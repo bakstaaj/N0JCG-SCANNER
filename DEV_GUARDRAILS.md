@@ -200,3 +200,12 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - After adding or changing `.gitattributes`, run `git add --renormalize .` before staged whitespace validation.
 - Patch scripts should include a single reusable LF normalization step instead of ad hoc per-file CRLF repairs.
 - Staged whitespace details should go to a report file; terminal output should remain concise PASS/FAIL.
+
+
+## Pi Bring-Up Acceptance Guardrails
+
+- Pi bring-up acceptance bundles must be non-invasive unless the milestone explicitly says otherwise: no package install, no source clone/build, no live decoder launch, and no transmit behavior.
+- Acceptance bundles should orchestrate existing validators/probes and store full step logs under ignored report folders while printing only concise PASS/WARN/FAIL summaries.
+- Optional decoder tooling gaps and quiet RF conditions remain WARN until the project reaches a milestone that explicitly requires live P25 control-channel lock or voice decode.
+- Bring-up acceptance must keep backend/API, config/schema, RTL hardware evidence, and decoder capability evidence as separate result categories.
+- Patch scripts must preserve the repository LF policy before staging: set repo-local `core.autocrlf=false`, `core.eol=lf`, normalize touched text, unstage stale entries, restage, then run staged whitespace validation.

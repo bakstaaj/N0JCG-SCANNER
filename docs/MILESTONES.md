@@ -70,6 +70,14 @@
 - Keep backend ownership serial-first and avoid hard-coded runtime indexes.
 - Keep live OP25 launch disabled until decoder install/capability is validated.
 
+
+## V0.1G - Pi bring-up acceptance bundle
+
+- Add a single Pi-side acceptance bundle for current non-live milestones.
+- Run repo, config, API, preflight, runtime, OP25 capability, and RTL role probes from one command.
+- Keep the bundle non-invasive: no package install, no OP25 build, no live decoder launch.
+- Preserve RF/no-traffic and optional decoder-tool gaps as warnings until a live decode milestone requires them.
+
 ## V0.2 - service install and acceptance bundle
 
 - Add systemd service installer.

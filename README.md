@@ -91,6 +91,7 @@ cd ~/sdrdev/PI-P25-SCANNER
 ./tools/pi5_p25_preflight.sh
 ./tools/pi5_p25_runtime_probe.sh
 ./tools/pi5_p25_op25_install_probe.sh
+./tools/pi5_p25_bringup_acceptance.sh
 ```
 
 The runtime probe is non-invasive. It checks repo health, generates OP25 runtime files, discovers OP25 candidates, and enumerates RTL-SDR tools/devices when present. Missing OP25 is reported as a warning until the OP25 install milestone.
@@ -127,6 +128,17 @@ Before live P25 decode work, map receivers by stable RTL EEPROM serial:
 ```
 
 The role setter updates only the ignored local runtime config at `runtime/settings/p25_systems.json`.
+
+
+## Pi bring-up acceptance bundle
+
+After the repo patches are applied and pulled on the Pi, run the current non-live acceptance bundle:
+
+```bash
+./tools/pi5_p25_bringup_acceptance.sh
+```
+
+The bundle runs the existing repo, config, API, Pi runtime, OP25 capability, and RTL role probes without installing packages or launching live OP25 decode.
 
 ## Backend dev run
 

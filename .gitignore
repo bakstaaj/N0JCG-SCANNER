@@ -52,3 +52,6 @@ Thumbs.db
 
 # Repo validation reports
 .p25_repo_validation_reports/
+
+# V0.1G Pi bring-up acceptance reports
+.p25_v0_1g_bringup_acceptance_reports/
