@@ -8,28 +8,77 @@
 </head>
 <body>
   <main class="shell">
-    <header>
-      <h1>PI P25 Scanner</h1>
-      <p>Minimal P25 trunk scanner control surface</p>
+    <header class="hero">
+      <div>
+        <h1>PI P25 Scanner</h1>
+        <p>Validated OP25 trunk scanner control surface on port <strong>8070</strong></p>
+      </div>
+      <div class="hero-status">
+        <span id="connectionStatus" class="badge badge-warn">Connecting</span>
+        <span id="lastUpdated" class="muted">Last update: -</span>
+      </div>
     </header>
 
-    <section class="panel controls">
-      <button id="startBtn" type="button">Start Scanner</button>
-      <button id="stopBtn" type="button">Stop Scanner</button>
-      <button id="refreshBtn" type="button">Refresh Status</button>
-      <button id="generateConfigBtn" type="button">Generate OP25 Config</button>
+    <section class="panel controls-panel" aria-label="scanner controls">
+      <div class="controls">
+        <button id="startBtn" type="button" class="primary">Start Scanner</button>
+        <button id="stopBtn" type="button" class="danger">Stop Scanner</button>
+        <button id="refreshBtn" type="button">Refresh Status</button>
+        <button id="generateConfigBtn" type="button">Generate OP25 Config</button>
+      </div>
+      <p id="controlHint" class="hint">Start uses the validated runtime marker only: runtime/settings/op25_validated_rx_command.env</p>
     </section>
 
-    <section class="panel grid">
-      <div><span>State</span><strong id="scannerState">-</strong></div>
-      <div><span>Decoder</span><strong id="decoderEngine">-</strong></div>
-      <div><span>Config</span><strong id="configSource">-</strong></div>
-      <div><span>Control</span><strong id="controlFrequency">-</strong></div>
-      <div><span>Voice</span><strong id="voiceFrequency">-</strong></div>
-      <div><span>TGID</span><strong id="activeTgid">-</strong></div>
-      <div><span>Phase</span><strong id="p25Phase">-</strong></div>
-      <div><span>Encrypted</span><strong id="encrypted">-</strong></div>
-      <div><span>Muted</span><strong id="muted">-</strong></div>
+    <section class="panel">
+      <div class="section-title">
+        <h2>Live Scanner Status</h2>
+        <span id="stateBadge" class="badge">-</span>
+      </div>
+      <div class="grid status-grid">
+        <div><span>State</span><strong id="scannerState">-</strong></div>
+        <div><span>Process</span><strong id="processState">-</strong></div>
+        <div><span>PID</span><strong id="decoderPid">-</strong></div>
+        <div><span>Launch Ready</span><strong id="launchReady">-</strong></div>
+        <div><span>Command Source</span><strong id="commandSource">-</strong></div>
+        <div><span>Validated Marker</span><strong id="validatedMarkerState">-</strong></div>
+        <div><span>Decoder</span><strong id="decoderEngine">-</strong></div>
+        <div><span>Config</span><strong id="configSource">-</strong></div>
+        <div><span>Control</span><strong id="controlFrequency">-</strong></div>
+        <div><span>Voice</span><strong id="voiceFrequency">-</strong></div>
+        <div><span>TGID</span><strong id="activeTgid">-</strong></div>
+        <div><span>Talkgroup</span><strong id="activeTalkgroupLabel">-</strong></div>
+        <div><span>Phase</span><strong id="p25Phase">-</strong></div>
+        <div><span>Encrypted</span><strong id="encrypted">-</strong></div>
+        <div><span>Muted</span><strong id="muted">-</strong></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <h2>Validated OP25 Launch</h2>
+        <span id="markerBadge" class="badge">-</span>
+      </div>
+      <div class="grid marker-grid">
+        <div><span>Marker Path</span><strong id="validatedMarkerPath">-</strong></div>
+        <div><span>OP25 CWD</span><strong id="op25Cwd">-</strong></div>
+        <div><span>Device Args</span><strong id="op25DeviceArgs">-</strong></div>
+        <div><span>Trunk TSV</span><strong id="op25TrunkTsv">-</strong></div>
+      </div>
+      <details>
+        <summary>Validated Command</summary>
+        <pre id="validatedCommand">-</pre>
+      </details>
+    </section>
+
+    <section class="panel two-column">
+      <div>
+        <h2>Last Event</h2>
+        <pre id="lastEvent">Loading...</pre>
+      </div>
+      <div>
+        <h2>Backend / OP25 Log Tail</h2>
+        <pre id="logTail">No log lines yet.</pre>
+      </div>
     </section>
 
     <section class="panel">
@@ -38,7 +87,7 @@
       <div class="controls compact">
         <button id="loadConfigBtn" type="button">Load Config</button>
         <button id="initLocalConfigBtn" type="button">Init Local Config</button>
-        <button id="saveConfigBtn" type="button">Save Local Config</button>
+        <button id="saveConfigBtn" type="button" class="primary">Save Local Config</button>
       </div>
       <form id="configForm" class="config-form">
         <label>System Name<input id="systemName" type="text" autocomplete="off"></label>
@@ -53,11 +102,6 @@
         <label class="check"><input id="phaseII" type="checkbox"> Phase II enabled</label>
         <label class="check"><input id="muteEncrypted" type="checkbox"> Mute encrypted calls</label>
       </form>
-    </section>
-
-    <section class="panel">
-      <h2>Last Event</h2>
-      <pre id="lastEvent">Loading...</pre>
     </section>
 
     <section class="panel">

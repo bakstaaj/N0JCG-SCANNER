@@ -1,19 +1,45 @@
 'use strict';
 
 let currentConfig = null;
+let latestStatus = null;
 
 function formatHz(value) {
   if (!value) return '-';
   return `${(Number(value) / 1000000).toFixed(6)} MHz`;
 }
 
+function formatBool(value) {
+  return value ? 'yes' : 'no';
+}
+
+function formatList(values) {
+  if (!Array.isArray(values) || values.length === 0) return '-';
+  return values.join('\n');
+}
+
 function setText(id, value) {
   const el = document.getElementById(id);
-  if (el) el.textContent = value;
+  if (el) el.textContent = value ?? '-';
 }
 
 function field(id) {
   return document.getElementById(id);
+}
+
+function setBadge(id, text, kind) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = `badge ${kind || ''}`.trim();
+}
+
+function setButtonsForState(status) {
+  const startBtn = field('startBtn');
+  const stopBtn = field('stopBtn');
+  const running = Boolean(status?.decoder_process?.running);
+  const startEnabled = Boolean(status?.decoder_process?.start_enabled);
+  if (startBtn) startBtn.disabled = running || !startEnabled;
+  if (stopBtn) stopBtn.disabled = !running;
 }
 
 async function fetchJson(url, options = {}) {
@@ -34,20 +60,50 @@ async function fetchJson(url, options = {}) {
   return payload;
 }
 
+function renderStatus(status) {
+  latestStatus = status;
+  const process = status.decoder_process || {};
+  const marker = process.validated_marker || {};
+  const running = Boolean(process.running);
+  const markerReady = Boolean(marker.exists && marker.validated);
+  const state = status.scanner_state || '-';
+
+  setText('scannerState', state);
+  setText('decoderEngine', status.decoder_engine || '-');
+  setText('configSource', status.config?.source || '-');
+  setText('controlFrequency', formatHz(status.active_control_frequency_hz));
+  setText('voiceFrequency', formatHz(status.active_voice_frequency_hz));
+  setText('activeTgid', status.active_tgid || '-');
+  setText('activeTalkgroupLabel', status.active_talkgroup_label || '-');
+  setText('p25Phase', status.p25_phase || '-');
+  setText('encrypted', formatBool(status.encrypted));
+  setText('muted', formatBool(status.muted));
+  setText('processState', running ? 'running' : 'stopped');
+  setText('decoderPid', process.pid || '-');
+  setText('launchReady', process.start_enabled ? 'yes' : 'no');
+  setText('commandSource', process.command_source || '-');
+  setText('validatedMarkerState', markerReady ? 'validated' : (marker.exists ? 'present' : 'missing'));
+  setText('validatedMarkerPath', marker.path || '-');
+  setText('op25Cwd', process.cwd || marker.cwd || '-');
+  setText('op25DeviceArgs', marker.device_args || '-');
+  setText('op25TrunkTsv', marker.trunk_tsv || '-');
+  setText('validatedCommand', formatList(process.command));
+  setText('lastEvent', status.last_event || '-');
+  setText('logTail', formatList(status.log_tail));
+  setText('lastUpdated', `Last update: ${new Date().toLocaleTimeString()}`);
+
+  setBadge('connectionStatus', 'Connected', 'badge-ok');
+  setBadge('stateBadge', state, running ? 'badge-ok' : (status.ok ? 'badge-warn' : 'badge-bad'));
+  setBadge('markerBadge', markerReady ? 'Validated' : (marker.exists ? 'Present' : 'Missing'), markerReady ? 'badge-ok' : 'badge-warn');
+  setButtonsForState(status);
+}
+
 async function refreshStatus() {
   try {
     const status = await fetchJson('/api/status');
-    setText('scannerState', status.scanner_state || '-');
-    setText('decoderEngine', status.decoder_engine || '-');
-    setText('configSource', status.config?.source || '-');
-    setText('controlFrequency', formatHz(status.active_control_frequency_hz));
-    setText('voiceFrequency', formatHz(status.active_voice_frequency_hz));
-    setText('activeTgid', status.active_tgid || '-');
-    setText('p25Phase', status.p25_phase || '-');
-    setText('encrypted', status.encrypted ? 'yes' : 'no');
-    setText('muted', status.muted ? 'yes' : 'no');
-    setText('lastEvent', status.last_event || '-');
+    renderStatus(status);
   } catch (error) {
+    setBadge('connectionStatus', 'Offline', 'badge-bad');
     setText('lastEvent', `Status error: ${error.message}`);
   }
 }
@@ -185,7 +241,8 @@ async function initLocalConfig() {
 
 async function postScanner(path) {
   try {
-    await fetchJson(path, { method: 'POST' });
+    const status = await fetchJson(path, { method: 'POST' });
+    renderStatus(status);
   } catch (error) {
     setText('lastEvent', `Control error: ${error.message}`);
   }
@@ -202,4 +259,4 @@ document.getElementById('saveConfigBtn')?.addEventListener('click', saveConfig);
 
 refreshStatus();
 refreshConfig();
-setInterval(refreshStatus, 5000);
+setInterval(refreshStatus, 3000);
