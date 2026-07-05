@@ -19,6 +19,7 @@ FAILURE_STATES = {
     "decoder_start_failed",
     "decoder_missing",
     "config_error",
+    "evidence_read_error",
 }
 
 REPORT_DIR = Path(".p25_live_evidence_analyze_reports")
@@ -31,6 +32,25 @@ def utc_stamp() -> str:
 def read_json(path: Path) -> Any:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def read_jsonl(path: Path) -> list[Any]:
+    records: list[Any] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line_number, raw in enumerate(handle, start=1):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                records.append(json.loads(raw))
+            except json.JSONDecodeError as exc:
+                records.append(
+                    {
+                        "scanner_state": "evidence_read_error",
+                        "warnings": [f"{path}:{line_number}: {exc}"],
+                    }
+                )
+    return records
 
 
 def as_int(value: Any) -> int | None:
@@ -56,22 +76,36 @@ def find_latest_evidence_root() -> Path | None:
     for base in (Path("runtime/evidence"), Path(".p25_live_activity_capture_reports")):
         if not base.exists():
             continue
-        candidates.append(base)
         for child in base.iterdir():
-            if child.is_dir() or child.suffix.lower() == ".json":
+            if child.is_file() and child.name.startswith("live_activity_") and child.suffix.lower() == ".jsonl":
                 candidates.append(child)
-    existing = [path for path in candidates if path.exists()]
+        if base == Path(".p25_live_activity_capture_reports"):
+            candidates.extend(base.glob("live_activity_*.jsonl"))
+    if candidates:
+        return max(candidates, key=lambda path: path.stat().st_mtime)
+
+    fallback: list[Path] = []
+    for base in (Path("runtime/evidence"), Path(".p25_live_activity_capture_reports")):
+        if not base.exists():
+            continue
+        fallback.append(base)
+        for child in base.iterdir():
+            if child.is_dir() or child.suffix.lower() in {".json", ".jsonl"}:
+                fallback.append(child)
+    existing = [path for path in fallback if path.exists()]
     if not existing:
         return None
     return max(existing, key=lambda path: path.stat().st_mtime)
 
 
-def collect_json_files(path: Path) -> list[Path]:
+def collect_evidence_files(path: Path) -> list[Path]:
     if path.is_file():
-        return [path] if path.suffix.lower() == ".json" else []
+        return [path] if path.suffix.lower() in {".json", ".jsonl"} else []
     if not path.exists():
         return []
-    return sorted(path.rglob("*.json"))
+    jsonl_files = sorted(path.rglob("*.jsonl"))
+    json_files = sorted(path.rglob("*.json"))
+    return jsonl_files + json_files
 
 
 def iter_status_records(payload: Any) -> list[dict[str, Any]]:
@@ -233,7 +267,7 @@ def make_report(summary: dict[str, Any], evidence_root: Path, strict: bool) -> t
     lines.append("")
     lines.append(f"- Evidence root: `{evidence_root}`")
     lines.append(f"- Snapshot count: {summary['snapshot_count']}")
-    lines.append(f"- Source JSON files: {len(summary['source_files'])}")
+    lines.append(f"- Source evidence files: {len(summary['source_files'])}")
     lines.append("")
 
     def add(level: str, message: str) -> None:
@@ -342,11 +376,15 @@ def make_report(summary: dict[str, Any], evidence_root: Path, strict: bool) -> t
 
 
 def analyze_path(path: Path, strict: bool, report_dir: Path | None) -> tuple[dict[str, Any], str, int, int, int, Path | None, Path | None]:
-    files = collect_json_files(path)
+    files = collect_evidence_files(path)
     records: list[dict[str, Any]] = []
     for file_path in files:
         try:
-            records.extend(iter_status_records(read_json(file_path)))
+            if file_path.suffix.lower() == ".jsonl":
+                for item in read_jsonl(file_path):
+                    records.extend(iter_status_records(item))
+            else:
+                records.extend(iter_status_records(read_json(file_path)))
         except (OSError, json.JSONDecodeError) as exc:
             records.append(
                 {
@@ -373,7 +411,7 @@ def analyze_path(path: Path, strict: bool, report_dir: Path | None) -> tuple[dic
 def run_self_test(keep: bool) -> int:
     temp_root = Path(tempfile.mkdtemp(prefix="pi-p25-evidence-selftest-"))
     try:
-        evidence = temp_root / "runtime" / "evidence" / "sample"
+        evidence = temp_root / "runtime" / "evidence"
         evidence.mkdir(parents=True)
         samples = [
             {
@@ -426,12 +464,10 @@ def run_self_test(keep: bool) -> int:
                 "log_tail": ["tgid 4501 encrypted muted"],
             },
         ]
-        for index, sample in enumerate(samples, start=1):
-            (evidence / f"status_{index:03d}.json").write_text(
-                json.dumps(sample, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-                newline="\n",
-            )
+        jsonl_path = evidence / "live_activity_selftest.jsonl"
+        with jsonl_path.open("w", encoding="utf-8") as handle:
+            for sample in samples:
+                handle.write(json.dumps(sample, sort_keys=True, separators=(",", ":")) + "\n")
 
         report_dir = temp_root / "reports"
         summary, report, _passes, _warns, fails, report_path, summary_path = analyze_path(
@@ -442,6 +478,7 @@ def run_self_test(keep: bool) -> int:
         required = [
             summary["snapshot_count"] == 3,
             "3001" in summary["tgids"],
+            "4501" in summary["tgids"],
             summary["encrypted_snapshots"] >= 1,
             summary["muted_snapshots"] >= 1,
             report_path is not None and report_path.exists(),
@@ -452,7 +489,7 @@ def run_self_test(keep: bool) -> int:
             print(report)
             print("FINAL: FAIL")
             return 1
-        print("PASS: self-test evidence analyzer produced expected summary")
+        print("PASS: self-test evidence analyzer produced expected JSONL summary")
         print(f"PASS: self-test report path: {report_path}")
         print("SUMMARY: PASS=2 WARN=0 FAIL=0")
         print("FINAL: PASS")

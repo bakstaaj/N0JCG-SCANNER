@@ -57,9 +57,9 @@ Options:
   --self-test       Validate the summarizer using fixture snapshots only.
   -h, --help        Show this help.
 
-Reports are written under .p25_live_activity_capture_reports/ by default and a
-copy of summary JSON is written under runtime/evidence/ when runtime is
-available. Set P25_SCANNER_CAPTURE_REPORT_DIR to override the report directory.
+Reports are written under .p25_live_activity_capture_reports/ by default. Copies
+of summary JSON and snapshot JSONL are written under runtime/evidence/ when
+runtime is available. Set P25_SCANNER_CAPTURE_REPORT_DIR to override the report directory.
 USAGE
 }
 
@@ -192,7 +192,7 @@ for payload in snapshots:
         active_tgids.add(tgid)
     for value in list_at(payload, ("unique_tgids", "observed_tgids", "tgids")):
         try:
-            active_tgids.add(int(value))
+            active_tgids.add(int(value if not isinstance(value, dict) else value.get("tgid")))
         except (TypeError, ValueError):
             pass
     recent_events.extend(list_at(payload, ("recent_activity", "recent_events", "activity_events")))
@@ -428,8 +428,11 @@ fi
 
 mkdir -p runtime/evidence
 EVIDENCE_JSON="runtime/evidence/live_activity_summary_${STAMP}.json"
+EVIDENCE_JSONL="runtime/evidence/live_activity_${STAMP}.jsonl"
 cp "$SUMMARY_JSON" "$EVIDENCE_JSON"
+cp "$JSONL" "$EVIDENCE_JSONL"
 pass "copied summary evidence: $EVIDENCE_JSON"
+pass "copied snapshot evidence: $EVIDENCE_JSONL"
 
 printf '%s\n' "$SUMMARY_PAYLOAD" > "$REPORT_DIR/live_activity_summary_${STAMP}.compact.json"
 echo "Report: $SUMMARY_TXT"
