@@ -280,3 +280,12 @@ The capture writes JSONL snapshots and summary reports under
 `.p25_live_activity_capture_reports/` and copies summary evidence under
 `runtime/evidence/`. The tool is observational and does not change the validated
 OP25 launch command or encryption behavior.
+## V0.2J live evidence analysis
+
+After a bounded live activity capture, summarize the captured status snapshots:
+
+```bash
+./tools/pi5_p25_live_evidence_analyze.sh --latest
+```
+
+The analyzer reads local evidence JSON, writes Markdown/JSON summaries under `.p25_live_evidence_analyze_reports/`, and reports control/voice frequency evidence, TGID evidence, clear voice events, encrypted-call metadata, muted/skipped events, warnings, and recent OP25 log-tail lines. It is observational only and does not change OP25 launch behavior.
