@@ -266,3 +266,17 @@ V0.2H adds an in-memory runtime activity summary to `/api/status` and the web UI
 ```bash
 ./tools/pi5_p25_runtime_activity_probe.sh
 ```
+
+## V0.2I live activity capture
+
+After V0.2H activity counters are available, archive a repeatable live test run
+from the Pi with:
+
+```bash
+./tools/pi5_p25_live_activity_capture.sh --seconds 180 --interval 3 --yes
+```
+
+The capture writes JSONL snapshots and summary reports under
+`.p25_live_activity_capture_reports/` and copies summary evidence under
+`runtime/evidence/`. The tool is observational and does not change the validated
+OP25 launch command or encryption behavior.
