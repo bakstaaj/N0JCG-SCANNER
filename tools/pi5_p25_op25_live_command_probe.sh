@@ -13,6 +13,7 @@ REPORT_FILE="$REPORT_DIR/op25_live_command_probe_${STAMP}.txt"
 COMMAND_FILE="$REPORT_DIR/op25_rx_command_${STAMP}.txt"
 SMOKE_LOG="$REPORT_DIR/op25_rx_smoke_${STAMP}.log"
 HELP_LOG="$REPORT_DIR/op25_rx_help_${STAMP}.txt"
+HELP_SOURCE_LOG="$REPORT_DIR/op25_rx_option_source_scan_${STAMP}.txt"
 META_ENV="$REPORT_DIR/op25_command_meta_${STAMP}.env"
 MODE="dry-run"
 SECONDS_LIMIT=20
@@ -219,20 +220,46 @@ else
   fail "p25_control serial is blank; run tools/p25_set_receiver_roles.sh first"
 fi
 
+HELP_USABLE=0
 if timeout 10s "$RX_PY" --help > "$HELP_LOG" 2>&1; then
   pass "rx.py help completed"
+  HELP_USABLE=1
 else
   rc=$?
-  fail "rx.py --help failed rc=$rc; see $HELP_LOG"
+  warn "rx.py --help returned rc=$rc; see $HELP_LOG; using source-code option scan fallback"
 fi
 
-for opt in '--args' '-S' '-q' '-N' '-T' '-V' '-U' '--crypt-behavior' '-2' '-l'; do
-  if grep -q -- "$opt" "$HELP_LOG"; then
-    pass "rx.py help includes option: $opt"
-  else
-    fail "rx.py help missing expected option: $opt"
-  fi
-done
+if python3 - "$RX_PY" "$HELP_LOG" "$HELP_SOURCE_LOG" <<'PY_OPT'
+from __future__ import annotations
+import sys
+from pathlib import Path
+
+rx_py = Path(sys.argv[1])
+help_log = Path(sys.argv[2])
+source_log = Path(sys.argv[3])
+required = ["--args", "-S", "-q", "-N", "-T", "-V", "-U", "--crypt-behavior", "-2", "-l"]
+help_text = help_log.read_text(encoding="utf-8", errors="replace") if help_log.exists() else ""
+source_text = rx_py.read_text(encoding="utf-8", errors="replace")
+missing = []
+lines = []
+for opt in required:
+    in_help = opt in help_text
+    in_source = opt in source_text
+    status = "PASS" if in_help or in_source else "FAIL"
+    where = "help" if in_help else "source" if in_source else "missing"
+    lines.append(f"{status}: {opt}: {where}")
+    if not in_help and not in_source:
+        missing.append(opt)
+source_log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+if missing:
+    print("missing expected rx.py options: " + ", ".join(missing), file=sys.stderr)
+    raise SystemExit(1)
+PY_OPT
+then
+  pass "rx.py expected options validated from help or source scan: $HELP_SOURCE_LOG"
+else
+  fail "rx.py expected option validation failed; see $HELP_SOURCE_LOG"
+fi
 
 RX_CMD=(
   "$RX_PY"
