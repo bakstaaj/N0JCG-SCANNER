@@ -30,3 +30,14 @@ These guardrails capture project-specific lessons learned while building and val
 - Live OP25 launch must stay gated by `runtime/settings/op25_validated_rx_command.env`.
 - Backend service startup must not automatically start RF decoding.
 - Encrypted calls are metadata only: detect, show, mute/skip, and count. Do not attempt decryption, key recovery, bypass, key loading, or protected audio reconstruction.
+
+## Whitespace and generated-script validation
+
+- Generated patch and recovery scripts must normalize tracked text files to LF endings before staging.
+- Generated patch and recovery scripts must remove trailing spaces/tabs and collapse EOF whitespace to exactly one final newline.
+- Treat `new blank line at EOF`, trailing whitespace, CRLF, heredoc/generator errors, syntax errors, and failed fixture tests as hard failures.
+- Run `git --no-pager diff --check` before staging and `git --no-pager diff --cached --check` after staging; both must pass before commit.
+- Never print `FINAL: PASS` after any failed heredoc, generator, syntax check, whitespace check, fixture test, commit, or push step.
+- Before generating future scripts, include a pre-commit whitespace normalizer/checker in the script design rather than relying on manual cleanup afterward.
+- Avoid embedded Python triple-quoted strings for generating shell scripts, JSONL fixtures, heredocs, or quote-heavy content.
+- Validate JSONL analysis with a real temporary JSONL fixture before commit whenever capture/analyzer behavior changes.

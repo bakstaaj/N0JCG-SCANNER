@@ -295,3 +295,6 @@ V0.2K recognizes OP25 `IMBE (PLAINTEXT)` and `AMBE (PLAINTEXT)` log lines as cle
 ## V0.2L active TGID evidence guard
 
 V0.2L separates OP25 whitelist/configuration talkgroup log lines from active call talkgroup evidence. Lines such as `added talkgroup ... from *_whitelist.tsv` are retained as parsed configuration notes but are not counted as active TGID activity. Active TGID evidence must come from live voice/grant/call-style runtime lines.
+## V0.2M OP25 discovery trust
+
+V0.2M classifies known OP25 source-tree app paths as trusted decoder candidates so the backend no longer warns about a generic `rx.py` when the path is under `op25/op25/gr-op25_repeater/apps`. Generic unrelated `rx.py` paths still warn. Validate with `./tools/pi5_p25_op25_discovery_trust_probe.sh`.

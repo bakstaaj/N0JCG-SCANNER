@@ -10,6 +10,13 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 
+TRUSTED_OP25_APP_PATH_PARTS = (
+    "/op25/op25/gr-op25_repeater/apps/",
+    "/boatbod/op25/op25/gr-op25_repeater/apps/",
+)
+TRUSTED_OP25_APP_NAMES = {"rx.py", "multi_rx.py"}
+
+
 @dataclass(slots=True)
 class Op25Capability:
     engine: str = "op25"
@@ -17,6 +24,8 @@ class Op25Capability:
     command: str = ""
     candidates: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    trusted: bool = False
+    trusted_reason: str = ""
     phase_ii_support: str = "unknown_until_live_decoder_validation"
     start_mode: str = "disabled_until_command_template_is_configured"
 
@@ -46,6 +55,23 @@ def _candidate_paths() -> list[str]:
     return paths
 
 
+def _normalized_path(path: Path) -> str:
+    return str(path.expanduser()).replace("\\", "/")
+
+
+def _looks_like_known_op25_app(path: Path) -> bool:
+    normalized = _normalized_path(path)
+    return path.name in TRUSTED_OP25_APP_NAMES and any(part in normalized for part in TRUSTED_OP25_APP_PATH_PARTS)
+
+
+def _trust_reason(path: Path) -> str:
+    if _looks_like_known_op25_app(path):
+        return "known_op25_source_tree_app"
+    if path.name == "op25_rx.py":
+        return "op25_named_executable"
+    return ""
+
+
 def discover_op25() -> Op25Capability:
     found: list[str] = []
     seen: set[str] = set()
@@ -62,8 +88,13 @@ def discover_op25() -> Op25Capability:
 
     capability = Op25Capability(installed=bool(found), candidates=found)
     if found:
-        capability.command = found[0]
-        if Path(found[0]).name == "rx.py":
+        command_path = Path(found[0]).expanduser()
+        capability.command = str(command_path)
+        reason = _trust_reason(command_path)
+        if reason:
+            capability.trusted = True
+            capability.trusted_reason = reason
+        elif command_path.name == "rx.py":
             capability.warnings.append("generic rx.py found; confirm this is the OP25 rx.py before enabling live start")
         capability.start_mode = os.environ.get(
             "P25_SCANNER_OP25_COMMAND_TEMPLATE",
@@ -84,6 +115,9 @@ def main() -> int:
     else:
         if capability.installed:
             print(f"OP25 candidate: {capability.command}")
+            print(f"OP25 candidate trusted: {'yes' if capability.trusted else 'no'}")
+            if capability.trusted_reason:
+                print(f"OP25 trust reason: {capability.trusted_reason}")
         else:
             print("OP25 candidate: not found")
         for warning in capability.warnings:
