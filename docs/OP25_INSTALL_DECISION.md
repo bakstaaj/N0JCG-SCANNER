@@ -59,3 +59,12 @@ Evidence commands:
 ./tools/pi5_p25_op25_source_install.sh --clone-only --yes
 ./tools/pi5_p25_op25_command_candidate.sh
 ```
+## Post-install validation state
+
+V0.1J adds post-install command evidence collection. This still does not enable backend live OP25 launch. The project must record the exact validated command template and manual control-channel test evidence before `/api/scanner/start` is allowed to start OP25.
+
+Post-install probe:
+
+```bash
+./tools/pi5_p25_op25_postinstall_probe.sh
+```

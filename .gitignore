@@ -64,3 +64,5 @@ Thumbs.db
 
 # V0.1I OP25 guarded source path reports
 .p25_v0_1i_op25_guarded_source_path_reports/
+.p25_v0_1j_op25_postinstall_reports/
+.p25_v0_1j_op25_postinstall_backups/

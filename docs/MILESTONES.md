@@ -93,3 +93,9 @@
 - Add non-invasive OP25 command-candidate evidence script.
 - Keep full upstream install/build behind explicit `--run-upstream-install --yes`.
 - Keep backend live OP25 launch disabled until the exact command template is validated on the Pi.
+## V0.1J - OP25 post-install command validation
+
+- Add bounded post-install OP25 command/help probe.
+- Verify OP25 source app paths after upstream install/build.
+- Capture GNU Radio/import evidence when available.
+- Keep live backend OP25 launch disabled until a bounded manual control-channel command is validated.

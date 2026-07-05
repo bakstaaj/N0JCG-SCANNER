@@ -227,3 +227,9 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - OP25 source and build artifacts belong outside tracked project files, normally `~/op25`, with only ignored runtime evidence written under `runtime/settings/`.
 - Command-candidate evidence is not sufficient to enable backend live OP25 launch; `docs/OP25_INSTALL_DECISION.md` must record the validated exact command template first.
 - The PI-P25-SCANNER scope remains clear audio only; encrypted traffic is mute/log only.
+## OP25 Post-Install Command Validation Guardrails
+
+- Post-install OP25 probes may run `rx.py --help` and `multi_rx.py --help` with short timeouts, but must not tune SDR hardware or start persistent decode processes.
+- Any generated command evidence under `runtime/settings/` is local runtime evidence and must not by itself enable backend live launch.
+- Backend live OP25 launch requires a separately documented, bounded Pi control-channel validation command and an explicit command template update.
+- OP25 install/build completion is not equivalent to scanner acceptance; command-line behavior and runtime imports must be validated after reboot when practical.

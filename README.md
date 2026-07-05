@@ -174,3 +174,13 @@ V0.1I adds a guarded OP25 source workflow for the Pi. The default helper mode is
 ```
 
 Full upstream OP25 install/build remains gated behind `--run-upstream-install --yes` and live backend OP25 launch remains disabled until `docs/OP25_INSTALL_DECISION.md` records the validated command template.
+## OP25 post-install command validation
+
+After the guarded OP25 install/build completes on the Pi, run:
+
+```bash
+./tools/pi5_p25_op25_postinstall_probe.sh
+./tools/pi5_p25_op25_command_candidate.sh
+```
+
+This captures installed OP25 command evidence and help output without starting live decode. Backend live launch remains disabled until the exact command template is validated on the Pi.
