@@ -135,6 +135,10 @@ fi
 SOURCE_DIR="${OP25_SOURCE_DIR:-${SOURCE_DIR:-$HOME/op25}}"
 RX_PY="$SOURCE_DIR/op25/gr-op25_repeater/apps/rx.py"
 MULTI_RX_PY="$SOURCE_DIR/op25/gr-op25_repeater/apps/multi_rx.py"
+APPS_DIR="$SOURCE_DIR/op25/gr-op25_repeater/apps"
+TDMA_DIR="$APPS_DIR/tdma"
+OP25_RX_PYTHONPATH="$APPS_DIR:$TDMA_DIR"
+IMPORT_LOG="$REPORT_DIR/op25_rx_import_probe_${STAMP}.txt"
 
 if [[ -d "$SOURCE_DIR" ]]; then
   pass "OP25 source directory exists: $SOURCE_DIR"
@@ -152,6 +156,30 @@ if [[ -f "$MULTI_RX_PY" ]]; then
   pass "OP25 multi_rx.py exists: $MULTI_RX_PY"
 else
   warn "OP25 multi_rx.py missing: $MULTI_RX_PY"
+fi
+
+if [[ -d "$TDMA_DIR" ]]; then
+  pass "OP25 TDMA helper directory exists: $TDMA_DIR"
+else
+  fail "OP25 TDMA helper directory missing: $TDMA_DIR"
+fi
+
+if [[ -f "$TDMA_DIR/lfsr.py" ]]; then
+  pass "OP25 lfsr helper exists: $TDMA_DIR/lfsr.py"
+else
+  fail "OP25 lfsr helper missing: $TDMA_DIR/lfsr.py"
+fi
+
+if PYTHONPATH="$OP25_RX_PYTHONPATH${PYTHONPATH:+:$PYTHONPATH}" python3 - <<'PY_IMPORT' > "$IMPORT_LOG" 2>&1
+import importlib
+importlib.import_module("lfsr")
+importlib.import_module("trunking")
+print("OP25_IMPORT_PROBE_PASS")
+PY_IMPORT
+then
+  pass "OP25 app/TDMA Python path imports lfsr and trunking"
+else
+  fail "OP25 app/TDMA Python path import probe failed; see $IMPORT_LOG"
 fi
 
 if [[ "$FAIL_COUNT" -ne 0 ]]; then
@@ -259,7 +287,7 @@ PY_OPTS
 }
 
 set +e
-timeout 10s "$RX_PY" --help > "$HELP_LOG" 2>&1
+PYTHONPATH="$OP25_RX_PYTHONPATH${PYTHONPATH:+:$PYTHONPATH}" timeout 10s "$RX_PY" --help > "$HELP_LOG" 2>&1
 HELP_RC=$?
 set -e
 if [[ "$HELP_RC" -eq 0 ]]; then
@@ -372,6 +400,7 @@ write_command_file() {
     printf 'CONTROL_FREQUENCY_MHZ=%s\n' "$CONTROL_FREQUENCY_MHZ"
     printf 'P25_CONTROL_SERIAL=%s\n' "$P25_CONTROL_SERIAL"
     printf 'P25_CONTROL_INDEX=%s\n' "$P25_CONTROL_INDEX"
+    printf 'OP25_RX_PYTHONPATH=%s\n' "$OP25_RX_PYTHONPATH"
     printf 'P25_CONTROL_GAIN_INT=%s\n' "$P25_CONTROL_GAIN_INT"
     printf 'P25_CONTROL_PPM=%s\n' "$P25_CONTROL_PPM"
     printf 'TRUNK_TSV=%s\n' "$TRUNK_TSV"
@@ -406,14 +435,14 @@ run_smoke_candidate() {
   build_rx_cmd "$device_arg"
   warn "starting bounded rx.py smoke run for ${SECONDS_LIMIT}s using ${label}; no backend launch or service changes will be made"
   set +e
-  timeout "${SECONDS_LIMIT}s" "${RX_CMD[@]}" > "$log" 2>&1
+  PYTHONPATH="$OP25_RX_PYTHONPATH${PYTHONPATH:+:$PYTHONPATH}" timeout "${SECONDS_LIMIT}s" "${RX_CMD[@]}" > "$log" 2>&1
   rc=$?
   set -e
   if [[ "$rc" -eq 124 ]]; then
     if grep -Eiq 'Traceback|ImportError|ModuleNotFoundError|source_c creation failure|No supported devices found|Failed to open|Exception|RuntimeError|ValueError' "$log"; then
       class="$(classify_smoke_log "$log")"
       warn "rx.py reached timeout but smoke log contains startup/runtime markers; classification=$class; see $log"
-      printf '--- smoke log tail (%s) ---\n' "$label" | tee -a "$REPORT_FILE"
+      printf '%s\n' "--- smoke log tail ($label) ---" | tee -a "$REPORT_FILE"
       tail -n 80 "$log" | tee -a "$REPORT_FILE" || true
       return 1
     fi
@@ -428,7 +457,7 @@ run_smoke_candidate() {
   fi
   class="$(classify_smoke_log "$log")"
   warn "rx.py smoke candidate ${label} exited early rc=$rc classification=$class; see $log"
-  printf '--- smoke log tail (%s) ---\n' "$label" | tee -a "$REPORT_FILE"
+  printf '%s\n' "--- smoke log tail ($label) ---" | tee -a "$REPORT_FILE"
   tail -n 80 "$log" | tee -a "$REPORT_FILE" || true
   printf 'LAST_SMOKE_CLASSIFICATION=%s\nLAST_SMOKE_RC=%s\nLAST_SMOKE_LOG=%s\n' "$class" "$rc" "$log" > runtime/settings/op25_live_command_last_failure.env
   return 1
@@ -444,6 +473,7 @@ write_validated_marker() {
 P25_VALIDATED_RX_APP=$RX_PY
 P25_VALIDATED_RX_DEVICE_LABEL=$label
 P25_VALIDATED_RX_ARGS=$device_arg
+P25_VALIDATED_RX_PYTHONPATH=$OP25_RX_PYTHONPATH
 P25_VALIDATED_RX_SAMPLE_RATE=$SAMPLE_RATE
 P25_VALIDATED_RX_GAIN=LNA:$P25_CONTROL_GAIN_INT
 P25_VALIDATED_RX_PPM=$P25_CONTROL_PPM
