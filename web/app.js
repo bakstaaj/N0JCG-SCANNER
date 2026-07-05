@@ -60,6 +60,34 @@ async function fetchJson(url, options = {}) {
   return payload;
 }
 
+function formatActivityEvent(event) {
+  const pieces = [];
+  if (event.tgid) pieces.push(`TGID ${event.tgid}`);
+  if (event.talkgroup_label) pieces.push(event.talkgroup_label);
+  if (event.voice_frequency_hz) pieces.push(formatHz(event.voice_frequency_hz));
+  if (event.control_frequency_hz) pieces.push(`control ${formatHz(event.control_frequency_hz)}`);
+  if (event.p25_phase) pieces.push(event.p25_phase);
+  if (event.encrypted === true) pieces.push('encrypted');
+  if (event.encrypted === false) pieces.push('clear');
+  if (event.muted === true) pieces.push('muted');
+  return pieces.length ? pieces.join(' | ') : (event.line || '-');
+}
+
+function renderActivitySummary(activity) {
+  const parsed = Number(activity?.parsed_status_lines || 0);
+  setText('activityParsedLines', parsed);
+  setText('activityControlUpdates', activity?.control_frequency_updates ?? 0);
+  setText('activityVoiceUpdates', activity?.voice_frequency_updates ?? 0);
+  setText('activityTalkgroupUpdates', activity?.talkgroup_updates ?? 0);
+  setText('activityUniqueTgids', activity?.unique_tgid_count ?? 0);
+  setText('activityClearEvents', activity?.clear_voice_events ?? 0);
+  setText('activityEncryptedEvents', activity?.encrypted_events ?? 0);
+  setText('activityMutedEvents', activity?.muted_events ?? 0);
+  const recent = Array.isArray(activity?.recent_events) ? activity.recent_events : [];
+  setText('activityRecentEvents', recent.length ? recent.slice(-10).map(formatActivityEvent).join('\n') : 'No parsed activity yet.');
+  setBadge('activityBadge', parsed > 0 ? `${parsed} parsed` : 'No activity', parsed > 0 ? 'badge-ok' : 'badge-warn');
+}
+
 function renderStatus(status) {
   latestStatus = status;
   const process = status.decoder_process || {};
@@ -78,6 +106,7 @@ function renderStatus(status) {
   setText('p25Phase', status.p25_phase || '-');
   setText('encrypted', formatBool(status.encrypted));
   setText('muted', formatBool(status.muted));
+  renderActivitySummary(status.activity_summary || {});
   setText('processState', running ? 'running' : 'stopped');
   setText('decoderPid', process.pid || '-');
   setText('launchReady', process.start_enabled ? 'yes' : 'no');

@@ -258,3 +258,11 @@ After applying the TOPAZ/TRWC test profile and refreshing the validated OP25 mar
 ```
 
 The probe starts decode through the backend API on port 8070, samples `/api/status`, writes a report under `.p25_topaz_trwc_live_rf_probe_reports/`, and stops decode unless `--leave-running` is supplied. Lack of observed TGID or voice-frequency activity is reported as a warning, not a failure.
+
+## V0.2H runtime activity summary
+
+V0.2H adds an in-memory runtime activity summary to `/api/status` and the web UI. It counts parsed OP25 status lines, control/voice updates, talkgroup observations, clear events, encrypted events, muted/skipped events, and recent parsed activity. Validate it with:
+
+```bash
+./tools/pi5_p25_runtime_activity_probe.sh
+```

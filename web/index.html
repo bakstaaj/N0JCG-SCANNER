@@ -55,6 +55,27 @@
 
     <section class="panel">
       <div class="section-title">
+        <h2>Runtime Activity Summary</h2>
+        <span id="activityBadge" class="badge">-</span>
+      </div>
+      <div class="grid status-grid">
+        <div><span>Parsed Lines</span><strong id="activityParsedLines">-</strong></div>
+        <div><span>Control Updates</span><strong id="activityControlUpdates">-</strong></div>
+        <div><span>Voice Updates</span><strong id="activityVoiceUpdates">-</strong></div>
+        <div><span>Talkgroup Updates</span><strong id="activityTalkgroupUpdates">-</strong></div>
+        <div><span>Unique TGIDs</span><strong id="activityUniqueTgids">-</strong></div>
+        <div><span>Clear Events</span><strong id="activityClearEvents">-</strong></div>
+        <div><span>Encrypted Events</span><strong id="activityEncryptedEvents">-</strong></div>
+        <div><span>Muted Events</span><strong id="activityMutedEvents">-</strong></div>
+      </div>
+      <details>
+        <summary>Recent Parsed Activity</summary>
+        <pre id="activityRecentEvents">No parsed activity yet.</pre>
+      </details>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
         <h2>Validated OP25 Launch</h2>
         <span id="markerBadge" class="badge">-</span>
       </div>

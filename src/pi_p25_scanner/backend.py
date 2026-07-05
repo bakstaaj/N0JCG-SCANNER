@@ -38,6 +38,7 @@ if __package__ in (None, ""):
     from pi_p25_scanner.decoder_discovery import discover_op25
     from pi_p25_scanner.op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
     from pi_p25_scanner.runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
+    from pi_p25_scanner.runtime_activity import RuntimeActivityTracker
 else:
     from .config_model import ConfigError
     from .config_store import (
@@ -56,6 +57,7 @@ else:
     from .decoder_discovery import discover_op25
     from .op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
     from .runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
+    from .runtime_activity import RuntimeActivityTracker
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "web"
@@ -97,7 +99,8 @@ class ScannerStatus:
     muted: bool = False
     generated_op25_config: dict[str, Any] = field(default_factory=dict)
     runtime_status: dict[str, Any] = field(default_factory=dict)
-    last_event: str = "V0.2E backend idle; runtime status parser ready"
+    activity_summary: dict[str, Any] = field(default_factory=dict)
+    last_event: str = "V0.2H backend idle; runtime activity summary ready"
     warnings: list[str] = field(default_factory=list)
     log_tail: list[str] = field(default_factory=list)
     updated_utc: float = field(default_factory=time.time)
@@ -109,6 +112,7 @@ class ScannerManager:
         self.process: subprocess.Popen[str] | None = None
         self.log_lines: deque[str] = deque(maxlen=LOG_TAIL_LIMIT)
         self.runtime_parser = RuntimeStatusParser()
+        self.activity_tracker = RuntimeActivityTracker()
         self.lock = threading.RLock()
         self.refresh_capability()
         self.refresh_config_summary()
@@ -139,6 +143,7 @@ class ScannerManager:
         if update.muted is not None:
             self.status.muted = update.muted
         self.status.runtime_status = update.to_status_dict()
+        self.status.activity_summary = self.activity_tracker.record(update)
 
     def _append_log(self, line: str) -> None:
         clean = line.rstrip("\n")
@@ -302,6 +307,10 @@ class ScannerManager:
                 )
             return asdict(self.status), HTTPStatus.ACCEPTED
 
+        with self.lock:
+            self.status.activity_summary = self.activity_tracker.reset()
+            self._set_event("Runtime activity counters reset for scanner start")
+
         try:
             process = subprocess.Popen(
                 command,
@@ -370,6 +379,7 @@ class ScannerManager:
                 self.status.decoder_process["pid"] = None
             self.status.decoder_process["validated_marker"] = validated_command_marker_metadata(PROJECT_ROOT)
             self.status.log_tail = list(self.log_lines)
+            self.status.activity_summary = self.activity_tracker.snapshot()
             self.status.updated_utc = time.time()
             return asdict(self.status)
 
