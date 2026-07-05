@@ -90,9 +90,12 @@ On the Raspberry Pi 5:
 cd ~/sdrdev/PI-P25-SCANNER
 ./tools/pi5_p25_preflight.sh
 ./tools/pi5_p25_runtime_probe.sh
+./tools/pi5_p25_op25_install_probe.sh
 ```
 
 The runtime probe is non-invasive. It checks repo health, generates OP25 runtime files, discovers OP25 candidates, and enumerates RTL-SDR tools/devices when present. Missing OP25 is reported as a warning until the OP25 install milestone.
+
+The OP25 install decision is tracked in `docs/OP25_INSTALL_DECISION.md`. Live OP25 launch remains disabled until the Pi-specific command template is validated there.
 
 ## Backend dev run
 

@@ -22,6 +22,9 @@
 
 ## V0.1C - OP25 install/capability decision
 
+- Add OP25 install/capability decision document.
+- Add non-invasive Pi OP25 install probe.
+- Keep package install/build and live launch out of this milestone.
 - Choose and document the supported OP25 install path for Raspberry Pi 5 / Trixie.
 - Validate OP25 command-line invocation with one attached NESDR Nano2+.
 - Validate whether the installed path supports Phase II.

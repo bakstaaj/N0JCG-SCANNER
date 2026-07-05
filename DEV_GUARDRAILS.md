@@ -133,3 +133,11 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - Executable-bit requests must be wrapped in explicit PASS/FAIL checks. A failed `git update-index` must not be followed by a misleading PASS line.
 - Patch scripts must normalize touched text files before staging and then validate both unstaged and staged whitespace with `git diff --check` and `git diff --cached --check`.
 - Recovery scripts may operate on a partially applied patch, but they must stage only explicit intended paths, preserve unrelated local artifacts, and commit/push only after all validation passes.
+
+## OP25 Install Decision Guardrail
+
+- OP25 install/build work must start with non-invasive capability evidence from `tools/pi5_p25_op25_install_probe.sh`.
+- Do not install, clone, build, or enable OP25 from a probe script.
+- Do not enable backend live OP25 launch until `docs/OP25_INSTALL_DECISION.md` records the validated executable path, command template, RTL-SDR selection method, and phase support.
+- Missing OP25 remains a warning during discovery/probe milestones and becomes a hard failure only in a milestone that explicitly requires live decoding.
+- Runtime OP25 files remain under ignored `runtime/op25/`; source config remains under `config/`.
