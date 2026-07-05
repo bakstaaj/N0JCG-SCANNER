@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Raspberry Pi 5 runtime probe for PI P25 Scanner V0.1B.
 # This is a non-invasive validator: it does not install packages or start long-running decoding.
+# If this fails at repository validator, inspect the repo validator sub-step log first.
 
 set -Eeuo pipefail
 

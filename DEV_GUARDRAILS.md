@@ -209,3 +209,11 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - Optional decoder tooling gaps and quiet RF conditions remain WARN until the project reaches a milestone that explicitly requires live P25 control-channel lock or voice decode.
 - Bring-up acceptance must keep backend/API, config/schema, RTL hardware evidence, and decoder capability evidence as separate result categories.
 - Patch scripts must preserve the repository LF policy before staging: set repo-local `core.autocrlf=false`, `core.eol=lf`, normalize touched text, unstage stale entries, restage, then run staged whitespace validation.
+
+## Config API Smoke Test Guardrails
+
+- Config API smoke validators must preserve and restore the operator's ignored runtime config when exercising save/init endpoints.
+- Config API smoke validators should seed a known-good temporary runtime config before backend startup so Pi bring-up failures are not caused by stale local operator state.
+- Loopback API smoke validators should select a dynamic high port by default, while still honoring an explicit test-port environment override.
+- API smoke validators must capture both backend logs and client/request logs, and failure messages must point to both logs.
+- Pi acceptance bundles should treat a runtime probe failure caused by repo validation as a repo/API validation failure first; inspect the step log before changing RF/decoder assumptions.

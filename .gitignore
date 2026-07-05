@@ -55,3 +55,9 @@ Thumbs.db
 
 # V0.1G Pi bring-up acceptance reports
 .p25_v0_1g_bringup_acceptance_reports/
+
+# V0.1H config API Pi fix reports
+.p25_v0_1h_config_api_pi_fix_reports/
+
+# V0.1H config API Pi fix backups
+.p25_v0_1h_config_api_pi_fix_backups/
