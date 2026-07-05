@@ -30,6 +30,11 @@ if __package__ in (None, ""):
         validate_config_payload,
         write_runtime_config,
     )
+    from pi_p25_scanner.backend_launch import (
+        LaunchConfigError,
+        build_validated_op25_command,
+        validated_command_marker_metadata,
+    )
     from pi_p25_scanner.decoder_discovery import discover_op25
     from pi_p25_scanner.op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
 else:
@@ -41,6 +46,11 @@ else:
         read_active_config_payload,
         validate_config_payload,
         write_runtime_config,
+    )
+    from .backend_launch import (
+        LaunchConfigError,
+        build_validated_op25_command,
+        validated_command_marker_metadata,
     )
     from .decoder_discovery import discover_op25
     from .op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
@@ -63,6 +73,9 @@ class ScannerStatus:
             "running": False,
             "pid": None,
             "command": [],
+            "cwd": "",
+            "command_source": "none",
+            "validated_marker": {},
             "start_enabled": False,
         }
     )
@@ -207,11 +220,48 @@ class ScannerManager:
         self.refresh_config_summary()
         manifest = self.generate_config()
         capability = self.refresh_capability()
-        command = self._build_command_from_template(manifest)
+        command: list[str] = []
+        command_cwd = str(PROJECT_ROOT)
+        command_env: dict[str, str] | None = None
+        command_meta: dict[str, Any] = validated_command_marker_metadata(PROJECT_ROOT)
+
+        try:
+            validated = build_validated_op25_command(PROJECT_ROOT)
+        except LaunchConfigError as exc:
+            with self.lock:
+                self.status.ok = False
+                self.status.scanner_state = "decoder_command_invalid"
+                self.status.decoder_process["start_enabled"] = False
+                self.status.decoder_process["command"] = []
+                self.status.decoder_process["cwd"] = ""
+                self.status.decoder_process["command_source"] = "validated_marker"
+                self.status.decoder_process["validated_marker"] = command_meta
+                self._append_warning(str(exc))
+                self._set_event(f"Validated OP25 command marker invalid: {exc}")
+            return asdict(self.status), HTTPStatus.BAD_REQUEST
+
+        if validated is not None:
+            command = validated.command
+            command_cwd = validated.cwd
+            command_env = validated.env
+            command_meta = validated.to_status_dict()
+        else:
+            template_command = self._build_command_from_template(manifest)
+            if template_command:
+                command = template_command
+                command_meta = {
+                    "source": "environment_template",
+                    "path": "",
+                    "exists": True,
+                    "validated": False,
+                }
 
         with self.lock:
             self.status.decoder_process["start_enabled"] = bool(command)
             self.status.decoder_process["command"] = command
+            self.status.decoder_process["cwd"] = command_cwd if command else ""
+            self.status.decoder_process["command_source"] = command_meta.get("source", "none")
+            self.status.decoder_process["validated_marker"] = command_meta
 
         if not capability.get("installed"):
             with self.lock:
@@ -222,13 +272,16 @@ class ScannerManager:
         if not command:
             with self.lock:
                 self.status.scanner_state = "decoder_config_generated"
-                self._set_event("Start requested; OP25 found but live launch is disabled until command template validation")
+                self._set_event(
+                    "Start requested; live launch disabled until runtime/settings/op25_validated_rx_command.env exists"
+                )
             return asdict(self.status), HTTPStatus.ACCEPTED
 
         try:
             process = subprocess.Popen(
                 command,
-                cwd=str(PROJECT_ROOT),
+                cwd=command_cwd,
+                env=command_env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -248,7 +301,11 @@ class ScannerManager:
             self.status.scanner_state = "running"
             self.status.decoder_process["running"] = True
             self.status.decoder_process["pid"] = process.pid
-            self._set_event("Decoder process started")
+            self.status.decoder_process["command"] = command
+            self.status.decoder_process["cwd"] = command_cwd
+            self.status.decoder_process["command_source"] = command_meta.get("source", "none")
+            self.status.decoder_process["validated_marker"] = command_meta
+            self._set_event("Decoder process started from validated OP25 command marker")
         threading.Thread(target=self._reader_thread, args=(process,), daemon=True).start()
         return asdict(self.status), HTTPStatus.ACCEPTED
 
@@ -286,6 +343,7 @@ class ScannerManager:
             else:
                 self.status.decoder_process["running"] = False
                 self.status.decoder_process["pid"] = None
+            self.status.decoder_process["validated_marker"] = validated_command_marker_metadata(PROJECT_ROOT)
             self.status.log_tail = list(self.log_lines)
             self.status.updated_utc = time.time()
             return asdict(self.status)

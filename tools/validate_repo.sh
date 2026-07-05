@@ -41,7 +41,7 @@ for required in \
   DEV_GUARDRAILS.md \
   docs/ARCHITECTURE.md \
   docs/MILESTONES.md \
-  docs/OP25_WRAPPER.md docs/OP25_GUARDED_SOURCE_PATH.md tools/pi5_p25_op25_source_install.sh tools/pi5_p25_op25_command_candidate.sh docs/OP25_LIVE_COMMAND_VALIDATION.md tools/pi5_p25_op25_live_command_probe.sh tools/p25_set_receiver_roles.sh tools/pi5_p25_rtl_role_probe.sh tools/pi5_p25_bringup_acceptance.sh docs/RTL_ROLE_MAPPING.md docs/PI_BRINGUP_ACCEPTANCE.md \
+  docs/OP25_WRAPPER.md docs/OP25_GUARDED_SOURCE_PATH.md tools/pi5_p25_op25_source_install.sh tools/pi5_p25_op25_command_candidate.sh tools/pi5_p25_backend_live_launch_probe.sh docs/OP25_BACKEND_LIVE_LAUNCH.md docs/OP25_LIVE_COMMAND_VALIDATION.md tools/pi5_p25_op25_live_command_probe.sh tools/p25_set_receiver_roles.sh tools/pi5_p25_rtl_role_probe.sh tools/pi5_p25_bringup_acceptance.sh docs/RTL_ROLE_MAPPING.md docs/PI_BRINGUP_ACCEPTANCE.md \
   config/p25_systems.example.json config/p25_systems.local.example.json \
   web/index.html \
   web/app.css \

@@ -200,3 +200,10 @@ This captures installed OP25 command evidence and help output without starting l
 ## V0.1M OP25 live command smoke diagnostics
 
 V0.1M improves the bounded OP25 live-command probe. The probe now classifies early OP25 startup failures, prints smoke-log tails into the report, and tries a runtime RTL index fallback when serial-based SDR opening does not validate. Backend live launch remains disabled until a later patch consumes validated command evidence.
+## V0.2A backend live launch
+
+After the bounded OP25 live command probe passes on the Pi, the backend can consume `runtime/settings/op25_validated_rx_command.env` for a guarded `/api/scanner/start` launch. Validate it with:
+
+```bash
+./tools/pi5_p25_backend_live_launch_probe.sh
+```

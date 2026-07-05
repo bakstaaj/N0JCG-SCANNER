@@ -72,3 +72,6 @@ Post-install probe:
 ## V0.1K command-validation evidence
 
 `tools/pi5_p25_op25_live_command_probe.sh` records the dry-run and optional bounded `rx.py` smoke command. A `FINAL: PASS` smoke report is required before the backend command template is considered validated. This milestone still does not enable live backend launch by default.
+## V0.2A backend launch decision
+
+The supported backend live-launch path is the validated marker produced by `tools/pi5_p25_op25_live_command_probe.sh --rx-smoke --seconds 20 --yes`. The backend must consume that marker instead of guessing command arguments.

@@ -114,3 +114,8 @@
 - Classify early OP25 failures from smoke logs.
 - Try stable serial first and runtime RTL index second when available.
 - Do not enable backend live launch.
+## V0.2A - Guarded backend OP25 launch
+
+- Consume the validated OP25 command marker from `runtime/settings/op25_validated_rx_command.env`.
+- Add a bounded backend start/status/stop validation probe.
+- Keep live launch disabled when the marker is missing or invalid.
