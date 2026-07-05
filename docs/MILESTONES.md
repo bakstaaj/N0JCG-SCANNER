@@ -39,6 +39,9 @@
 
 ## V0.1E - P25 config UI
 
+- Add minimal web config editor.
+- Add `/api/config/init-local` and `/api/config/save`.
+- Add loopback config API smoke validator.
 - Edit control channel list.
 - Edit talkgroup whitelist.
 - Select one-SDR or two-SDR mode.

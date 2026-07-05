@@ -37,3 +37,6 @@ Thumbs.db
 
 # Staged index/CRLF recovery reports
 .p25_index_refresh_reports/
+
+# V0.1E config UI/API reports
+.p25_v0_1e_config_ui_reports/

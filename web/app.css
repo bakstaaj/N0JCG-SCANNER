@@ -10,7 +10,7 @@ body {
 }
 
 .shell {
-  max-width: 980px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 24px;
 }
@@ -19,7 +19,8 @@ header h1 {
   margin: 0 0 4px;
 }
 
-header p {
+header p,
+.hint {
   margin: 0 0 20px;
   color: #cbd5e1;
 }
@@ -36,6 +37,10 @@ header p {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.controls.compact {
+  margin-bottom: 14px;
 }
 
 button {
@@ -68,6 +73,42 @@ button {
 .grid strong {
   display: block;
   font-size: 1.1rem;
+}
+
+.config-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #cbd5e1;
+  font-size: 0.92rem;
+}
+
+label.check {
+  flex-direction: row;
+  align-items: center;
+  margin-top: 26px;
+}
+
+input,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  background: #111827;
+  color: #f9fafb;
+  padding: 10px;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
 }
 
 pre {

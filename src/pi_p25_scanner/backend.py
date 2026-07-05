@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal PI P25 Scanner web/API backend.
-
-V0.1B adds config loading, OP25 runtime-file generation, decoder discovery,
-and guarded process-wrapper scaffolding. Live OP25 process launch is disabled
-by default until a Pi-specific command template is validated.
-"""
+"""Minimal PI P25 Scanner web/API backend."""
 
 from __future__ import annotations
 
@@ -26,29 +21,35 @@ from typing import Any
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from pi_p25_scanner.config_model import DEFAULT_CONFIG_PATH, ConfigError, load_project_config
+    from pi_p25_scanner.config_model import ConfigError
+    from pi_p25_scanner.config_store import (
+        active_config_metadata,
+        ensure_runtime_config,
+        load_active_project_config,
+        read_active_config_payload,
+        validate_config_payload,
+        write_runtime_config,
+    )
     from pi_p25_scanner.decoder_discovery import discover_op25
     from pi_p25_scanner.op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
 else:
-    from .config_model import DEFAULT_CONFIG_PATH, ConfigError, load_project_config
+    from .config_model import ConfigError
+    from .config_store import (
+        active_config_metadata,
+        ensure_runtime_config,
+        load_active_project_config,
+        read_active_config_payload,
+        validate_config_payload,
+        write_runtime_config,
+    )
     from .decoder_discovery import discover_op25
     from .op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "web"
-def resolve_config_path() -> Path:
-    env_path = os.environ.get("P25_SCANNER_CONFIG", "").strip()
-    if env_path:
-        return Path(env_path)
-    runtime_config = PROJECT_ROOT / "runtime" / "settings" / "p25_systems.json"
-    if runtime_config.exists():
-        return runtime_config
-    return DEFAULT_CONFIG_PATH
-
-
-CONFIG_PATH = resolve_config_path()
 OP25_OUTPUT_DIR = Path(os.environ.get("P25_SCANNER_OP25_OUTPUT", str(DEFAULT_OUTPUT_DIR)))
 LOG_TAIL_LIMIT = 80
+MAX_JSON_BODY_BYTES = 512 * 1024
 
 
 @dataclass
@@ -56,6 +57,7 @@ class ScannerStatus:
     ok: bool = True
     scanner_state: str = "stopped"
     decoder_engine: str = "op25"
+    config: dict[str, Any] = field(default_factory=active_config_metadata)
     decoder_process: dict[str, Any] = field(
         default_factory=lambda: {
             "running": False,
@@ -79,7 +81,7 @@ class ScannerStatus:
     encrypted: bool = False
     muted: bool = False
     generated_op25_config: dict[str, Any] = field(default_factory=dict)
-    last_event: str = "V0.1B backend idle; OP25 wrapper scaffold ready"
+    last_event: str = "V0.1E backend idle; config API/UI scaffold ready"
     warnings: list[str] = field(default_factory=list)
     log_tail: list[str] = field(default_factory=list)
     updated_utc: float = field(default_factory=time.time)
@@ -98,6 +100,10 @@ class ScannerManager:
         self.status.last_event = message
         self.status.updated_utc = time.time()
 
+    def _append_warning(self, message: str) -> None:
+        if message not in self.status.warnings:
+            self.status.warnings.append(message)
+
     def _append_log(self, line: str) -> None:
         clean = line.rstrip("\n")
         if not clean:
@@ -111,15 +117,16 @@ class ScannerManager:
         with self.lock:
             self.status.decoder_capability = capability
             for warning in capability.get("warnings", []):
-                if warning not in self.status.warnings:
-                    self.status.warnings.append(str(warning))
+                self._append_warning(str(warning))
         return capability
 
     def refresh_config_summary(self) -> None:
         with self.lock:
+            self.status.config = active_config_metadata()
             try:
-                config = load_project_config(CONFIG_PATH)
+                config, path = load_active_project_config()
                 system = config.first_enabled_system()
+                self.status.config["path"] = str(path)
                 self.status.receiver_roles = {
                     name: {
                         "rtl_serial": role.rtl_serial,
@@ -134,15 +141,33 @@ class ScannerManager:
             except ConfigError as exc:
                 self.status.ok = False
                 self.status.scanner_state = "config_error"
-                self.status.warnings.append(str(exc))
+                self._append_warning(str(exc))
                 self._set_event(f"Config error: {exc}")
 
     def generate_config(self) -> dict[str, Any]:
-        manifest = generate_op25_configs(CONFIG_PATH, OP25_OUTPUT_DIR).to_dict()
+        _config, path = load_active_project_config()
+        manifest = generate_op25_configs(path, OP25_OUTPUT_DIR).to_dict()
         with self.lock:
             self.status.generated_op25_config = manifest
+            self.status.config = active_config_metadata()
             self._set_event(f"Generated OP25 runtime config at {manifest['output_dir']}")
         return manifest
+
+    def init_local_config(self) -> dict[str, Any]:
+        result = ensure_runtime_config(force=False)
+        self.refresh_config_summary()
+        with self.lock:
+            self._set_event(f"Initialized local runtime config at {result['config_path']}")
+        return {"ok": True, **result, "status": self.status_payload()}
+
+    def save_config(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise ConfigError("config save payload must be an object")
+        result = write_runtime_config(payload)
+        self.refresh_config_summary()
+        with self.lock:
+            self._set_event(f"Saved local runtime config at {result['config_path']}")
+        return {"ok": True, **result, "status": self.status_payload()}
 
     def _reader_thread(self, process: subprocess.Popen[str]) -> None:
         assert process.stdout is not None
@@ -213,7 +238,7 @@ class ScannerManager:
             with self.lock:
                 self.status.ok = False
                 self.status.scanner_state = "decoder_start_failed"
-                self.status.warnings.append(str(exc))
+                self._append_warning(str(exc))
                 self._set_event(f"Decoder start failed: {exc}")
             return asdict(self.status), HTTPStatus.INTERNAL_SERVER_ERROR
 
@@ -254,6 +279,7 @@ class ScannerManager:
 
     def status_payload(self) -> dict[str, Any]:
         with self.lock:
+            self.status.config = active_config_metadata()
             if self.process is not None and self.process.poll() is None:
                 self.status.decoder_process["running"] = True
                 self.status.decoder_process["pid"] = self.process.pid
@@ -270,18 +296,21 @@ MANAGER = ScannerManager()
 
 def load_config_payload() -> dict[str, Any]:
     try:
-        config = load_project_config(CONFIG_PATH)
+        payload, path = read_active_config_payload()
+        validation = validate_config_payload(payload)
         return {
             "ok": True,
-            "schema_version": config.schema_version,
-            "systems": [system.to_status_dict() for system in config.systems],
+            "config_path": str(path),
+            "metadata": active_config_metadata(),
+            "config": payload,
+            "validation": validation,
         }
     except ConfigError as exc:
-        return {"ok": False, "error": str(exc), "systems": []}
+        return {"ok": False, "error": str(exc), "metadata": active_config_metadata(), "config": None}
 
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "PiP25Scanner/0.1B"
+    server_version = "PiP25Scanner/0.1E"
 
     def _send_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         data = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
@@ -291,6 +320,21 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
+
+    def _read_json(self) -> dict[str, Any]:
+        length = int(self.headers.get("Content-Length") or "0")
+        if length <= 0:
+            return {}
+        if length > MAX_JSON_BODY_BYTES:
+            raise ConfigError("JSON request body too large")
+        raw = self.rfile.read(length).decode("utf-8")
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ConfigError(f"request JSON invalid: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise ConfigError("request JSON body must be an object")
+        return payload
 
     def do_GET(self) -> None:  # noqa: N802 - http.server method name
         if self.path == "/api/status":
@@ -322,6 +366,20 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 manifest = MANAGER.generate_config()
                 self._send_json({"ok": True, **manifest}, HTTPStatus.ACCEPTED)
+            except ConfigError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if self.path == "/api/config/init-local":
+            try:
+                self._send_json(MANAGER.init_local_config(), HTTPStatus.ACCEPTED)
+            except ConfigError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if self.path == "/api/config/save":
+            try:
+                request = self._read_json()
+                payload = request.get("config", request)
+                self._send_json(MANAGER.save_config(payload), HTTPStatus.ACCEPTED)
             except ConfigError as exc:
                 self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return

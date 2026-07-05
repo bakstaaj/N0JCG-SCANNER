@@ -174,3 +174,12 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - New executable scripts must be `git add` staged before `git update-index --chmod=+x`; do not set executable mode on untracked paths.
 - Staged whitespace validation should write detailed output to a report file and print a concise PASS/FAIL summary so the terminal does not flood or hang.
 - No-blocking Git validators must not flag pager-safe PASS/FAIL checks such as `git --no-pager diff --check` or `git --no-pager diff --cached --check`.
+
+## Config UI/API Guardrails
+
+- Web UI config edits must save only to the ignored runtime config path `runtime/settings/p25_systems.json`; checked-in templates under `config/` are not edited by the running app.
+- Config save APIs must validate the full project config model before writing runtime config files.
+- Existing runtime config files must be backed up under ignored runtime backup paths before overwrite.
+- Backend status must expose active config metadata separately from decoder process state.
+- Config/API validators that start the backend must bind only to loopback on a high test port, use bounded readiness waits, capture logs to ignored report folders, and always clean up the backend process.
+- Patch scripts that normalize line endings must unstage intended files first, normalize the working tree, then restage so the Git index cannot retain stale CRLF content.

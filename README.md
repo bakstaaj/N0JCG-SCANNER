@@ -109,9 +109,10 @@ Validate the active local config:
 
 ```bash
 ./tools/p25_validate_config.sh
+./tools/p25_validate_config_api.sh
 ```
 
-The backend reads `P25_SCANNER_CONFIG` when set. Otherwise it prefers `runtime/settings/p25_systems.json` and falls back to `config/p25_systems.example.json`.
+The backend reads `P25_SCANNER_CONFIG` when set. Otherwise it prefers `runtime/settings/p25_systems.json` and falls back to `config/p25_systems.example.json`. V0.1E adds the minimal web config editor and saves UI edits only to the ignored runtime config path.
 
 The OP25 install decision is tracked in `docs/OP25_INSTALL_DECISION.md`. Live OP25 launch remains disabled until the Pi-specific command template is validated there.
 
@@ -128,6 +129,8 @@ Useful endpoints:
 - `/api/decoder/capability`
 - `/api/op25/generated-config`
 - `POST /api/decoder/generate-config`
+- `POST /api/config/init-local`
+- `POST /api/config/save`
 - `POST /api/scanner/start`
 - `POST /api/scanner/stop`
 

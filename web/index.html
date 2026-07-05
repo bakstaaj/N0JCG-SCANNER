@@ -17,11 +17,13 @@
       <button id="startBtn" type="button">Start Scanner</button>
       <button id="stopBtn" type="button">Stop Scanner</button>
       <button id="refreshBtn" type="button">Refresh Status</button>
+      <button id="generateConfigBtn" type="button">Generate OP25 Config</button>
     </section>
 
     <section class="panel grid">
       <div><span>State</span><strong id="scannerState">-</strong></div>
       <div><span>Decoder</span><strong id="decoderEngine">-</strong></div>
+      <div><span>Config</span><strong id="configSource">-</strong></div>
       <div><span>Control</span><strong id="controlFrequency">-</strong></div>
       <div><span>Voice</span><strong id="voiceFrequency">-</strong></div>
       <div><span>TGID</span><strong id="activeTgid">-</strong></div>
@@ -31,12 +33,35 @@
     </section>
 
     <section class="panel">
+      <h2>Scanner Configuration</h2>
+      <p class="hint">Saved edits go to the ignored local runtime file, not the checked-in templates.</p>
+      <div class="controls compact">
+        <button id="loadConfigBtn" type="button">Load Config</button>
+        <button id="initLocalConfigBtn" type="button">Init Local Config</button>
+        <button id="saveConfigBtn" type="button">Save Local Config</button>
+      </div>
+      <form id="configForm" class="config-form">
+        <label>System Name<input id="systemName" type="text" autocomplete="off"></label>
+        <label>Site<input id="siteName" type="text" autocomplete="off"></label>
+        <label>Control Channels, one per line<textarea id="controlChannels" rows="4"></textarea></label>
+        <label>Voice Channels, optional<textarea id="voiceChannels" rows="3"></textarea></label>
+        <label>Talkgroups: TGID, Label<textarea id="talkgroups" rows="5"></textarea></label>
+        <label>Control SDR Serial<input id="controlSerial" type="text" autocomplete="off"></label>
+        <label>Voice SDR Serial<input id="voiceSerial" type="text" autocomplete="off"></label>
+        <label>RF Gain dB<input id="gainDb" type="number" step="0.1"></label>
+        <label>PPM Correction<input id="ppm" type="number" step="1"></label>
+        <label class="check"><input id="phaseII" type="checkbox"> Phase II enabled</label>
+        <label class="check"><input id="muteEncrypted" type="checkbox"> Mute encrypted calls</label>
+      </form>
+    </section>
+
+    <section class="panel">
       <h2>Last Event</h2>
       <pre id="lastEvent">Loading...</pre>
     </section>
 
     <section class="panel">
-      <h2>Example Config</h2>
+      <h2>Active Config Preview</h2>
       <pre id="configPreview">Loading...</pre>
     </section>
   </main>

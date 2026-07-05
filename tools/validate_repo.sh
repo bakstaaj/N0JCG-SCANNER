@@ -42,13 +42,13 @@ for required in \
   docs/ARCHITECTURE.md \
   docs/MILESTONES.md \
   docs/OP25_WRAPPER.md \
-  config/p25_systems.example.json \
+  config/p25_systems.example.json config/p25_systems.local.example.json \
   web/index.html \
   web/app.css \
   web/app.js \
   src/pi_p25_scanner/__init__.py \
   src/pi_p25_scanner/backend.py \
-  src/pi_p25_scanner/config_model.py \
+  src/pi_p25_scanner/config_model.py src/pi_p25_scanner/config_store.py \
   src/pi_p25_scanner/decoder_discovery.py \
   src/pi_p25_scanner/op25_config.py; do
   if [[ -f "$required" ]]; then
@@ -114,6 +114,16 @@ elif [[ -f tools/validate_no_blocking_git_output.sh ]]; then
   fi
 else
   warn "no-blocking Git output validator not present"
+fi
+
+if [[ -x tools/p25_validate_config_api.sh ]]; then
+  if tools/p25_validate_config_api.sh; then
+    pass "config API smoke validator passed"
+  else
+    fail "config API smoke validator failed"
+  fi
+else
+  warn "tools/p25_validate_config_api.sh not executable; skipped config API smoke validator"
 fi
 
 if command -v node >/dev/null 2>&1; then
