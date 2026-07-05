@@ -100,6 +100,22 @@ if command -v python3 >/dev/null 2>&1; then
   fi
 fi
 
+if [[ -x tools/validate_no_blocking_git_output.sh ]]; then
+  if tools/validate_no_blocking_git_output.sh; then
+    pass "no-blocking Git output validation passed"
+  else
+    fail "no-blocking Git output validation failed"
+  fi
+elif [[ -f tools/validate_no_blocking_git_output.sh ]]; then
+  if bash tools/validate_no_blocking_git_output.sh; then
+    pass "no-blocking Git output validation passed"
+  else
+    fail "no-blocking Git output validation failed"
+  fi
+else
+  warn "no-blocking Git output validator not present"
+fi
+
 if command -v node >/dev/null 2>&1; then
   if node --check web/app.js; then
     pass "node syntax valid: web/app.js"
@@ -111,12 +127,12 @@ else
 fi
 
 if command -v git >/dev/null 2>&1; then
-  if git diff --check -- . ':!runtime' ':!.p25_*_reports' ':!.p25_*_backups'; then
+  if git --no-pager diff --check -- . ':!runtime' ':!.p25_*_reports' ':!.p25_*_backups'; then
     pass "working tree whitespace check passed"
   else
     fail "working tree whitespace check failed"
   fi
-  if git diff --cached --check -- . ':!runtime' ':!.p25_*_reports' ':!.p25_*_backups'; then
+  if git --no-pager diff --cached --check -- . ':!runtime' ':!.p25_*_reports' ':!.p25_*_backups'; then
     pass "staged whitespace check passed"
   else
     fail "staged whitespace check failed"

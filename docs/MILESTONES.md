@@ -30,7 +30,14 @@
 - Validate whether the installed path supports Phase II.
 - Document exact decoder start command and required package/build dependencies.
 
-## V0.1D - P25 config UI
+## V0.1D - local scanner config workflow
+
+- Add local runtime scanner config template.
+- Add config init and validation scripts.
+- Backend prefers ignored runtime config over checked-in example config.
+- Keep UI editing for the next milestone after config persistence rules are validated.
+
+## V0.1E - P25 config UI
 
 - Edit control channel list.
 - Edit talkgroup whitelist.

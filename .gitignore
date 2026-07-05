@@ -25,3 +25,15 @@ Thumbs.db
 
 # V0.1B recovery reports
 .p25_v0_1b_recovery_reports/
+
+# V0.1D local config patch reports
+.p25_v0_1d_local_config_reports/
+
+# Local no-pager guardrail reports
+.p25_no_pager_guardrail_reports/
+
+# No-pager recovery reports
+.p25_no_pager_recovery_reports/
+
+# Staged index/CRLF recovery reports
+.p25_index_refresh_reports/

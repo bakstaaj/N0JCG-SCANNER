@@ -141,3 +141,36 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - Do not enable backend live OP25 launch until `docs/OP25_INSTALL_DECISION.md` records the validated executable path, command template, RTL-SDR selection method, and phase support.
 - Missing OP25 remains a warning during discovery/probe milestones and becomes a hard failure only in a milestone that explicitly requires live decoding.
 - Runtime OP25 files remain under ignored `runtime/op25/`; source config remains under `config/`.
+
+## Local Config Guardrails
+
+- Checked-in P25 JSON files under `config/` are templates; user/site runtime settings belong under ignored `runtime/settings/p25_systems.json`.
+- Backend config resolution must prefer explicit `P25_SCANNER_CONFIG`, then ignored runtime config, then checked-in example config.
+- Patch scripts that add new runnable tools must `git add` the file before `git update-index --chmod=+x`; do not set executable mode on an untracked path.
+- Patch scripts must normalize touched text files before staging and must run staged whitespace validation with `git diff --cached --check` before commit.
+- Config validators must check JSON syntax and project schema/model requirements, not only that the file exists.
+
+## No-Pager Git Command Guardrails
+
+- Patch and validation scripts must not run raw `git diff`, `git log`, or `git show` commands that can open a pager and stop at a `:` prompt.
+- Any Git inspection command that could page must use `git --no-pager ...` or set `GIT_PAGER=cat` in that command's environment.
+- `git diff` is allowed only when used as a PASS/FAIL validation such as `git --no-pager diff --check`, `git --no-pager diff --quiet`, or `git --no-pager diff --name-only` captured into a variable for explicit validation.
+- Patch scripts must include a no-pager/static script validation step before commit when they add or modify runnable shell scripts.
+- If a script hangs at a pager prompt, stop using that script and replace it with a no-pager recovery script instead of asking the operator to visually inspect diff output.
+
+## No-Pager Validator Recovery Guardrail
+
+- No-blocking Git validators must not flag their own comments, examples, or regex/pattern text as executable Git commands.
+- When validating pager-prone commands, scan only executable-looking shell lines such as command-position `git diff`, `git log`, or `git show`.
+- Allow `git --no-pager diff --check` and `git --no-pager diff --name-only --exit-code` only when used as PASS/FAIL validation.
+- Patch scripts must stage new executable scripts before running `git update-index --chmod=+x`; do not set executable mode on paths Git has not added yet.
+- Patch and recovery scripts must normalize touched text files to LF before both working-tree and staged whitespace checks.
+
+
+## Staged Index / CRLF Recovery Guardrail
+
+- If `git diff --cached --check` reports nearly every added line as trailing whitespace, suspect stale staged CRLF content rather than bad source logic.
+- Recovery scripts must unstage intended paths first, normalize the working-tree copies to LF/no trailing spaces, then restage the normalized files before running staged whitespace validation.
+- New executable scripts must be `git add` staged before `git update-index --chmod=+x`; do not set executable mode on untracked paths.
+- Staged whitespace validation should write detailed output to a report file and print a concise PASS/FAIL summary so the terminal does not flood or hang.
+- No-blocking Git validators must not flag pager-safe PASS/FAIL checks such as `git --no-pager diff --check` or `git --no-pager diff --cached --check`.

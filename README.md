@@ -95,6 +95,24 @@ cd ~/sdrdev/PI-P25-SCANNER
 
 The runtime probe is non-invasive. It checks repo health, generates OP25 runtime files, discovers OP25 candidates, and enumerates RTL-SDR tools/devices when present. Missing OP25 is reported as a warning until the OP25 install milestone.
 
+## Local scanner configuration
+
+The checked-in JSON files under `config/` are templates. Runtime scanner settings should live under the ignored path `runtime/settings/p25_systems.json`.
+
+Initialize a local editable config:
+
+```bash
+./tools/p25_init_local_config.sh
+```
+
+Validate the active local config:
+
+```bash
+./tools/p25_validate_config.sh
+```
+
+The backend reads `P25_SCANNER_CONFIG` when set. Otherwise it prefers `runtime/settings/p25_systems.json` and falls back to `config/p25_systems.example.json`.
+
 The OP25 install decision is tracked in `docs/OP25_INSTALL_DECISION.md`. Live OP25 launch remains disabled until the Pi-specific command template is validated there.
 
 ## Backend dev run

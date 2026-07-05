@@ -36,7 +36,17 @@ else:
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "web"
-CONFIG_PATH = Path(os.environ.get("P25_SCANNER_CONFIG", str(DEFAULT_CONFIG_PATH)))
+def resolve_config_path() -> Path:
+    env_path = os.environ.get("P25_SCANNER_CONFIG", "").strip()
+    if env_path:
+        return Path(env_path)
+    runtime_config = PROJECT_ROOT / "runtime" / "settings" / "p25_systems.json"
+    if runtime_config.exists():
+        return runtime_config
+    return DEFAULT_CONFIG_PATH
+
+
+CONFIG_PATH = resolve_config_path()
 OP25_OUTPUT_DIR = Path(os.environ.get("P25_SCANNER_OP25_OUTPUT", str(DEFAULT_OUTPUT_DIR)))
 LOG_TAIL_LIMIT = 80
 
