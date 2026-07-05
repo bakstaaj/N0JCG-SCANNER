@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PI P25 Scanner</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <h1>PI P25 Scanner</h1>
+      <p>Minimal P25 trunk scanner control surface</p>
+    </header>
+
+    <section class="panel controls">
+      <button id="startBtn" type="button">Start Scanner</button>
+      <button id="stopBtn" type="button">Stop Scanner</button>
+      <button id="refreshBtn" type="button">Refresh Status</button>
+    </section>
+
+    <section class="panel grid">
+      <div><span>State</span><strong id="scannerState">-</strong></div>
+      <div><span>Decoder</span><strong id="decoderEngine">-</strong></div>
+      <div><span>Control</span><strong id="controlFrequency">-</strong></div>
+      <div><span>Voice</span><strong id="voiceFrequency">-</strong></div>
+      <div><span>TGID</span><strong id="activeTgid">-</strong></div>
+      <div><span>Phase</span><strong id="p25Phase">-</strong></div>
+      <div><span>Encrypted</span><strong id="encrypted">-</strong></div>
+      <div><span>Muted</span><strong id="muted">-</strong></div>
+    </section>
+
+    <section class="panel">
+      <h2>Last Event</h2>
+      <pre id="lastEvent">Loading...</pre>
+    </section>
+
+    <section class="panel">
+      <h2>Example Config</h2>
+      <pre id="configPreview">Loading...</pre>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

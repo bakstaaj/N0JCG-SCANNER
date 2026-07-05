@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "systems": [
+    {
+      "name": "Example P25 System",
+      "enabled": true,
+      "mode": "p25_trunked",
+      "site": "Example Site",
+      "control_channels_hz": [
+        851012500,
+        851512500
+      ],
+      "voice_channels_hz": [],
+      "talkgroups": [
+        {
+          "tgid": 1001,
+          "label": "Example Dispatch",
+          "enabled": true
+        },
+        {
+          "tgid": 1002,
+          "label": "Example Fireground",
+          "enabled": true
+        }
+      ],
+      "receiver_roles": {
+        "p25_control": {
+          "rtl_serial": "",
+          "gain_db": 40.2,
+          "ppm": 0
+        },
+        "p25_voice": {
+          "rtl_serial": "",
+          "gain_db": 40.2,
+          "ppm": 0
+        }
+      },
+      "decoder": {
+        "engine": "op25",
+        "phase_ii_enabled": true,
+        "mute_encrypted": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+# Python/cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local runtime and generated state
+runtime/
+*.log
+*.wav
+*.iq
+*.tmp
+
+# Local validation and backup artifacts
+.p25_*_reports/
+.p25_*_backups/
+.p25_bootstrap_backups/
+
+# Editor/OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
