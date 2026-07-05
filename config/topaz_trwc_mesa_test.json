@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "systems": [
+    {
+      "name": "TOPAZ TRWC Mesa Simulcast Test",
+      "enabled": true,
+      "mode": "p25_trunked",
+      "site": "Mesa Simulcast",
+      "control_channels_hz": [
+        852750000,
+        852825000,
+        853275000,
+        853350000
+      ],
+      "voice_channels_hz": [
+        852075000,
+        852250000,
+        852300000,
+        852425000,
+        852600000,
+        852675000,
+        852900000,
+        853050000,
+        853200000,
+        853500000,
+        853525000,
+        854087500
+      ],
+      "talkgroups": [
+        {
+          "tgid": 3064,
+          "label": "M/G FD C1 Dispatch",
+          "enabled": true
+        },
+        {
+          "tgid": 3065,
+          "label": "M/G FD C2 Major Incident",
+          "enabled": true
+        },
+        {
+          "tgid": 3066,
+          "label": "M/G FD C3 Mesa",
+          "enabled": true
+        },
+        {
+          "tgid": 3067,
+          "label": "M/G FD C4 Gilbert QC Superstition",
+          "enabled": true
+        },
+        {
+          "tgid": 3068,
+          "label": "M/G FD C5 Major Incident",
+          "enabled": true
+        },
+        {
+          "tgid": 3069,
+          "label": "M/G FD C6 Fire Tac",
+          "enabled": true
+        },
+        {
+          "tgid": 3070,
+          "label": "M/G FD Safety C7",
+          "enabled": true
+        },
+        {
+          "tgid": 3105,
+          "label": "E6 EMS TG3105",
+          "enabled": true
+        },
+        {
+          "tgid": 3899,
+          "label": "Fire MultiAgency",
+          "enabled": true
+        },
+        {
+          "tgid": 3044,
+          "label": "M/Gt PD/FD Link Interop",
+          "enabled": true
+        },
+        {
+          "tgid": 3804,
+          "label": "M/G PD Channel A Law Dispatch",
+          "enabled": true
+        },
+        {
+          "tgid": 3049,
+          "label": "GPD-1 Central Law Dispatch partial clear",
+          "enabled": true
+        },
+        {
+          "tgid": 2900,
+          "label": "MPD A1 Fiesta District encrypted skip expected",
+          "enabled": true
+        },
+        {
+          "tgid": 2901,
+          "label": "MPD A2 Central District encrypted skip expected",
+          "enabled": true
+        },
+        {
+          "tgid": 2902,
+          "label": "MPD A3 Red Mountain encrypted skip expected",
+          "enabled": true
+        },
+        {
+          "tgid": 2903,
+          "label": "MPD A4 Superstition encrypted skip expected",
+          "enabled": true
+        },
+        {
+          "tgid": 2904,
+          "label": "MPD A5 Gateway encrypted skip expected",
+          "enabled": true
+        },
+        {
+          "tgid": 3107,
+          "label": "AJPD 1 Dispatch encrypted skip expected",
+          "enabled": true
+        },
+        {
+          "tgid": 3840,
+          "label": "QC PD Dispatch encrypted skip expected",
+          "enabled": true
+        }
+      ],
+      "receiver_roles": {
+        "p25_control": {
+          "rtl_serial": "",
+          "gain_db": 40.2,
+          "ppm": 0
+        },
+        "p25_voice": {
+          "rtl_serial": "",
+          "gain_db": 40.2,
+          "ppm": 0
+        }
+      },
+      "decoder": {
+        "engine": "op25",
+        "phase_ii_enabled": true,
+        "mute_encrypted": true
+      }
+    }
+  ]
+}

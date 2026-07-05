@@ -236,3 +236,15 @@ Validate without live RF traffic:
 ```bash
 ./tools/pi5_p25_runtime_status_parser_probe.sh
 ```
+
+## V0.2F TOPAZ/TRWC Mesa test profile
+
+V0.2F adds a guarded TOPAZ Regional Wireless Cooperative (TRWC) Mesa Simulcast test profile for later real-world validation. The profile is checked in at `config/topaz_trwc_mesa_test.json`; applying it writes only the ignored runtime config at `runtime/settings/p25_systems.json`.
+
+```bash
+./tools/pi5_p25_topaz_trwc_profile_probe.sh
+./tools/p25_init_topaz_trwc_test_config.sh --dry-run
+./tools/p25_init_topaz_trwc_test_config.sh --apply --yes
+```
+
+The profile includes Mesa Simulcast control-channel-capable frequencies plus a focused fire, EMS, law dispatch, and interop talkgroup starter list. Encrypted talkgroups remain mute/skip-only; the project must not attempt encrypted audio decoding or key handling.
