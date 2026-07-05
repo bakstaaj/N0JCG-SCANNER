@@ -98,9 +98,9 @@ def generate_op25_configs(
             "0",
             op25_nac_value(system),
             system.modulation or "CQPSK",
-            str(tags_file),
-            str(whitelist_file),
-            str(blacklist_file),
+            str(tags_file.resolve()),
+            str(whitelist_file.resolve()),
+            str(blacklist_file.resolve()),
             "0",
         ]
         trunk_rows.append("\t".join(row))
@@ -112,9 +112,9 @@ def generate_op25_configs(
                 "control_channels_mhz": [hz_to_mhz_string(freq) for freq in system.control_channels_hz],
                 "enabled_talkgroups": [tg.tgid for tg in enabled_tgs],
                 "talkgroup_count": len(enabled_tgs),
-                "tags_file": str(tags_file),
-                "whitelist_file": str(whitelist_file),
-                "blacklist_file": str(blacklist_file),
+                "tags_file": str(tags_file.resolve()),
+                "whitelist_file": str(whitelist_file.resolve()),
+                "blacklist_file": str(blacklist_file.resolve()),
                 "nac": op25_nac_value(system),
                 "modulation": system.modulation or "CQPSK",
             }
@@ -123,8 +123,8 @@ def generate_op25_configs(
     trunk_tsv = output / "trunk.tsv"
     write_lines(trunk_tsv, trunk_rows)
     manifest = GeneratedOp25Config(
-        output_dir=str(output),
-        trunk_tsv=str(trunk_tsv),
+        output_dir=str(output.resolve()),
+        trunk_tsv=str(trunk_tsv.resolve()),
         systems=manifest_systems,
         warnings=warnings,
     )
