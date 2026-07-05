@@ -78,6 +78,13 @@
 - Keep the bundle non-invasive: no package install, no OP25 build, no live decoder launch.
 - Preserve RF/no-traffic and optional decoder-tool gaps as warnings until a live decode milestone requires them.
 
+## V0.1K - OP25 live command validation
+
+- Add bounded Pi-side OP25 foreground command probe.
+- Generate dry-run command evidence from runtime config, RTL serial roles, and OP25 source marker.
+- Allow optional short `rx.py` smoke run behind explicit `--yes`.
+- Keep backend live OP25 launch disabled until the validated command template is committed.
+
 ## V0.2 - service install and acceptance bundle
 
 - Add systemd service installer.

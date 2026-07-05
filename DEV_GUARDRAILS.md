@@ -233,3 +233,26 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - Any generated command evidence under `runtime/settings/` is local runtime evidence and must not by itself enable backend live launch.
 - Backend live OP25 launch requires a separately documented, bounded Pi control-channel validation command and an explicit command template update.
 - OP25 install/build completion is not equivalent to scanner acceptance; command-line behavior and runtime imports must be validated after reboot when practical.
+
+## OP25 Live Command Validation Guardrails
+
+- Live OP25 command validation must be bounded with `timeout` and write logs to ignored report folders.
+- Dry-run command generation must be the default; any RF/decoder smoke run requires an explicit mode and `--yes`.
+- A timeout exit from a bounded smoke run is acceptable evidence that OP25 started and stayed alive for the validation window, as long as the log has no immediate import/source/config errors.
+- Backend `/api/scanner/start` live launch remains disabled until a later patch records and wires the exact validated command template.
+- OP25 validation tools must keep encrypted traffic behavior set to skip or mute; no key files or decryption workflows are in scope.
+
+
+## Staged Whitespace Recovery Guardrails
+
+- If working-tree whitespace passes but staged whitespace fails, treat the Git index as stale until proven otherwise.
+- Recovery must unstage the intended paths, normalize the working-tree files to LF/no trailing whitespace, then restage the normalized files.
+- Patch scripts must not continue to repo validation after a staged whitespace failure without first refreshing the index.
+- `tools/normalize_text_policy.sh --check` must be a real check-only mode before patch scripts rely on it; otherwise patch scripts should use explicit `git --no-pager diff --check` and `git --no-pager diff --cached --check` PASS/FAIL checks.
+
+## Force LF Index Recovery Guardrail
+
+- If normal unstage/normalize/restage still leaves `git diff --cached --check` failing while working-tree whitespace passes, rebuild staged blobs directly from normalized LF worktree content.
+- The direct-index recovery pattern is: `git reset` to clear stale staged blobs, normalize each intended file to LF/no trailing spaces, `git hash-object -w` the normalized file, and `git update-index --add --cacheinfo` with the intended file mode.
+- Do not use `git add --renormalize .` as the only recovery step when a stale index has already survived normal restaging.
+- Recovery scripts may unstage all paths with `git reset -q`; this must not delete working-tree changes and must restage only explicit intended patch paths.

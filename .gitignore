@@ -66,3 +66,18 @@ Thumbs.db
 .p25_v0_1i_op25_guarded_source_path_reports/
 .p25_v0_1j_op25_postinstall_reports/
 .p25_v0_1j_op25_postinstall_backups/
+
+# V0.1K OP25 live command probe reports
+.p25_op25_live_command_probe_reports/
+
+# V0.1K OP25 live command patch reports
+.p25_v0_1k_op25_live_command_patch_reports/
+
+# V0.1K OP25 live command patch backups
+.p25_v0_1k_op25_live_command_patch_backups/
+
+# V0.1K staged whitespace recovery reports
+.p25_v0_1k_staged_whitespace_recovery_reports/
+
+# V0.1K force LF index recovery reports
+.p25_v0_1k_force_lf_index_recovery_reports/

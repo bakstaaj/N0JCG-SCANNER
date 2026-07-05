@@ -140,6 +140,18 @@ After the repo patches are applied and pulled on the Pi, run the current non-liv
 
 The bundle runs the existing repo, config, API, Pi runtime, OP25 capability, and RTL role probes without installing packages or launching live OP25 decode.
 
+## OP25 live command validation
+
+After OP25 post-install validation passes, validate the foreground OP25 command on the Pi without enabling backend live launch:
+
+```bash
+cd ~/PI-P25-SCANNER
+./tools/pi5_p25_op25_live_command_probe.sh --dry-run
+./tools/pi5_p25_op25_live_command_probe.sh --rx-smoke --seconds 20 --yes
+```
+
+The probe is bounded with `timeout` and records report/log files under `.p25_op25_live_command_probe_reports/`.
+
 ## Backend dev run
 
 ```bash
