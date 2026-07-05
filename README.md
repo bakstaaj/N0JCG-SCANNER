@@ -207,3 +207,23 @@ After the bounded OP25 live command probe passes on the Pi, the backend can cons
 ```bash
 ./tools/pi5_p25_backend_live_launch_probe.sh
 ```
+
+## V0.2D backend service
+
+The standard backend/UI port is `8070`. For manual foreground operation on the Pi:
+
+```bash
+cd ~/PI-P25-SCANNER
+PYTHONPATH=src python3 -m pi_p25_scanner.backend --host 0.0.0.0
+```
+
+For boot-time operation, install the guarded systemd service:
+
+```bash
+cd ~/PI-P25-SCANNER
+./tools/pi5_p25_backend_service_install.sh --dry-run
+./tools/pi5_p25_backend_service_install.sh --install --yes
+./tools/pi5_p25_backend_service_probe.sh
+```
+
+Open the UI at `http://<pi-ip>:8070`.
