@@ -35,6 +35,8 @@ The preferred local path is:
 
 V0.1 uses an external decoder-engine wrapper approach. The first implementation target is OP25 on the Pi, controlled by this project's Python backend. SDRTrunk may be used as a protocol and behavior reference, but SDRTrunk source code must not be copied into this repository unless the project license decision is made and documented first.
 
+V0.1B adds OP25 config generation and guarded decoder discovery. Live OP25 start is intentionally disabled until the exact Pi OP25 install path and command template are validated.
+
 ## P25 scope
 
 Initial scope:
@@ -65,7 +67,7 @@ tools/                  MSYS2/Pi validation and setup scripts
 runtime/                Ignored local runtime state created on the Pi
 ```
 
-## First validation
+## Development validation
 
 On the development machine from MSYS2 UCRT64:
 
@@ -74,12 +76,39 @@ cd ~/sdrdev/PI-P25-SCANNER
 ./tools/validate_repo.sh
 ```
 
+Generate OP25 runtime config files from the example project config:
+
+```bash
+./tools/p25_generate_op25_config.sh
+```
+
+## Raspberry Pi validation
+
 On the Raspberry Pi 5:
 
 ```bash
 cd ~/sdrdev/PI-P25-SCANNER
 ./tools/pi5_p25_preflight.sh
+./tools/pi5_p25_runtime_probe.sh
 ```
+
+The runtime probe is non-invasive. It checks repo health, generates OP25 runtime files, discovers OP25 candidates, and enumerates RTL-SDR tools/devices when present. Missing OP25 is reported as a warning until the OP25 install milestone.
+
+## Backend dev run
+
+```bash
+PYTHONPATH=src python3 src/pi_p25_scanner/backend.py --host 0.0.0.0 --port 8090
+```
+
+Useful endpoints:
+
+- `/api/status`
+- `/api/config`
+- `/api/decoder/capability`
+- `/api/op25/generated-config`
+- `POST /api/decoder/generate-config`
+- `POST /api/scanner/start`
+- `POST /api/scanner/stop`
 
 ## Legal and safety guardrails
 

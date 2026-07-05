@@ -22,3 +22,6 @@ runtime/
 Thumbs.db
 .vscode/
 .idea/
+
+# V0.1B recovery reports
+.p25_v0_1b_recovery_reports/

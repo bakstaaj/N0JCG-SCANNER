@@ -91,6 +91,8 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - Do not treat stale generated files as proof that the decoder process is alive.
 - Validators must separate backend/API failures from RF-environment warnings.
 - Phase II support depends on the installed decoder path and must be reported honestly in status/preflight.
+- Live OP25 process launch must not use a guessed command. It is enabled only after the Pi-specific command template is validated and documented.
+- Generated OP25 runtime files belong under ignored `runtime/op25/`; source JSON stays in `config/`.
 
 ## RTL-SDR Hardware Guardrails
 
@@ -110,10 +112,24 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 ## API and UI Contract Guardrails
 
 - `/api/status` must expose scanner state, decoder engine state, receiver role mapping, active control frequency, active voice frequency, active TGID, phase, encryption status, and recent log/status messages.
+- `/api/status` must expose generated OP25 config state and decoder process state separately.
 - Automatic UI refresh may poll status but must not issue scanner stop/start POSTs unless tied to a recent operator action.
 - Service/API validators must wait for a stable, parseable `/api/status` before counting endpoint failures after startup.
+
+## ChatGPT/Sandbox Reliability Guardrail
+
+- When the assistant sandbox is slow or timing out, prefer small bounded scripts that run in the user's MSYS2/Pi environment instead of long sandbox operations.
+- Keep generated patch scripts single-file, repo-root runnable, and self-validating.
+- Avoid promising background work or delayed results; deliver the next executable handoff in the current response.
 
 ## Acceptance Bundle Guardrail
 
 - When a milestone has several validators, maintain a single acceptance bundle that emits one top-level `FINAL: PASS` or `FINAL: FAIL` summary.
 - Required runtime paths must remain hard failures; RF conditions with no live traffic may be WARN when the scanner is otherwise healthy.
+
+## Patch Recovery and Staging Order Guardrails
+
+- Patch scripts that create new runnable scripts must `git add <path>` before `git update-index --chmod=+x <path>`; `git update-index` must never be used as the first index operation for a new file.
+- Executable-bit requests must be wrapped in explicit PASS/FAIL checks. A failed `git update-index` must not be followed by a misleading PASS line.
+- Patch scripts must normalize touched text files before staging and then validate both unstaged and staged whitespace with `git diff --check` and `git diff --cached --check`.
+- Recovery scripts may operate on a partially applied patch, but they must stage only explicit intended paths, preserve unrelated local artifacts, and commit/push only after all validation passes.

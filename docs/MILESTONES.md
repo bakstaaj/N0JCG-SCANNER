@@ -1,6 +1,6 @@
 # PI P25 Scanner Milestones
 
-## V0.1A — repository baseline and preflight
+## V0.1A - repository baseline and preflight
 
 - Project README.
 - Guardrail file.
@@ -11,15 +11,23 @@
 - Repo validator.
 - Pi preflight validator.
 
-## V0.1B — decoder process wrapper
+## V0.1B - decoder process wrapper scaffold
 
 - Add OP25 runtime discovery.
 - Generate decoder runtime config from project JSON.
-- Start/stop decoder from backend.
-- Capture logs and process state.
-- Expose decoder health through `/api/status`.
+- Expose decoder capability through `/api/status` and `/api/decoder/capability`.
+- Add guarded backend start/stop wrapper.
+- Keep live decoder launch disabled until the Pi-specific OP25 command template is validated.
+- Add Pi runtime probe that separates missing decoder tooling warnings from hard repo/runtime failures.
 
-## V0.1C — P25 config UI
+## V0.1C - OP25 install/capability decision
+
+- Choose and document the supported OP25 install path for Raspberry Pi 5 / Trixie.
+- Validate OP25 command-line invocation with one attached NESDR Nano2+.
+- Validate whether the installed path supports Phase II.
+- Document exact decoder start command and required package/build dependencies.
+
+## V0.1D - P25 config UI
 
 - Edit control channel list.
 - Edit talkgroup whitelist.
@@ -27,21 +35,21 @@
 - Configure RTL serial roles.
 - Configure gain and PPM.
 
-## V0.1D — live control-channel validation
+## V0.1E - live control-channel validation
 
 - Confirm RTL serial mapping.
 - Confirm control-channel lock.
 - Confirm system/NAC/WACN/site metadata when available.
 - Keep no-traffic RF conditions as warnings when lock and process health pass.
 
-## V0.1E — talkgroup-following validation
+## V0.1F - talkgroup-following validation
 
 - Follow allowed TGID voice grants.
 - Mute disallowed TGIDs.
 - Mute encrypted calls.
 - Show active TGID/frequency/phase/status in UI.
 
-## V0.2 — service install and acceptance bundle
+## V0.2 - service install and acceptance bundle
 
 - Add systemd service installer.
 - Add foreground/dev-mode validator.

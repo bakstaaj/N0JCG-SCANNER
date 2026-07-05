@@ -6,6 +6,7 @@ set -Eeuo pipefail
 PASS_COUNT=0
 WARN_COUNT=0
 FAIL_COUNT=0
+REPORT_DIR=".p25_repo_validation_reports"
 
 pass() { printf 'PASS: %s\n' "$*"; PASS_COUNT=$((PASS_COUNT + 1)); return 0; }
 warn() { printf 'WARN: %s\n' "$*"; WARN_COUNT=$((WARN_COUNT + 1)); return 0; }
@@ -21,6 +22,8 @@ else
   exit 1
 fi
 
+mkdir -p "$REPORT_DIR"
+
 if command -v python3 >/dev/null 2>&1; then
   pass "python3 available"
 else
@@ -33,7 +36,21 @@ else
   fail "git missing"
 fi
 
-for required in README.md DEV_GUARDRAILS.md docs/ARCHITECTURE.md docs/MILESTONES.md config/p25_systems.example.json web/index.html web/app.css web/app.js src/pi_p25_scanner/backend.py; do
+for required in \
+  README.md \
+  DEV_GUARDRAILS.md \
+  docs/ARCHITECTURE.md \
+  docs/MILESTONES.md \
+  docs/OP25_WRAPPER.md \
+  config/p25_systems.example.json \
+  web/index.html \
+  web/app.css \
+  web/app.js \
+  src/pi_p25_scanner/__init__.py \
+  src/pi_p25_scanner/backend.py \
+  src/pi_p25_scanner/config_model.py \
+  src/pi_p25_scanner/decoder_discovery.py \
+  src/pi_p25_scanner/op25_config.py; do
   if [[ -f "$required" ]]; then
     pass "required file exists: $required"
   else
@@ -59,7 +76,7 @@ if command -v python3 >/dev/null 2>&1; then
     else
       fail "python compile failed: $pyfile"
     fi
-  done < <(find src -type f -name '*.py' -print | sort)
+  done < <(git ls-files 'src/*.py' 'src/**/*.py' 2>/dev/null | sort)
 
   while IFS= read -r jsonfile; do
     [[ -z "$jsonfile" ]] && continue
@@ -68,7 +85,19 @@ if command -v python3 >/dev/null 2>&1; then
     else
       fail "json invalid: $jsonfile"
     fi
-  done < <(find config -type f -name '*.json' -print | sort)
+  done < <(git ls-files 'config/*.json' 'config/**/*.json' 2>/dev/null | sort)
+
+  if PYTHONPATH=src python3 -m pi_p25_scanner.op25_config --config config/p25_systems.example.json --output "$REPORT_DIR/op25_generated" --json > "$REPORT_DIR/op25_manifest.json"; then
+    pass "OP25 config generator CLI passed"
+  else
+    fail "OP25 config generator CLI failed"
+  fi
+
+  if PYTHONPATH=src python3 -m pi_p25_scanner.decoder_discovery --json > "$REPORT_DIR/op25_discovery.json"; then
+    pass "OP25 decoder discovery CLI passed"
+  else
+    fail "OP25 decoder discovery CLI failed"
+  fi
 fi
 
 if command -v node >/dev/null 2>&1; then
@@ -86,6 +115,11 @@ if command -v git >/dev/null 2>&1; then
     pass "working tree whitespace check passed"
   else
     fail "working tree whitespace check failed"
+  fi
+  if git diff --cached --check -- . ':!runtime' ':!.p25_*_reports' ':!.p25_*_backups'; then
+    pass "staged whitespace check passed"
+  else
+    fail "staged whitespace check failed"
   fi
 fi
 
