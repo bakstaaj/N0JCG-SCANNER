@@ -289,3 +289,6 @@ After a bounded live activity capture, summarize the captured status snapshots:
 ```
 
 The analyzer reads local evidence JSON, writes Markdown/JSON summaries under `.p25_live_evidence_analyze_reports/`, and reports control/voice frequency evidence, TGID evidence, clear voice events, encrypted-call metadata, muted/skipped events, warnings, and recent OP25 log-tail lines. It is observational only and does not change OP25 launch behavior.
+## V0.2K OP25 voice-frame parser
+
+V0.2K recognizes OP25 `IMBE (PLAINTEXT)` and `AMBE (PLAINTEXT)` log lines as clear voice-frame metadata so live evidence captures can report clear voice activity even when OP25 does not print TGID/frequency on the same line. Encrypted frame metadata is still detect/show/mute/skip only; no decryption behavior is added.

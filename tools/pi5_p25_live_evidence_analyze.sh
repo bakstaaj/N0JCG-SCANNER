@@ -317,20 +317,25 @@ def make_report(summary: dict[str, Any], evidence_root: Path, strict: bool) -> t
     else:
         add("WARN", "no talkgroup evidence observed")
 
-    if summary["clear_voice_snapshots"] > 0:
-        add("PASS", f"clear voice snapshots observed: {summary['clear_voice_snapshots']}")
-    else:
-        add("WARN", "no clear voice snapshots observed")
+    counters = summary.get("activity_numeric_max") or {}
+    clear_voice_total = summary["clear_voice_snapshots"] + int(counters.get("clear_voice_events", 0) or 0)
+    encrypted_total = summary["encrypted_snapshots"] + int(counters.get("encrypted_events", 0) or 0)
+    muted_total = summary["muted_snapshots"] + int(counters.get("muted_events", 0) or 0)
 
-    if summary["encrypted_snapshots"] > 0:
-        add("PASS", f"encrypted-call metadata observed and counted: {summary['encrypted_snapshots']}")
+    if clear_voice_total > 0:
+        add("PASS", f"clear voice evidence observed: {clear_voice_total}")
+    else:
+        add("WARN", "no clear voice evidence observed")
+
+    if encrypted_total > 0:
+        add("PASS", f"encrypted-call metadata observed and counted: {encrypted_total}")
     else:
         add("PASS", "no encrypted-call metadata observed during this capture")
 
-    if summary["muted_snapshots"] > 0:
-        add("PASS", f"muted/skipped snapshots observed: {summary['muted_snapshots']}")
+    if muted_total > 0:
+        add("PASS", f"muted/skipped evidence observed: {muted_total}")
     else:
-        add("PASS", "no muted/skipped snapshots observed during this capture")
+        add("PASS", "no muted/skipped evidence observed during this capture")
 
     lines.append("")
     lines.append("## States")

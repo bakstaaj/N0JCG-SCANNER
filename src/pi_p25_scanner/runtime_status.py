@@ -107,6 +107,21 @@ class RuntimeStatusParser:
         elif "phase i" in lower or "phase 1" in lower or "fdma" in lower:
             update.p25_phase = "Phase I"
 
+        voice_frame_seen = "imbe" in lower or "ambe" in lower
+        if voice_frame_seen:
+            if "imbe" in lower and not update.p25_phase:
+                update.p25_phase = "Phase I"
+            elif "ambe" in lower and not update.p25_phase:
+                update.p25_phase = "Phase II"
+            if "plaintext" in lower or "plain text" in lower or "clear" in lower:
+                update.encrypted = False
+                update.muted = False
+                update.parser_notes.append("clear_voice_frame")
+            elif "encrypted" in lower or re.search(r"\benc(?:rypted)?\b", lower):
+                update.encrypted = True
+                update.muted = True
+                update.parser_notes.append("encrypted_voice_frame")
+
         if "encrypted" in lower or "encryption" in lower or re.search(r"\benc(?:rypted)?\b", lower):
             if "clear" in lower and "not encrypted" in lower:
                 update.encrypted = False
