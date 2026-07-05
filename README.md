@@ -248,3 +248,13 @@ V0.2F adds a guarded TOPAZ Regional Wireless Cooperative (TRWC) Mesa Simulcast t
 ```
 
 The profile includes Mesa Simulcast control-channel-capable frequencies plus a focused fire, EMS, law dispatch, and interop talkgroup starter list. Encrypted talkgroups remain mute/skip-only; the project must not attempt encrypted audio decoding or key handling.
+
+## V0.2G TOPAZ/TRWC live RF probe
+
+After applying the TOPAZ/TRWC test profile and refreshing the validated OP25 marker, run a bounded live RF observation from the Pi:
+
+```bash
+./tools/pi5_p25_topaz_trwc_live_rf_probe.sh --seconds 90 --yes
+```
+
+The probe starts decode through the backend API on port 8070, samples `/api/status`, writes a report under `.p25_topaz_trwc_live_rf_probe_reports/`, and stops decode unless `--leave-running` is supplied. Lack of observed TGID or voice-frequency activity is reported as a warning, not a failure.
