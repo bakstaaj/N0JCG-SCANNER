@@ -292,3 +292,6 @@ The analyzer reads local evidence JSON, writes Markdown/JSON summaries under `.p
 ## V0.2K OP25 voice-frame parser
 
 V0.2K recognizes OP25 `IMBE (PLAINTEXT)` and `AMBE (PLAINTEXT)` log lines as clear voice-frame metadata so live evidence captures can report clear voice activity even when OP25 does not print TGID/frequency on the same line. Encrypted frame metadata is still detect/show/mute/skip only; no decryption behavior is added.
+## V0.2L active TGID evidence guard
+
+V0.2L separates OP25 whitelist/configuration talkgroup log lines from active call talkgroup evidence. Lines such as `added talkgroup ... from *_whitelist.tsv` are retained as parsed configuration notes but are not counted as active TGID activity. Active TGID evidence must come from live voice/grant/call-style runtime lines.

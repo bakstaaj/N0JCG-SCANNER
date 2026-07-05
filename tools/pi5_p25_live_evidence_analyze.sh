@@ -311,11 +311,11 @@ def make_report(summary: dict[str, Any], evidence_root: Path, strict: bool) -> t
         tgid_text = ", ".join(
             f"{tgid} ({label})" if label else tgid for tgid, label in summary["tgids"].items()
         )
-        add("PASS", f"talkgroup evidence observed: {tgid_text}")
+        add("PASS", f"active talkgroup evidence observed: {tgid_text}")
     elif strict:
-        add("FAIL", "no talkgroup evidence observed in strict mode")
+        add("FAIL", "no active talkgroup evidence observed in strict mode")
     else:
-        add("WARN", "no talkgroup evidence observed")
+        add("WARN", "no active talkgroup evidence observed")
 
     counters = summary.get("activity_numeric_max") or {}
     clear_voice_total = summary["clear_voice_snapshots"] + int(counters.get("clear_voice_events", 0) or 0)
