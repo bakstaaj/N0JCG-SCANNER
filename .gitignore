@@ -61,3 +61,6 @@ Thumbs.db
 
 # V0.1H config API Pi fix backups
 .p25_v0_1h_config_api_pi_fix_backups/
+
+# V0.1I OP25 guarded source path reports
+.p25_v0_1i_op25_guarded_source_path_reports/

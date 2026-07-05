@@ -217,3 +217,13 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - Loopback API smoke validators should select a dynamic high port by default, while still honoring an explicit test-port environment override.
 - API smoke validators must capture both backend logs and client/request logs, and failure messages must point to both logs.
 - Pi acceptance bundles should treat a runtime probe failure caused by repo validation as a repo/API validation failure first; inspect the step log before changing RF/decoder assumptions.
+
+
+## OP25 Source Install Guardrails
+
+- OP25 source acquisition must be dry-run-first on the Pi.
+- Clone-only source acquisition is allowed with explicit `--clone-only --yes`; it must not install packages, build OP25, or launch a decoder.
+- Full upstream OP25 install/build must require explicit `--run-upstream-install --yes` and must capture a report.
+- OP25 source and build artifacts belong outside tracked project files, normally `~/op25`, with only ignored runtime evidence written under `runtime/settings/`.
+- Command-candidate evidence is not sufficient to enable backend live OP25 launch; `docs/OP25_INSTALL_DECISION.md` must record the validated exact command template first.
+- The PI-P25-SCANNER scope remains clear audio only; encrypted traffic is mute/log only.

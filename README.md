@@ -161,3 +161,16 @@ Useful endpoints:
 ## Legal and safety guardrails
 
 This project is for lawful monitoring of unencrypted radio traffic only. It must not attempt to decrypt, bypass, defeat, or recover encryption keys for protected communications. Encrypted calls should be detected, muted, and logged as encrypted/skipped.
+
+
+## Guarded OP25 source path
+
+V0.1I adds a guarded OP25 source workflow for the Pi. The default helper mode is dry-run and does not install, build, or launch OP25:
+
+```bash
+./tools/pi5_p25_op25_source_install.sh --dry-run
+./tools/pi5_p25_op25_source_install.sh --clone-only --yes
+./tools/pi5_p25_op25_command_candidate.sh
+```
+
+Full upstream OP25 install/build remains gated behind `--run-upstream-install --yes` and live backend OP25 launch remains disabled until `docs/OP25_INSTALL_DECISION.md` records the validated command template.

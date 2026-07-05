@@ -84,3 +84,12 @@
 - Add foreground/dev-mode validator.
 - Add service smoke validator.
 - Add single acceptance bundle with top-level `FINAL: PASS`/`FINAL: FAIL`.
+
+
+## V0.1I - guarded OP25 source path
+
+- Add dry-run-first OP25 source helper.
+- Add clone-only guarded OP25 source acquisition.
+- Add non-invasive OP25 command-candidate evidence script.
+- Keep full upstream install/build behind explicit `--run-upstream-install --yes`.
+- Keep backend live OP25 launch disabled until the exact command template is validated on the Pi.

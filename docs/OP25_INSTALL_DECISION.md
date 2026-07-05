@@ -44,3 +44,18 @@ When a path is selected, update this file with:
 ## Guardrails
 
 Do not enable `/api/scanner/start` live OP25 launch by default until this document contains the validated command template.
+
+
+## V0.1I guarded source candidate
+
+The current guarded source candidate is `https://github.com/boatbod/op25.git` on branch `master`, cloned by default to `~/op25` only when `tools/pi5_p25_op25_source_install.sh --clone-only --yes` is run on the Pi.
+
+This is not yet a live-launch decision. The repository may be cloned and inspected, and command-candidate evidence may be generated, but `/api/scanner/start` live OP25 launch remains disabled until this document records the exact validated Pi command template.
+
+Evidence commands:
+
+```bash
+./tools/pi5_p25_op25_source_install.sh --dry-run
+./tools/pi5_p25_op25_source_install.sh --clone-only --yes
+./tools/pi5_p25_op25_command_candidate.sh
+```
