@@ -155,7 +155,7 @@ The probe is bounded with `timeout` and records report/log files under `.p25_op2
 ## Backend dev run
 
 ```bash
-PYTHONPATH=src python3 src/pi_p25_scanner/backend.py --host 0.0.0.0 --port 8090
+PYTHONPATH=src python3 src/pi_p25_scanner/backend.py --host 0.0.0.0 --port 8070
 ```
 
 Useful endpoints:
