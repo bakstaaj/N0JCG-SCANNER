@@ -116,8 +116,8 @@ else:
     raise SystemExit(f"backend status endpoint never became ready: {last_error}")
 
 checks = {
-    "/": ["port <strong>8070</strong>", "validatedMarkerState", "logTail", "Validated OP25 Launch"],
-    "/app.js": ["validated_marker", "setButtonsForState", "Backend / OP25", "scanner_state"],
+    "/": ["port <strong>8070</strong>", "validatedMarkerState", "logTail", "Validated OP25 Launch", "Backend / OP25"],
+    "/app.js": ["validated_marker", "setButtonsForState", "scanner_state"],
     "/app.css": ["badge-ok", "two-column", "controls-panel"],
 }
 for path, required in checks.items():
