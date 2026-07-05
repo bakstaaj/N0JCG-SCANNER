@@ -18,6 +18,7 @@ MODE="dry-run"
 SECONDS_LIMIT=20
 YES=0
 TERMINAL_TYPE="http:127.0.0.1:18091"
+UDP_PLAYER=0
 SAMPLE_RATE=960000
 APP="rx"
 PROJECT_ROOT="$(pwd -P)"
@@ -38,6 +39,7 @@ Options:
   --seconds N        Smoke-test duration. Default: 20. Allowed: 5-120.
   --yes              Required with --rx-smoke.
   --terminal VALUE   OP25 terminal option. Default: http:127.0.0.1:18091.
+  --with-udp-player Enable OP25 -U built-in UDP audio player. Default off for headless smoke.
   --sample-rate N    OP25 sample rate. Default: 960000.
   --app rx           Current executable probe target. multi_rx is reserved for a later validator.
   -h, --help         Show this help.
@@ -69,6 +71,10 @@ while [[ $# -gt 0 ]]; do
     --sample-rate)
       SAMPLE_RATE="${2:-}"
       shift 2
+      ;;
+    --with-udp-player)
+      UDP_PLAYER=1
+      shift
       ;;
     --app)
       APP="${2:-}"
@@ -251,6 +257,12 @@ if [[ "$FAIL_COUNT" -ne 0 ]]; then
   exit 1
 fi
 
+if [[ "$UDP_PLAYER" -eq 0 ]]; then
+  pass "headless OP25 smoke mode selected; omitting -U built-in UDP audio player"
+else
+  warn "OP25 built-in UDP audio player enabled with -U; ALSA default audio must be available"
+fi
+
 validate_source_options() {
   python3 - "$RX_PY" "$SOURCE_OPT_LOG" <<'PY_OPTS'
 from __future__ import annotations
@@ -365,8 +377,10 @@ build_rx_cmd() {
     "-N" "LNA:$P25_CONTROL_GAIN_INT"
     "-T" "$TRUNK_TSV"
     "-V"
-    "-U"
   )
+  if [[ "$UDP_PLAYER" -eq 1 ]]; then
+    RX_CMD+=("-U")
+  fi
   if [[ "$HAS_PHASE2" -eq 1 ]]; then
     RX_CMD+=("-2")
   fi
@@ -386,8 +400,10 @@ classify_smoke_log() {
     printf 'OPTION_ERROR'
   elif grep -Eiq 'No supported devices found|Failed to open|unable to open|usb_claim_interface|LIBUSB_ERROR|source_c creation failure|osmosdr.*source|rtl.*open|No such device|device.*busy|Found 0 device' "$log"; then
     printf 'SDR_OPEN_ERROR'
-  elif grep -Eiq 'trunk.*No such file|No such file.*trunk|cannot open.*trunk|failed to open.*tsv' "$log"; then
+  elif grep -Eiq 'trunk.*No such file|No such file.*trunk|cannot open.*trunk|failed to open.*tsv|FileNotFoundError.*whitelist|FileNotFoundError.*blacklist' "$log"; then
     printf 'CONFIG_FILE_ERROR'
+  elif grep -Eiq 'failed to open audio device|using ALSA sound system|audio device: default|sockaudio' "$log"; then
+    printf 'AUDIO_OUTPUT_ERROR'
   elif grep -Eiq 'Traceback|Exception|RuntimeError|ValueError' "$log"; then
     printf 'PYTHON_RUNTIME_ERROR'
   else
@@ -412,6 +428,7 @@ P25_VALIDATED_RX_GAIN=LNA:$P25_CONTROL_GAIN_INT
 P25_VALIDATED_RX_PPM=$P25_CONTROL_PPM
 P25_VALIDATED_RX_TRUNK_TSV=$TRUNK_TSV
 P25_VALIDATED_RX_TERMINAL=$TERMINAL_TYPE
+P25_VALIDATED_RX_UDP_PLAYER=$UDP_PLAYER
 P25_VALIDATED_RX_CRYPT_BEHAVIOR=2
 P25_VALIDATED_RX_SECONDS=$SECONDS_LIMIT
 P25_VALIDATED_RX_REPORT=$REPORT_FILE
@@ -434,6 +451,7 @@ write_command_file() {
     printf 'TRUNK_TSV=%s\n' "$TRUNK_TSV"
     printf 'OP25_APP_DIR=%s\n' "$APP_DIR"
     printf 'OP25_PYTHONPATH=%s\n' "$OP25_PYTHONPATH"
+    printf 'OP25_UDP_PLAYER=%s\n' "$UDP_PLAYER"
   } >> "$COMMAND_FILE"
   build_rx_cmd "rtl=$P25_CONTROL_SERIAL"
   printf 'RX_COMMAND_SERIAL_CD=%q ' cd "$APP_DIR" >> "$COMMAND_FILE"
