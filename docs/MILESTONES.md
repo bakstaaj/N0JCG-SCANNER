@@ -106,3 +106,11 @@
 - Verify OP25 source app paths after upstream install/build.
 - Capture GNU Radio/import evidence when available.
 - Keep live backend OP25 launch disabled until a bounded manual control-channel command is validated.
+
+## V0.1M OP25 live command smoke diagnostics
+
+- Improve the bounded rx.py foreground smoke validator.
+- Keep dry-run as the default.
+- Classify early OP25 failures from smoke logs.
+- Try stable serial first and runtime RTL index second when available.
+- Do not enable backend live launch.

@@ -196,3 +196,7 @@ After the guarded OP25 install/build completes on the Pi, run:
 ```
 
 This captures installed OP25 command evidence and help output without starting live decode. Backend live launch remains disabled until the exact command template is validated on the Pi.
+
+## V0.1M OP25 live command smoke diagnostics
+
+V0.1M improves the bounded OP25 live-command probe. The probe now classifies early OP25 startup failures, prints smoke-log tails into the report, and tries a runtime RTL index fallback when serial-based SDR opening does not validate. Backend live launch remains disabled until a later patch consumes validated command evidence.

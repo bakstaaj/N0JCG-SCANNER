@@ -256,3 +256,7 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - The direct-index recovery pattern is: `git reset` to clear stale staged blobs, normalize each intended file to LF/no trailing spaces, `git hash-object -w` the normalized file, and `git update-index --add --cacheinfo` with the intended file mode.
 - Do not use `git add --renormalize .` as the only recovery step when a stale index has already survived normal restaging.
 - Recovery scripts may unstage all paths with `git reset -q`; this must not delete working-tree changes and must restage only explicit intended patch paths.
+
+## V0.1M OP25 smoke diagnostics guardrail
+
+OP25 live-command validation must remain bounded, foreground-only, and report-driven. A smoke-test failure must preserve the OP25 log and classify the likely failure type before changing command templates. Stable RTL serials remain preferred in config, but a runtime-index candidate may be tested as evidence because OP25/osmosdr builds may differ in serial handling.

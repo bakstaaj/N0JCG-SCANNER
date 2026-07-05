@@ -11,16 +11,16 @@ REPORT_DIR=".p25_op25_live_command_probe_reports"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 REPORT_FILE="$REPORT_DIR/op25_live_command_probe_${STAMP}.txt"
 COMMAND_FILE="$REPORT_DIR/op25_rx_command_${STAMP}.txt"
-SMOKE_LOG="$REPORT_DIR/op25_rx_smoke_${STAMP}.log"
-HELP_LOG="$REPORT_DIR/op25_rx_help_${STAMP}.txt"
-HELP_SOURCE_LOG="$REPORT_DIR/op25_rx_option_source_scan_${STAMP}.txt"
 META_ENV="$REPORT_DIR/op25_command_meta_${STAMP}.env"
+HELP_LOG="$REPORT_DIR/op25_rx_help_${STAMP}.txt"
+SOURCE_OPT_LOG="$REPORT_DIR/op25_rx_source_options_${STAMP}.txt"
 MODE="dry-run"
 SECONDS_LIMIT=20
 YES=0
 TERMINAL_TYPE="http:127.0.0.1:18091"
 SAMPLE_RATE=960000
 APP="rx"
+PROJECT_ROOT="$(pwd -P)"
 
 pass() { printf 'PASS: %s\n' "$*" | tee -a "$REPORT_FILE"; PASS_COUNT=$((PASS_COUNT + 1)); return 0; }
 warn() { printf 'WARN: %s\n' "$*" | tee -a "$REPORT_FILE"; WARN_COUNT=$((WARN_COUNT + 1)); return 0; }
@@ -33,9 +33,9 @@ Usage:
   ./tools/pi5_p25_op25_live_command_probe.sh --rx-smoke --seconds 20 --yes
 
 Options:
-  --dry-run          Generate and print the candidate rx.py command only. Default.
-  --rx-smoke         Run a bounded rx.py foreground smoke test with timeout.
-  --seconds N        Smoke-test duration. Default: 20.
+  --dry-run          Generate and print candidate rx.py commands only. Default.
+  --rx-smoke         Run bounded rx.py foreground smoke tests with timeout.
+  --seconds N        Smoke-test duration. Default: 20. Allowed: 5-120.
   --yes              Required with --rx-smoke.
   --terminal VALUE   OP25 terminal option. Default: http:127.0.0.1:18091.
   --sample-rate N    OP25 sample rate. Default: 960000.
@@ -104,17 +104,13 @@ else
   fail "target runtime must be Linux on Raspberry Pi"
 fi
 
-if command -v python3 >/dev/null 2>&1; then
-  pass "python3 available"
-else
-  fail "python3 missing"
-fi
-
-if command -v timeout >/dev/null 2>&1; then
-  pass "timeout available"
-else
-  fail "timeout missing"
-fi
+for required_cmd in python3 timeout; do
+  if command -v "$required_cmd" >/dev/null 2>&1; then
+    pass "command available: $required_cmd"
+  else
+    fail "missing required command: $required_cmd"
+  fi
+done
 
 if [[ "$APP" != "rx" ]]; then
   fail "only --app rx is supported in this milestone; multi_rx validation is reserved for a later patch"
@@ -176,7 +172,7 @@ else
   fail "generated trunk TSV missing: runtime/op25/trunk.tsv"
 fi
 
-if PYTHONPATH=src python3 - "$META_ENV" <<'PY'
+if PYTHONPATH=src python3 - "$META_ENV" <<'PY_META'
 from __future__ import annotations
 import shlex
 import sys
@@ -204,7 +200,7 @@ lines = {
     "TRUNK_TSV": "runtime/op25/trunk.tsv",
 }
 out.write_text("".join(f"{key}={shlex.quote(value)}\n" for key, value in lines.items()), encoding="utf-8")
-PY
+PY_META
 then
   pass "wrote command metadata: $META_ENV"
 else
@@ -220,79 +216,252 @@ else
   fail "p25_control serial is blank; run tools/p25_set_receiver_roles.sh first"
 fi
 
-HELP_USABLE=0
-if timeout 10s "$RX_PY" --help > "$HELP_LOG" 2>&1; then
-  pass "rx.py help completed"
-  HELP_USABLE=1
-else
-  rc=$?
-  warn "rx.py --help returned rc=$rc; see $HELP_LOG; using source-code option scan fallback"
+if [[ "$FAIL_COUNT" -ne 0 ]]; then
+  printf 'SUMMARY: PASS=%s WARN=%s FAIL=%s\n' "$PASS_COUNT" "$WARN_COUNT" "$FAIL_COUNT" | tee -a "$REPORT_FILE"
+  printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
+  exit 1
 fi
 
-if python3 - "$RX_PY" "$HELP_LOG" "$HELP_SOURCE_LOG" <<'PY_OPT'
+validate_source_options() {
+  python3 - "$RX_PY" "$SOURCE_OPT_LOG" <<'PY_OPTS'
 from __future__ import annotations
+import re
 import sys
 from pathlib import Path
-
-rx_py = Path(sys.argv[1])
-help_log = Path(sys.argv[2])
-source_log = Path(sys.argv[3])
-required = ["--args", "-S", "-q", "-N", "-T", "-V", "-U", "--crypt-behavior", "-2", "-l"]
-help_text = help_log.read_text(encoding="utf-8", errors="replace") if help_log.exists() else ""
-source_text = rx_py.read_text(encoding="utf-8", errors="replace")
-missing = []
-lines = []
-for opt in required:
-    in_help = opt in help_text
-    in_source = opt in source_text
-    status = "PASS" if in_help or in_source else "FAIL"
-    where = "help" if in_help else "source" if in_source else "missing"
-    lines.append(f"{status}: {opt}: {where}")
-    if not in_help and not in_source:
+rx_path = Path(sys.argv[1])
+out_path = Path(sys.argv[2])
+text = rx_path.read_text(encoding="utf-8", errors="replace")
+checks = {
+    "--args": r"--args",
+    "-S": r"['\"]-S['\"]",
+    "-q": r"['\"]-q['\"]",
+    "-N": r"['\"]-N['\"]",
+    "-T": r"['\"]-T['\"]",
+    "-V": r"['\"]-V['\"]",
+    "-U": r"['\"]-U['\"]",
+    "-l": r"['\"]-l['\"]",
+    "--crypt-behavior": r"--crypt-behavior",
+    "-2": r"['\"]-2['\"]",
+}
+results: list[str] = []
+missing: list[str] = []
+for opt, pattern in checks.items():
+    found = re.search(pattern, text) is not None
+    results.append(f"{opt}={'present' if found else 'missing'}")
+    if not found:
         missing.append(opt)
-source_log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+out_path.write_text("\n".join(results) + "\n", encoding="utf-8")
 if missing:
-    print("missing expected rx.py options: " + ", ".join(missing), file=sys.stderr)
+    print("MISSING=" + ",".join(missing))
     raise SystemExit(1)
-PY_OPT
-then
-  pass "rx.py expected options validated from help or source scan: $HELP_SOURCE_LOG"
+print("SOURCE_OPTION_VALIDATION_PASS")
+PY_OPTS
+}
+
+set +e
+timeout 10s "$RX_PY" --help > "$HELP_LOG" 2>&1
+HELP_RC=$?
+set -e
+if [[ "$HELP_RC" -eq 0 ]]; then
+  pass "rx.py help completed"
 else
-  fail "rx.py expected option validation failed; see $HELP_SOURCE_LOG"
+  warn "rx.py --help returned rc=$HELP_RC; source option validation will be used; see $HELP_LOG"
 fi
 
-RX_CMD=(
-  "$RX_PY"
-  "--args" "rtl=$P25_CONTROL_SERIAL"
-  "-S" "$SAMPLE_RATE"
-  "-q" "$P25_CONTROL_PPM"
-  "-N" "LNA:$P25_CONTROL_GAIN_INT"
-  "-T" "$TRUNK_TSV"
-  "-V"
-  "-2"
-  "-U"
-  "-l" "$TERMINAL_TYPE"
-  "--crypt-behavior" "2"
-)
+if validate_source_options >> "$REPORT_FILE" 2>&1; then
+  pass "rx.py source includes expected option definitions"
+else
+  fail "rx.py source option validation failed; see $SOURCE_OPT_LOG"
+fi
 
-{
-  printf 'ACTIVE_CONFIG_PATH=%s\n' "$ACTIVE_CONFIG_PATH"
-  printf 'SYSTEM_NAME=%s\n' "$SYSTEM_NAME"
-  printf 'CONTROL_FREQUENCY_HZ=%s\n' "$CONTROL_FREQUENCY_HZ"
-  printf 'CONTROL_FREQUENCY_MHZ=%s\n' "$CONTROL_FREQUENCY_MHZ"
-  printf 'P25_CONTROL_SERIAL=%s\n' "$P25_CONTROL_SERIAL"
-  printf 'P25_CONTROL_GAIN_INT=%s\n' "$P25_CONTROL_GAIN_INT"
-  printf 'P25_CONTROL_PPM=%s\n' "$P25_CONTROL_PPM"
-  printf 'TRUNK_TSV=%s\n' "$TRUNK_TSV"
-  printf 'RX_COMMAND='
-  printf '%q ' "${RX_CMD[@]}"
-  printf '\n'
-} > "$COMMAND_FILE"
-pass "wrote candidate command file: $COMMAND_FILE"
+HAS_PHASE2=0
+HAS_CRYPT=0
+HAS_TERMINAL=0
+if grep -q -- '^-2=present$' "$SOURCE_OPT_LOG"; then
+  HAS_PHASE2=1
+  pass "rx.py source includes Phase II option: -2"
+else
+  warn "rx.py source does not include -2; Phase II flag will be omitted"
+fi
+if grep -q -- '^--crypt-behavior=present$' "$SOURCE_OPT_LOG"; then
+  HAS_CRYPT=1
+  pass "rx.py source includes encrypted-call behavior option"
+else
+  warn "rx.py source does not include --crypt-behavior; encrypted-call flag will be omitted"
+fi
+if grep -q -- '^-l=present$' "$SOURCE_OPT_LOG"; then
+  HAS_TERMINAL=1
+  pass "rx.py source includes terminal option: -l"
+else
+  warn "rx.py source does not include -l; terminal flag will be omitted"
+fi
 
-printf '\nCandidate rx.py command:\n' | tee -a "$REPORT_FILE"
-printf '%q ' "${RX_CMD[@]}" | tee -a "$REPORT_FILE"
-printf '\n' | tee -a "$REPORT_FILE"
+find_rtl_index_for_serial() {
+  local serial="$1"
+  local idx out parsed
+  if ! command -v rtl_eeprom >/dev/null 2>&1; then
+    return 1
+  fi
+  for idx in 0 1 2 3 4 5 6 7; do
+    out="$REPORT_DIR/rtl_eeprom_index_${idx}_${STAMP}.txt"
+    if timeout 6s rtl_eeprom -d "$idx" > "$out" 2>&1; then
+      parsed="$(awk -F: '/Serial number/{gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit}' "$out" || true)"
+      if [[ "$parsed" == "$serial" ]]; then
+        printf '%s\n' "$idx"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
+P25_CONTROL_INDEX=""
+if P25_CONTROL_INDEX="$(find_rtl_index_for_serial "$P25_CONTROL_SERIAL")"; then
+  pass "p25_control runtime index detected: $P25_CONTROL_INDEX"
+else
+  warn "could not map p25_control serial to a runtime RTL index; serial-only candidate will be used"
+  P25_CONTROL_INDEX=""
+fi
+
+build_rx_cmd() {
+  local device_arg="$1"
+  RX_CMD=(
+    "$RX_PY"
+    "--args" "$device_arg"
+    "-S" "$SAMPLE_RATE"
+    "-q" "$P25_CONTROL_PPM"
+    "-N" "LNA:$P25_CONTROL_GAIN_INT"
+    "-T" "$TRUNK_TSV"
+    "-V"
+    "-U"
+  )
+  if [[ "$HAS_PHASE2" -eq 1 ]]; then
+    RX_CMD+=("-2")
+  fi
+  if [[ "$HAS_TERMINAL" -eq 1 ]]; then
+    RX_CMD+=("-l" "$TERMINAL_TYPE")
+  fi
+  if [[ "$HAS_CRYPT" -eq 1 ]]; then
+    RX_CMD+=("--crypt-behavior" "2")
+  fi
+}
+
+classify_smoke_log() {
+  local log="$1"
+  if grep -Eiq 'ModuleNotFoundError|ImportError|No module named' "$log"; then
+    printf 'IMPORT_ERROR'
+  elif grep -Eiq 'no such option|unrecognized arguments|option .*not recognized|Usage:.*rx\.py' "$log"; then
+    printf 'OPTION_ERROR'
+  elif grep -Eiq 'No supported devices found|Failed to open|unable to open|usb_claim_interface|LIBUSB_ERROR|source_c creation failure|osmosdr.*source|rtl.*open|No such device|device.*busy|Found 0 device' "$log"; then
+    printf 'SDR_OPEN_ERROR'
+  elif grep -Eiq 'trunk.*No such file|No such file.*trunk|cannot open.*trunk|failed to open.*tsv' "$log"; then
+    printf 'CONFIG_FILE_ERROR'
+  elif grep -Eiq 'Traceback|Exception|RuntimeError|ValueError' "$log"; then
+    printf 'PYTHON_RUNTIME_ERROR'
+  else
+    printf 'UNKNOWN_EARLY_EXIT'
+  fi
+}
+
+write_command_file() {
+  : > "$COMMAND_FILE"
+  {
+    printf 'ACTIVE_CONFIG_PATH=%s\n' "$ACTIVE_CONFIG_PATH"
+    printf 'SYSTEM_NAME=%s\n' "$SYSTEM_NAME"
+    printf 'CONTROL_FREQUENCY_HZ=%s\n' "$CONTROL_FREQUENCY_HZ"
+    printf 'CONTROL_FREQUENCY_MHZ=%s\n' "$CONTROL_FREQUENCY_MHZ"
+    printf 'P25_CONTROL_SERIAL=%s\n' "$P25_CONTROL_SERIAL"
+    printf 'P25_CONTROL_INDEX=%s\n' "$P25_CONTROL_INDEX"
+    printf 'P25_CONTROL_GAIN_INT=%s\n' "$P25_CONTROL_GAIN_INT"
+    printf 'P25_CONTROL_PPM=%s\n' "$P25_CONTROL_PPM"
+    printf 'TRUNK_TSV=%s\n' "$TRUNK_TSV"
+  } >> "$COMMAND_FILE"
+  build_rx_cmd "rtl=$P25_CONTROL_SERIAL"
+  printf 'RX_COMMAND_SERIAL=' >> "$COMMAND_FILE"
+  printf '%q ' "${RX_CMD[@]}" >> "$COMMAND_FILE"
+  printf '\n' >> "$COMMAND_FILE"
+  if [[ -n "$P25_CONTROL_INDEX" ]]; then
+    build_rx_cmd "rtl=$P25_CONTROL_INDEX"
+    printf 'RX_COMMAND_INDEX=' >> "$COMMAND_FILE"
+    printf '%q ' "${RX_CMD[@]}" >> "$COMMAND_FILE"
+    printf '\n' >> "$COMMAND_FILE"
+  fi
+  pass "wrote candidate command file: $COMMAND_FILE"
+}
+
+print_candidate() {
+  local label="$1"
+  local device_arg="$2"
+  build_rx_cmd "$device_arg"
+  printf '\nCandidate rx.py command (%s):\n' "$label" | tee -a "$REPORT_FILE"
+  printf '%q ' "${RX_CMD[@]}" | tee -a "$REPORT_FILE"
+  printf '\n' | tee -a "$REPORT_FILE"
+}
+
+run_smoke_candidate() {
+  local label="$1"
+  local device_arg="$2"
+  local log="$REPORT_DIR/op25_rx_smoke_${label}_${STAMP}.log"
+  local class rc
+  build_rx_cmd "$device_arg"
+  warn "starting bounded rx.py smoke run for ${SECONDS_LIMIT}s using ${label}; no backend launch or service changes will be made"
+  set +e
+  timeout "${SECONDS_LIMIT}s" "${RX_CMD[@]}" > "$log" 2>&1
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 124 ]]; then
+    if grep -Eiq 'Traceback|ImportError|ModuleNotFoundError|source_c creation failure|No supported devices found|Failed to open|Exception|RuntimeError|ValueError' "$log"; then
+      class="$(classify_smoke_log "$log")"
+      warn "rx.py reached timeout but smoke log contains startup/runtime markers; classification=$class; see $log"
+      printf '--- smoke log tail (%s) ---\n' "$label" | tee -a "$REPORT_FILE"
+      tail -n 80 "$log" | tee -a "$REPORT_FILE" || true
+      return 1
+    fi
+    pass "rx.py smoke stayed alive until bounded timeout (${SECONDS_LIMIT}s) using ${label}; see $log"
+    write_validated_marker "$label" "$device_arg" "$log"
+    return 0
+  fi
+  if [[ "$rc" -eq 0 ]]; then
+    pass "rx.py smoke exited cleanly rc=0 using ${label}; see $log"
+    write_validated_marker "$label" "$device_arg" "$log"
+    return 0
+  fi
+  class="$(classify_smoke_log "$log")"
+  warn "rx.py smoke candidate ${label} exited early rc=$rc classification=$class; see $log"
+  printf '--- smoke log tail (%s) ---\n' "$label" | tee -a "$REPORT_FILE"
+  tail -n 80 "$log" | tee -a "$REPORT_FILE" || true
+  printf 'LAST_SMOKE_CLASSIFICATION=%s\nLAST_SMOKE_RC=%s\nLAST_SMOKE_LOG=%s\n' "$class" "$rc" "$log" > runtime/settings/op25_live_command_last_failure.env
+  return 1
+}
+
+write_validated_marker() {
+  local label="$1"
+  local device_arg="$2"
+  local log="$3"
+  cat > runtime/settings/op25_validated_rx_command.env <<ENV
+# Generated by tools/pi5_p25_op25_live_command_probe.sh on ${STAMP}
+# Evidence only. Backend live launch remains disabled until a later patch consumes this template.
+P25_VALIDATED_RX_APP=$RX_PY
+P25_VALIDATED_RX_DEVICE_LABEL=$label
+P25_VALIDATED_RX_ARGS=$device_arg
+P25_VALIDATED_RX_SAMPLE_RATE=$SAMPLE_RATE
+P25_VALIDATED_RX_GAIN=LNA:$P25_CONTROL_GAIN_INT
+P25_VALIDATED_RX_PPM=$P25_CONTROL_PPM
+P25_VALIDATED_RX_TRUNK_TSV=$TRUNK_TSV
+P25_VALIDATED_RX_TERMINAL=$TERMINAL_TYPE
+P25_VALIDATED_RX_CRYPT_BEHAVIOR=2
+P25_VALIDATED_RX_SECONDS=$SECONDS_LIMIT
+P25_VALIDATED_RX_REPORT=$REPORT_FILE
+P25_VALIDATED_RX_LOG=$log
+ENV
+  pass "wrote validated command evidence marker: runtime/settings/op25_validated_rx_command.env"
+}
+
+write_command_file
+print_candidate "serial" "rtl=$P25_CONTROL_SERIAL"
+if [[ -n "$P25_CONTROL_INDEX" ]]; then
+  print_candidate "runtime-index" "rtl=$P25_CONTROL_INDEX"
+fi
 
 if [[ "$FAIL_COUNT" -ne 0 ]]; then
   printf 'SUMMARY: PASS=%s WARN=%s FAIL=%s\n' "$PASS_COUNT" "$WARN_COUNT" "$FAIL_COUNT" | tee -a "$REPORT_FILE"
@@ -303,36 +472,17 @@ fi
 if [[ "$MODE" == "dry-run" ]]; then
   pass "dry-run selected; OP25 live command was not started"
 elif [[ "$MODE" == "rx-smoke" ]]; then
-  warn "starting bounded rx.py smoke run for ${SECONDS_LIMIT}s; no backend launch or service changes will be made"
-  set +e
-  timeout "${SECONDS_LIMIT}s" "${RX_CMD[@]}" > "$SMOKE_LOG" 2>&1
-  rc=$?
-  set -e
-  if [[ "$rc" -eq 124 ]]; then
-    if grep -Eiq 'Traceback|ImportError|ModuleNotFoundError|osmosdr source_c creation failure|No supported devices found|Failed to open|Exception' "$SMOKE_LOG"; then
-      fail "rx.py reached timeout but smoke log contains startup/import/source errors; see $SMOKE_LOG"
-    else
-      pass "rx.py smoke stayed alive until bounded timeout (${SECONDS_LIMIT}s); see $SMOKE_LOG"
-      cat > runtime/settings/op25_validated_rx_command.env <<ENV
-# Generated by tools/pi5_p25_op25_live_command_probe.sh on ${STAMP}
-# Evidence only. Backend live launch remains disabled until a later patch consumes this template.
-P25_VALIDATED_RX_APP=$RX_PY
-P25_VALIDATED_RX_ARGS=rtl=$P25_CONTROL_SERIAL
-P25_VALIDATED_RX_SAMPLE_RATE=$SAMPLE_RATE
-P25_VALIDATED_RX_GAIN=LNA:$P25_CONTROL_GAIN_INT
-P25_VALIDATED_RX_PPM=$P25_CONTROL_PPM
-P25_VALIDATED_RX_TRUNK_TSV=$TRUNK_TSV
-P25_VALIDATED_RX_TERMINAL=$TERMINAL_TYPE
-P25_VALIDATED_RX_CRYPT_BEHAVIOR=2
-P25_VALIDATED_RX_SECONDS=$SECONDS_LIMIT
-P25_VALIDATED_RX_REPORT=$REPORT_FILE
-ENV
-      pass "wrote validated command evidence marker: runtime/settings/op25_validated_rx_command.env"
+  SMOKE_PASS=0
+  if run_smoke_candidate "serial" "rtl=$P25_CONTROL_SERIAL"; then
+    SMOKE_PASS=1
+  elif [[ -n "$P25_CONTROL_INDEX" ]]; then
+    warn "serial candidate did not validate; trying runtime index candidate"
+    if run_smoke_candidate "runtime_index" "rtl=$P25_CONTROL_INDEX"; then
+      SMOKE_PASS=1
     fi
-  elif [[ "$rc" -eq 0 ]]; then
-    pass "rx.py smoke exited cleanly rc=0; see $SMOKE_LOG"
-  else
-    fail "rx.py smoke exited early rc=$rc; see $SMOKE_LOG"
+  fi
+  if [[ "$SMOKE_PASS" -ne 1 ]]; then
+    fail "no rx.py smoke candidate validated; see report and smoke logs"
   fi
 else
   fail "unknown mode: $MODE"
@@ -340,9 +490,6 @@ fi
 
 printf 'Report: %s\n' "$REPORT_FILE" | tee -a "$REPORT_FILE"
 printf 'Command file: %s\n' "$COMMAND_FILE" | tee -a "$REPORT_FILE"
-if [[ -f "$SMOKE_LOG" ]]; then
-  printf 'Smoke log: %s\n' "$SMOKE_LOG" | tee -a "$REPORT_FILE"
-fi
 printf 'SUMMARY: PASS=%s WARN=%s FAIL=%s\n' "$PASS_COUNT" "$WARN_COUNT" "$FAIL_COUNT" | tee -a "$REPORT_FILE"
 if [[ "$FAIL_COUNT" -eq 0 ]]; then
   printf 'FINAL: PASS\n' | tee -a "$REPORT_FILE"
