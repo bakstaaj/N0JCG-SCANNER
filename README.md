@@ -227,3 +227,12 @@ cd ~/PI-P25-SCANNER
 ```
 
 Open the UI at `http://<pi-ip>:8070`.
+## V0.2E runtime status parsing
+
+V0.2E adds conservative OP25 log parsing so the backend can populate UI status fields such as active voice frequency, TGID, P25 phase, encrypted state, and muted state from OP25 stdout/stderr when recognizable log lines are present.
+
+Validate without live RF traffic:
+
+```bash
+./tools/pi5_p25_runtime_status_parser_probe.sh
+```

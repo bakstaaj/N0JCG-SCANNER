@@ -37,6 +37,7 @@ if __package__ in (None, ""):
     )
     from pi_p25_scanner.decoder_discovery import discover_op25
     from pi_p25_scanner.op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
+    from pi_p25_scanner.runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
 else:
     from .config_model import ConfigError
     from .config_store import (
@@ -54,6 +55,7 @@ else:
     )
     from .decoder_discovery import discover_op25
     from .op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
+    from .runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "web"
@@ -94,7 +96,8 @@ class ScannerStatus:
     encrypted: bool = False
     muted: bool = False
     generated_op25_config: dict[str, Any] = field(default_factory=dict)
-    last_event: str = "V0.1E backend idle; config API/UI scaffold ready"
+    runtime_status: dict[str, Any] = field(default_factory=dict)
+    last_event: str = "V0.2E backend idle; runtime status parser ready"
     warnings: list[str] = field(default_factory=list)
     log_tail: list[str] = field(default_factory=list)
     updated_utc: float = field(default_factory=time.time)
@@ -105,6 +108,7 @@ class ScannerManager:
         self.status = ScannerStatus()
         self.process: subprocess.Popen[str] | None = None
         self.log_lines: deque[str] = deque(maxlen=LOG_TAIL_LIMIT)
+        self.runtime_parser = RuntimeStatusParser()
         self.lock = threading.RLock()
         self.refresh_capability()
         self.refresh_config_summary()
@@ -117,13 +121,34 @@ class ScannerManager:
         if message not in self.status.warnings:
             self.status.warnings.append(message)
 
+    def _apply_runtime_status_update(self, update: RuntimeStatusUpdate) -> None:
+        if not update.has_update:
+            return
+        if update.control_frequency_hz is not None:
+            self.status.active_control_frequency_hz = update.control_frequency_hz
+        if update.voice_frequency_hz is not None:
+            self.status.active_voice_frequency_hz = update.voice_frequency_hz
+        if update.tgid is not None:
+            self.status.active_tgid = update.tgid
+        if update.talkgroup_label:
+            self.status.active_talkgroup_label = update.talkgroup_label
+        if update.p25_phase:
+            self.status.p25_phase = update.p25_phase
+        if update.encrypted is not None:
+            self.status.encrypted = update.encrypted
+        if update.muted is not None:
+            self.status.muted = update.muted
+        self.status.runtime_status = update.to_status_dict()
+
     def _append_log(self, line: str) -> None:
         clean = line.rstrip("\n")
         if not clean:
             return
+        update = self.runtime_parser.parse_line(clean)
         with self.lock:
             self.log_lines.append(clean)
             self.status.log_tail = list(self.log_lines)
+            self._apply_runtime_status_update(update)
 
     def refresh_capability(self) -> dict[str, Any]:
         capability = discover_op25().to_dict()
