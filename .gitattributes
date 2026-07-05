@@ -1,0 +1,29 @@
+# Enforce LF line endings for all project text files.
+* text=auto eol=lf
+
+# Source, docs, config, and web assets.
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.service text eol=lf
+*.tsv text eol=lf
+*.csv text eol=lf
+
+# Binary/media artifacts.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.wav binary
+*.iq binary

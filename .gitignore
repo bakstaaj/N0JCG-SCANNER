@@ -40,3 +40,15 @@ Thumbs.db
 
 # V0.1E config UI/API reports
 .p25_v0_1e_config_ui_reports/
+
+# V0.1F RTL role mapping reports
+.p25_v0_1f_rtl_role_mapping_reports/
+
+# LF policy recovery reports
+.p25_lf_policy_recovery_reports/
+
+# RTL role probe reports
+.p25_rtl_role_probe_reports/
+
+# Repo validation reports
+.p25_repo_validation_reports/

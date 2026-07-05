@@ -116,6 +116,18 @@ The backend reads `P25_SCANNER_CONFIG` when set. Otherwise it prefers `runtime/s
 
 The OP25 install decision is tracked in `docs/OP25_INSTALL_DECISION.md`. Live OP25 launch remains disabled until the Pi-specific command template is validated there.
 
+
+## RTL receiver role mapping
+
+Before live P25 decode work, map receivers by stable RTL EEPROM serial:
+
+```bash
+./tools/pi5_p25_rtl_role_probe.sh
+./tools/p25_set_receiver_roles.sh <control_serial> [voice_serial]
+```
+
+The role setter updates only the ignored local runtime config at `runtime/settings/p25_systems.json`.
+
 ## Backend dev run
 
 ```bash

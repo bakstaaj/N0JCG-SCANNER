@@ -62,6 +62,14 @@
 - Mute encrypted calls.
 - Show active TGID/frequency/phase/status in UI.
 
+
+## V0.1F - RTL receiver role mapping
+
+- Add Pi-side RTL serial/index evidence probe.
+- Add local config helper to assign `p25_control` and optional `p25_voice` serials.
+- Keep backend ownership serial-first and avoid hard-coded runtime indexes.
+- Keep live OP25 launch disabled until decoder install/capability is validated.
+
 ## V0.2 - service install and acceptance bundle
 
 - Add systemd service installer.

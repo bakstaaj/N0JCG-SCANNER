@@ -41,7 +41,7 @@ for required in \
   DEV_GUARDRAILS.md \
   docs/ARCHITECTURE.md \
   docs/MILESTONES.md \
-  docs/OP25_WRAPPER.md \
+  docs/OP25_WRAPPER.md tools/p25_set_receiver_roles.sh tools/pi5_p25_rtl_role_probe.sh docs/RTL_ROLE_MAPPING.md \
   config/p25_systems.example.json config/p25_systems.local.example.json \
   web/index.html \
   web/app.css \

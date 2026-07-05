@@ -183,3 +183,20 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - Backend status must expose active config metadata separately from decoder process state.
 - Config/API validators that start the backend must bind only to loopback on a high test port, use bounded readiness waits, capture logs to ignored report folders, and always clean up the backend process.
 - Patch scripts that normalize line endings must unstage intended files first, normalize the working tree, then restage so the Git index cannot retain stale CRLF content.
+
+
+## RTL Role Mapping Patch Guardrails
+
+- Receiver ownership must be serial-first. Runtime RTL indexes are evidence only and must not be persisted as the source of truth.
+- Role mapping tools may write detected evidence under ignored `runtime/settings/` and report folders, but must not commit live hardware evidence unless explicitly requested.
+- Local role update tools must modify only the ignored runtime config by default and must back up that file before overwrite.
+- Patch scripts must unstage intended paths before normalization, normalize LF/no trailing whitespace, restage after normalization, then run staged whitespace validation to avoid stale CRLF index failures.
+
+## Repository LF Line-Ending Policy Guardrails
+
+- This repository must track `.gitattributes` to force LF line endings for text, scripts, source, docs, config, and web files.
+- Patch and recovery scripts must set repo-local `core.autocrlf=false` and `core.eol=lf` before writing or staging generated text.
+- When staged whitespace validation reports nearly every added line as trailing whitespace, treat it as a CRLF-in-index failure and repair the index with LF policy plus `git add --renormalize .`.
+- After adding or changing `.gitattributes`, run `git add --renormalize .` before staged whitespace validation.
+- Patch scripts should include a single reusable LF normalization step instead of ad hoc per-file CRLF repairs.
+- Staged whitespace details should go to a report file; terminal output should remain concise PASS/FAIL.
