@@ -88,8 +88,8 @@ class RuntimeStatusParser:
         parsed_tgid = self._parse_tgid(text)
         if parsed_tgid is not None and self._looks_like_configured_talkgroup(lower):
             update.parser_notes.append("configured_tgid_ignored_for_activity")
-        else:
-            update.tgid = parsed_tgid
+            return update
+        update.tgid = parsed_tgid
         freq = self._parse_frequency(text)
         if freq is not None:
             if self._looks_like_control_channel(lower):
@@ -183,16 +183,29 @@ class RuntimeStatusParser:
 
     @staticmethod
     def _looks_like_configured_talkgroup(lower: str) -> bool:
+        if not any(token in lower for token in ("tgid", "tg(", "talkgroup")):
+            return False
         config_tokens = (
             "whitelist",
             "blacklist",
+            "whiteli",
+            "blackli",
+            "_whitelist",
+            "_blacklist",
+            "_whiteli",
+            "_blackli",
+            ".tsv",
+            " from /",
+            " from runtime/",
             "added talkgroup",
-            "reading whitelist",
-            "reading blacklist",
-            "_whitelist.tsv",
-            "_blacklist.tsv",
+            "adding talkgroup",
+            "loaded talkgroup",
+            "loading talkgroup",
+            "reading talkgroup",
+            "configured talkgroup",
         )
         return any(token in lower for token in config_tokens)
+
     @staticmethod
     def _looks_like_control_channel(lower: str) -> bool:
         return any(token in lower for token in ("control", "ctrl", "cc ", "cc:", "control channel"))

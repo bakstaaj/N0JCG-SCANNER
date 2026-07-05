@@ -143,6 +143,40 @@ def boolish(value: Any) -> bool | None:
     return None
 
 
+def looks_like_configured_tgid_text(value: Any) -> bool:
+    lower = str(value or "").lower()
+    config_tokens = (
+        "whitelist",
+        "blacklist",
+        "whiteli",
+        "blackli",
+        "_whitelist",
+        "_blacklist",
+        "_whiteli",
+        "_blackli",
+        ".tsv",
+        " from /",
+        " from runtime/",
+        "added talkgroup",
+        "adding talkgroup",
+        "loaded talkgroup",
+        "loading talkgroup",
+        "reading talkgroup",
+        "configured talkgroup",
+    )
+    return any(token in lower for token in config_tokens)
+
+
+def record_looks_like_configured_tgid(record: dict[str, Any], label: str) -> bool:
+    runtime = record.get("runtime_status") if isinstance(record.get("runtime_status"), dict) else {}
+    notes = runtime.get("parser_notes") if isinstance(runtime, dict) else []
+    if isinstance(notes, list) and "configured_tgid_ignored_for_activity" in notes:
+        return True
+    if looks_like_configured_tgid_text(label):
+        return True
+    line = runtime.get("last_parsed_line") if isinstance(runtime, dict) else ""
+    return looks_like_configured_tgid_text(line)
+
 def summarize(records: list[dict[str, Any]], files: list[Path]) -> dict[str, Any]:
     states: Counter[str] = Counter()
     control_freqs: Counter[int] = Counter()
@@ -180,7 +214,8 @@ def summarize(records: list[dict[str, Any]], files: list[Path]) -> dict[str, Any
 
         tgid = as_int(record.get("active_tgid"))
         label = str(record.get("active_talkgroup_label") or "").strip()
-        if tgid:
+        configured_tgid_record = record_looks_like_configured_tgid(record, label)
+        if tgid and not configured_tgid_record:
             tgids[tgid] = label or tgids.get(tgid, "")
 
         phase = str(record.get("p25_phase") or "").strip()
@@ -216,6 +251,8 @@ def summarize(records: list[dict[str, Any]], files: list[Path]) -> dict[str, Any
                 if key in {"recent_events", "recent_activity", "recent_parsed_activity"}:
                     continue
                 if key in {"unique_tgids", "tgids"}:
+                    if configured_tgid_record:
+                        continue
                     if isinstance(value, list):
                         for item in value:
                             parsed = as_int(item if not isinstance(item, dict) else item.get("tgid"))

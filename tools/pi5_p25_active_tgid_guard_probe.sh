@@ -40,15 +40,21 @@ from pi_p25_scanner.runtime_status import RuntimeStatusParser
 parser = RuntimeStatusParser()
 tracker = RuntimeActivityTracker()
 
-config_line = 'added talkgroup 3105 from /home/pi/PI-P25-SCANNER/runtime/op25/TOPAZ_TRWC_Mesa_Simulcast_Test_whitelist.tsv'
-config_update = parser.parse_line(config_line)
-config_summary = tracker.record(config_update)
-if config_update.tgid is not None:
-    raise SystemExit('configured whitelist TGID was incorrectly treated as active')
+config_lines = [
+    'added talkgroup 3105 from /home/pi/PI-P25-SCANNER/runtime/op25/TOPAZ_TRWC_Mesa_Simulcast_Test_whitelist.tsv',
+    'loading talkgroup 3840 from /home/pi/PI-P25-SCANNER/runtime/op25/TOPAZ_TRWC_Mesa_Simulcast_Test_whiteli',
+    'tgid 3899 from /home/pi/PI-P25-SCANNER/runtime/op25/TOPAZ_TRWC_Mesa_Simulcast_Test_blacklist.tsv',
+]
+config_summary = tracker.snapshot()
+for config_line in config_lines:
+    config_update = parser.parse_line(config_line)
+    config_summary = tracker.record(config_update)
+    if config_update.tgid is not None:
+        raise SystemExit('configured whitelist/blacklist TGID was incorrectly treated as active')
+    if 'configured_tgid_ignored_for_activity' not in config_update.parser_notes:
+        raise SystemExit('configured TGID parser note missing')
 if config_summary['talkgroup_updates'] != 0 or config_summary['unique_tgids']:
-    raise SystemExit('configured whitelist TGID changed active TGID counters')
-if 'configured_tgid_ignored_for_activity' not in config_update.parser_notes:
-    raise SystemExit('configured TGID parser note missing')
+    raise SystemExit('configured whitelist/blacklist TGID changed active TGID counters')
 
 active_line = 'voice grant tgid 3105 frequency 853.275000 label Mesa Fire Dispatch clear'
 active_update = parser.parse_line(active_line)
