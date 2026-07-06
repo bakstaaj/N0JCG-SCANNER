@@ -83,3 +83,8 @@ Thumbs.db
 .p25_v0_1k_force_lf_index_recovery_reports/
 
 .p25_command_logs/
+
+# Local MSYS2/Pi secrets
+.env
+.env.local
+!.env.example

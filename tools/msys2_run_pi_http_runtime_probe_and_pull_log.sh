@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=tools/msys2_env_common.sh
+. "$SCRIPT_DIR/msys2_env_common.sh"
+p25_load_dotenv
+
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
 PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
@@ -19,6 +24,9 @@ Usage:
 Runs the HTTP runtime probe on the Pi over sshpass, then pulls the generated
 upload-ready log into /c/Users/jim/Downloads/pi-p25-command-logs.
 
+Password handling:
+  Loads .env first. If PI_PASSWORD is missing, prompts once and saves it to .env.
+
 Defaults:
   Pi user: pi
   Pi host: PI-SDR
@@ -32,7 +40,7 @@ Options:
   --seconds N       Probe duration. Default: 30
   --interval N      Probe interval. Default: 1
   --dest PATH       Local MSYS2 destination directory
-  --password PASS   Pi password for sshpass. Prefer PI_PASSWORD or prompt instead.
+  --password PASS   Pi password for sshpass. Prefer .env/PI_PASSWORD instead.
   --self-test       Validate local defaults and exit without SSH
   -h, --help        Show this help
 EOF_USAGE
@@ -126,21 +134,7 @@ if [[ ! -x ./tools/msys2_pull_latest_p25_log.sh ]]; then
   exit 1
 fi
 
-if [[ -n "$PI_PASSWORD_ARG" ]]; then
-  PI_PASSWORD="$PI_PASSWORD_ARG"
-elif [[ -n "${PI_PASSWORD:-}" ]]; then
-  PI_PASSWORD="$PI_PASSWORD"
-elif [[ -n "${SSHPASS:-}" ]]; then
-  PI_PASSWORD="$SSHPASS"
-else
-  read -r -s -p "Pi password for ${PI_USER}@${PI_HOST}: " PI_PASSWORD
-  echo
-fi
-
-if [[ -z "$PI_PASSWORD" ]]; then
-  echo "FAIL: empty Pi password" >&2
-  exit 1
-fi
+p25_require_pi_password "$PI_PASSWORD_ARG" "$PI_USER" "$PI_HOST"
 
 REMOTE_SCRIPT='set -u
 cd "$1" || exit 10

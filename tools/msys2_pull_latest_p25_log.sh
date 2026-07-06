@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=tools/msys2_env_common.sh
+. "$SCRIPT_DIR/msys2_env_common.sh"
+p25_load_dotenv
+
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
 PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
@@ -28,12 +33,12 @@ Options:
   --label NAME            Log label prefix. Default: http_runtime_probe
   --remote-file PATH      Pull this exact Pi-side file instead of latest by label
   --dest PATH             Local MSYS2 destination directory. Default: /c/Users/jim/Downloads/pi-p25-command-logs
-  --password PASS         Pi password for sshpass. Prefer PI_PASSWORD or prompt instead.
+  --password PASS         Pi password for sshpass. Prefer .env/PI_PASSWORD instead.
   --self-test             Validate local defaults and exit without SSH
   -h, --help              Show this help
 
 Password handling:
-  Uses PI_PASSWORD first, then SSHPASS, then prompts silently.
+  Loads .env first. Uses PI_PASSWORD, then SSHPASS, then prompts once and saves PI_PASSWORD to .env.
 
 Output:
   Prints UPLOAD_FILE_MSYS and UPLOAD_FILE_WINDOWS for the copied file.
@@ -126,21 +131,7 @@ if ! command -v scp >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ -n "$PI_PASSWORD_ARG" ]]; then
-  PI_PASSWORD="$PI_PASSWORD_ARG"
-elif [[ -n "${PI_PASSWORD:-}" ]]; then
-  PI_PASSWORD="$PI_PASSWORD"
-elif [[ -n "${SSHPASS:-}" ]]; then
-  PI_PASSWORD="$SSHPASS"
-else
-  read -r -s -p "Pi password for ${PI_USER}@${PI_HOST}: " PI_PASSWORD
-  echo
-fi
-
-if [[ -z "$PI_PASSWORD" ]]; then
-  echo "FAIL: empty Pi password" >&2
-  exit 1
-fi
+p25_require_pi_password "$PI_PASSWORD_ARG" "$PI_USER" "$PI_HOST"
 
 mkdir -p "$LOCAL_DOWNLOAD_DIR"
 

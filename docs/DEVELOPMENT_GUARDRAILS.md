@@ -101,3 +101,14 @@ For Pi-hosted probes, do not ask the user to manually copy files from the Pi. Th
 Probe scripts that restart or immediately follow a restart of `pi-p25-scanner.service` must wait for `/api/status` to become reachable before making scanner start/no-start decisions. A transient connection-refused response during backend startup must not be treated as "already running," "no-start," or a final runtime state.
 
 For Pi probes run from Windows/MSYS2, instructions must use the repo helper that runs the Pi command and pulls the latest upload-ready log back to `/c/Users/jim/Downloads/pi-p25-command-logs` using `sshpass` and `scp -O`.
+
+## MSYS2-to-Pi credential and log-transfer guardrail
+
+MSYS2 helper scripts that connect to the Pi must use Jim's standard defaults unless explicitly overridden:
+
+- Windows/MSYS2 user path: `/c/Users/jim/Downloads/pi-p25-command-logs`
+- Pi user: `pi`
+- Pi repo path: `/home/pi/PI-P25-SCANNER`
+- Copy method: `sshpass` plus `scp -O`
+
+Helpers must source `tools/msys2_env_common.sh`, load local `.env` values, and create `.env` with mode `600` when prompting for `PI_PASSWORD`. The `.env` file must remain ignored by git, must never be staged, and scripts must never print the password value. Tracked examples belong in `.env.example` only.
