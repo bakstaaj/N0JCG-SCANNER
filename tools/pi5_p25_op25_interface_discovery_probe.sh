@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -115,6 +116,35 @@ def boolish(value: Any) -> bool | None:
             return False
     return None
 
+
+
+
+def iter_strings_from_obj(value: Any):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from iter_strings_from_obj(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from iter_strings_from_obj(item)
+
+
+def extract_http_ports_from_status_samples(samples: list[dict[str, Any]]) -> list[int]:
+    ports: list[int] = []
+    seen: set[int] = set()
+    pattern = re.compile(r'http:(?:\[[^\]]+\]|[^:\s]+):(?P<port>\d{1,5})')
+    for sample in samples:
+        for text_value in iter_strings_from_obj(sample):
+            for match in pattern.finditer(text_value):
+                try:
+                    port = int(match.group('port'))
+                except ValueError:
+                    continue
+                if 0 < port < 65536 and port not in seen:
+                    seen.add(port)
+                    ports.append(port)
+    return ports
 
 def status_running(status: dict[str, Any] | None) -> bool:
     if not isinstance(status, dict):
@@ -365,6 +395,14 @@ def make_report(summary: dict[str, Any]) -> tuple[str, int, int, int]:
     lines.append(json.dumps(summary.get('backend_probe') or {}, indent=2, sort_keys=True))
     lines.append('```')
     lines.append('')
+    lines.append('## HTTP Probe Port Selection')
+    lines.append('```json')
+    lines.append(json.dumps({
+        'op25_http_ports_from_command': summary.get('op25_http_ports_from_command') or [],
+        'http_ports_probed': summary.get('http_ports_probed') or [],
+    }, indent=2, sort_keys=True))
+    lines.append('```')
+    lines.append('')
     lines.append('## Listening TCP Sockets')
     lines.append('```text')
     listener_text = str(summary.get('listeners') or 'none')
@@ -426,7 +464,7 @@ def run_self_test(keep: bool) -> int:
         status_samples = [
             {
                 'scanner_state': 'running',
-                'decoder_process': {'running': True, 'command': [str(app_dir / 'rx.py')]},
+                'decoder_process': {'running': True, 'command': [str(app_dir / 'rx.py'), '-l', 'http:127.0.0.1:18091']},
                 'active_control_frequency_hz': 852750000,
                 'warnings': [],
             }
@@ -448,6 +486,7 @@ def run_self_test(keep: bool) -> int:
             files,
             hits,
             status_summary.get('running_snapshots') == 1,
+            extract_http_ports_from_status_samples(status_samples) == [18091],
             'FINAL: PASS' in report,
             report_path.exists(),
         ]
@@ -550,9 +589,13 @@ def main() -> int:
     best_status = final_status or (status_samples[-1] if status_samples else initial_status)
     source_dirs = op25_candidate_dirs(best_status)
     source_files, source_hits = scan_source_paths(source_dirs)
-    ports = parse_ports(args.ports)
+    command_http_ports = extract_http_ports_from_status_samples(status_samples)
+    configured_ports = parse_ports(args.ports)
+    ports = command_http_ports + [port for port in configured_ports if port not in command_http_ports]
     summary = {
         'status_summary': summarize_status(status_samples),
+        'op25_http_ports_from_command': command_http_ports,
+        'http_ports_probed': ports,
         'backend_probe': {
             'backend_url': args.backend_url,
             'initial_status_captured': initial_status is not None,

@@ -55,3 +55,8 @@ These guardrails capture project-specific lessons learned while building and val
 - Interface/status discovery tools must save the initial `/api/status` snapshot before starting or stopping the scanner.
 - A temporary loss of post-start status polling is WARN-level diagnostic evidence when the backend was initially reachable; do not fail the interface-discovery milestone solely from that condition.
 - Live decoder metadata discovery must not guess active TGID or voice-frequency parsers from whitelist/config lines; use captured evidence or explicit OP25 status/interface data.
+
+## Live interface probe guardrail
+
+- Long-running interface discovery probes must derive endpoint ports from the actual decoder command before falling back to static defaults.
+- When OP25 is launched with `-l http:host:port`, that port must appear in the probe report before concluding that no OP25 HTTP/status interface is active.

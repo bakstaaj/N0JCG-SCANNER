@@ -34,3 +34,9 @@ Useful options:
 - `--preflight-seconds N`: readiness window before long collection, default 20.
 - `--preflight-interval N`: status polling interval during preflight, default 1.
 - `--force-collect`: collect the full window even when preflight does not observe a running decoder.
+
+## V0.2Q dynamic OP25 HTTP port probing
+
+- Interface discovery must parse the live backend decoder command for OP25 terminal HTTP arguments such as `http:127.0.0.1:18091`.
+- Runtime-declared OP25 HTTP ports must be probed before the static default port list.
+- A report that says no OP25 HTTP endpoint responded is not conclusive unless the runtime-declared `-l http:...` port appears in `http_ports_probed`.
