@@ -1,24 +1,42 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
+set -euo pipefail
 
-HOST="${P25_PI_HOST:-pi@PI-SDR}"
-REMOTE_REPO="${P25_PI_REPO:-~/PI-P25-SCANNER}"
-LABEL=""
-DEST=""
-STRICT_LABEL=0
+PI_USER="${PI_USER:-pi}"
+PI_HOST="${PI_HOST:-PI-SDR}"
+PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+LOCAL_DOWNLOAD_DIR="${LOCAL_DOWNLOAD_DIR:-/c/Users/jim/Downloads/pi-p25-command-logs}"
+LABEL="http_runtime_probe"
+REMOTE_FILE=""
+PI_PASSWORD_ARG=""
+SELF_TEST=0
 
 usage() {
   cat <<'EOF_USAGE'
 Usage:
-  ./tools/msys2_pull_latest_p25_log.sh [--host USER@HOST] [--remote-repo PATH] [--label NAME] [--dest DIR]
+  ./tools/msys2_pull_latest_p25_log.sh [options]
 
-Examples:
-  ./tools/msys2_pull_latest_p25_log.sh
-  ./tools/msys2_pull_latest_p25_log.sh --host pi@PI-SDR
-  ./tools/msys2_pull_latest_p25_log.sh --host pi@192.168.1.50 --label http_runtime_probe
+Defaults are intentionally matched to Jim's workflow:
+  Pi user: pi
+  Pi host: PI-SDR
+  Pi repo: /home/pi/PI-P25-SCANNER
+  Windows/MSYS2 downloads: /c/Users/jim/Downloads/pi-p25-command-logs
 
-This helper copies the latest Pi-side .p25_command_logs/*.txt file into a Windows/MSYS2 local upload folder.
-Default destination is /c/Users/$USER/Downloads/pi-p25-command-logs when that folder exists.
+Options:
+  --host HOST             Pi host name or pi@HOST. Default: PI-SDR
+  --user USER             Pi SSH user. Default: pi
+  --repo PATH             Pi repo path. Default: /home/pi/PI-P25-SCANNER
+  --label NAME            Log label prefix. Default: http_runtime_probe
+  --remote-file PATH      Pull this exact Pi-side file instead of latest by label
+  --dest PATH             Local MSYS2 destination directory. Default: /c/Users/jim/Downloads/pi-p25-command-logs
+  --password PASS         Pi password for sshpass. Prefer PI_PASSWORD or prompt instead.
+  --self-test             Validate local defaults and exit without SSH
+  -h, --help              Show this help
+
+Password handling:
+  Uses PI_PASSWORD first, then SSHPASS, then prompts silently.
+
+Output:
+  Prints UPLOAD_FILE_MSYS and UPLOAD_FILE_WINDOWS for the copied file.
 EOF_USAGE
 }
 
@@ -26,26 +44,44 @@ while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --host)
       shift
-      HOST="${1:-}"
-      shift || true
-      ;;
-    --remote-repo)
+      PI_HOST="$1"
       shift
-      REMOTE_REPO="${1:-}"
-      shift || true
+      ;;
+    --user)
+      shift
+      PI_USER="$1"
+      shift
+      ;;
+    --repo)
+      shift
+      PI_REPO="$1"
+      shift
       ;;
     --label)
       shift
-      LABEL="${1:-}"
-      STRICT_LABEL=1
-      shift || true
+      LABEL="$1"
+      shift
+      ;;
+    --remote-file)
+      shift
+      REMOTE_FILE="$1"
+      shift
       ;;
     --dest)
       shift
-      DEST="${1:-}"
-      shift || true
+      LOCAL_DOWNLOAD_DIR="$1"
+      shift
       ;;
-    --help|-h)
+    --password)
+      shift
+      PI_PASSWORD_ARG="$1"
+      shift
+      ;;
+    --self-test)
+      SELF_TEST=1
+      shift
+      ;;
+    -h|--help)
       usage
       exit 0
       ;;
@@ -57,94 +93,97 @@ while [[ "$#" -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$HOST" ]]; then
-  echo "FAIL: host is empty" >&2
-  exit 2
-fi
-if [[ -z "$REMOTE_REPO" ]]; then
-  echo "FAIL: remote repo path is empty" >&2
-  exit 2
+if [[ "$PI_HOST" == *@* ]]; then
+  PI_USER="${PI_HOST%@*}"
+  PI_HOST="${PI_HOST#*@}"
 fi
 
-if [[ -z "$DEST" ]]; then
-  if [[ -n "${USER:-}" && -d "/c/Users/${USER}/Downloads" ]]; then
-    DEST="/c/Users/${USER}/Downloads/pi-p25-command-logs"
-  elif [[ -n "${USERNAME:-}" && -d "/c/Users/${USERNAME}/Downloads" ]]; then
-    DEST="/c/Users/${USERNAME}/Downloads/pi-p25-command-logs"
-  else
-    DEST="$HOME/Downloads/pi-p25-command-logs"
+if [[ "$SELF_TEST" -eq 1 ]]; then
+  echo "PASS: self-test mode"
+  echo "PI_USER=$PI_USER"
+  echo "PI_HOST=$PI_HOST"
+  echo "PI_REPO=$PI_REPO"
+  echo "LOCAL_DOWNLOAD_DIR=$LOCAL_DOWNLOAD_DIR"
+  if [[ "$PI_USER" != "pi" ]]; then
+    echo "FAIL: default Pi user should be pi" >&2
+    exit 1
   fi
+  if [[ "$LOCAL_DOWNLOAD_DIR" != /c/Users/jim/Downloads/* ]]; then
+    echo "FAIL: default local path should be under /c/Users/jim/Downloads" >&2
+    exit 1
+  fi
+  echo "FINAL: PASS"
+  exit 0
 fi
 
-if ! command -v ssh >/dev/null 2>&1; then
-  echo "FAIL: ssh is required in MSYS2" >&2
+if ! command -v sshpass >/dev/null 2>&1; then
+  echo "FAIL: sshpass is required in MSYS2. Install it before pulling Pi logs." >&2
   exit 1
 fi
+
 if ! command -v scp >/dev/null 2>&1; then
   echo "FAIL: scp is required in MSYS2" >&2
   exit 1
 fi
-mkdir -p "$DEST"
 
-SAFE_LABEL=""
-if [[ -n "$LABEL" ]]; then
-  SAFE_LABEL="$(printf '%s' "$LABEL" | tr -c 'A-Za-z0-9_.-' '_' | sed 's/^_*//; s/_*$//')"
-  if [[ -z "$SAFE_LABEL" ]]; then
-    echo "FAIL: --label did not contain any safe filename characters" >&2
-    exit 2
+if [[ -n "$PI_PASSWORD_ARG" ]]; then
+  PI_PASSWORD="$PI_PASSWORD_ARG"
+elif [[ -n "${PI_PASSWORD:-}" ]]; then
+  PI_PASSWORD="$PI_PASSWORD"
+elif [[ -n "${SSHPASS:-}" ]]; then
+  PI_PASSWORD="$SSHPASS"
+else
+  read -r -s -p "Pi password for ${PI_USER}@${PI_HOST}: " PI_PASSWORD
+  echo
+fi
+
+if [[ -z "$PI_PASSWORD" ]]; then
+  echo "FAIL: empty Pi password" >&2
+  exit 1
+fi
+
+mkdir -p "$LOCAL_DOWNLOAD_DIR"
+
+sq() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+if [[ -n "$REMOTE_FILE" ]]; then
+  REMOTE_SELECTED="$REMOTE_FILE"
+else
+  REMOTE_LOG_DIR="$PI_REPO/.p25_command_logs"
+  REMOTE_CMD="find $(sq "$REMOTE_LOG_DIR") -maxdepth 1 -type f -name $(sq "${LABEL}_*.txt") -printf '%T@ %p\\n' | sort -nr | head -n 1 | cut -d' ' -f2-"
+  set +e
+  REMOTE_SELECTED="$(sshpass -p "$PI_PASSWORD" ssh -o StrictHostKeyChecking=accept-new "${PI_USER}@${PI_HOST}" "bash -lc $(sq "$REMOTE_CMD")")"
+  SSH_RC=$?
+  set -e
+  if [[ "$SSH_RC" -ne 0 ]]; then
+    echo "FAIL: ssh command failed while locating latest Pi log" >&2
+    exit "$SSH_RC"
   fi
 fi
 
-REMOTE_SCRIPT='set -e
-cd "$1"
-if [ ! -d .p25_command_logs ]; then
-  echo "__NO_LOG_DIR__"
-  exit 0
-fi
-if [ -n "$2" ]; then
-  latest=$(ls -1t ".p25_command_logs/${2}"*.txt 2>/dev/null | head -n 1 || true)
-else
-  latest=$(ls -1t .p25_command_logs/*.txt 2>/dev/null | head -n 1 || true)
-fi
-if [ -z "$latest" ]; then
-  echo "__NO_LOG_FILE__"
-else
-  printf "%s\n" "$latest"
-fi'
-
-LATEST="$(ssh "$HOST" bash -s -- "$REMOTE_REPO" "$SAFE_LABEL" <<< "$REMOTE_SCRIPT")"
-if [[ "$LATEST" == "__NO_LOG_DIR__" ]]; then
-  echo "FAIL: remote log directory does not exist: ${REMOTE_REPO}/.p25_command_logs" >&2
-  exit 1
-fi
-if [[ "$LATEST" == "__NO_LOG_FILE__" || -z "$LATEST" ]]; then
-  if [[ "$STRICT_LABEL" -eq 1 ]]; then
-    echo "FAIL: no remote log file found for label prefix: $SAFE_LABEL" >&2
-  else
-    echo "FAIL: no remote log files found under ${REMOTE_REPO}/.p25_command_logs" >&2
-  fi
+if [[ -z "$REMOTE_SELECTED" ]]; then
+  echo "FAIL: no Pi log found for label '${LABEL}' under ${PI_REPO}/.p25_command_logs" >&2
   exit 1
 fi
 
-BASENAME="$(basename "$LATEST")"
-LOCAL_FILE="$DEST/$BASENAME"
-REMOTE_SPEC="$HOST:$REMOTE_REPO/$LATEST"
+BASE_NAME="$(basename "$REMOTE_SELECTED")"
+LOCAL_FILE="$LOCAL_DOWNLOAD_DIR/$BASE_NAME"
 
-if scp -O "$REMOTE_SPEC" "$LOCAL_FILE" >/dev/null 2>&1; then
-  :
-else
-  scp "$REMOTE_SPEC" "$LOCAL_FILE"
-fi
+sshpass -p "$PI_PASSWORD" scp -O -o StrictHostKeyChecking=accept-new "${PI_USER}@${PI_HOST}:$REMOTE_SELECTED" "$LOCAL_FILE"
 
-if [[ ! -s "$LOCAL_FILE" ]]; then
-  echo "FAIL: local copied file is missing or empty: $LOCAL_FILE" >&2
+if [[ ! -f "$LOCAL_FILE" ]]; then
+  echo "FAIL: local copied file was not created: $LOCAL_FILE" >&2
   exit 1
 fi
 
-echo "PASS: copied latest Pi command log"
-echo "Remote log file: $REMOTE_REPO/$LATEST"
-echo "Local log file: $LOCAL_FILE"
+echo "PASS: copied Pi log"
+echo "PI_REMOTE_FILE=$REMOTE_SELECTED"
+echo "UPLOAD_FILE_MSYS=$LOCAL_FILE"
 if command -v cygpath >/dev/null 2>&1; then
-  echo "Windows path: $(cygpath -w "$LOCAL_FILE")"
+  echo "UPLOAD_FILE_WINDOWS=$(cygpath -w "$LOCAL_FILE")"
+else
+  echo "UPLOAD_FILE_WINDOWS=$LOCAL_FILE"
 fi
 echo "FINAL: PASS"

@@ -91,3 +91,7 @@ These guardrails capture project-specific lessons learned while building and val
 - Probe helpers that parse backend JSON must read the full HTTP response before calling `json.loads`; only report samples and terminal display snippets may be truncated.
 - Long or repetitive HTTP probe result arrays should be summarized in terminal Markdown, with complete details preserved in the generated JSON artifact.
 - Pi-side command logs must include an absolute Pi path, and MSYS2-side instructions must provide a one-step pull command or helper that places the log in Windows Downloads for upload.
+
+## GUARDRAIL: MSYS2 Pi log pulls must use sshpass and Jim/Pi paths
+
+For Pi-hosted probes, do not ask the user to manually copy files from the Pi. The Pi user is `pi`, the Windows/MSYS2 user is `jim`, the Pi repo path is `/home/pi/PI-P25-SCANNER`, and local upload logs must be copied to `/c/Users/jim/Downloads/pi-p25-command-logs` before asking the user to upload them. MSYS2-side helper commands must use `sshpass` plus `scp -O`/`ssh`, not generic `ssh`/`scp` instructions that assume agent auth. Prefer `tools/msys2_run_pi_http_runtime_probe_and_pull_log.sh` or `tools/msys2_pull_latest_p25_log.sh` so the final output prints `UPLOAD_FILE_MSYS` and `UPLOAD_FILE_WINDOWS`.
