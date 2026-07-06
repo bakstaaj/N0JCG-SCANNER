@@ -306,3 +306,7 @@ V0.2N adds `tools/pi5_p25_op25_metadata_discovery_probe.sh`, a live evidence pro
 ## V0.2O OP25 interface discovery
 
 V0.2O adds `tools/pi5_p25_op25_interface_discovery_probe.sh`, a Pi-side discovery probe that checks backend status snapshots, localhost listeners, possible OP25 HTTP/status endpoints, and OP25 source/app files for metadata interface clues. This is used after V0.2N when OP25 log text shows control lock and plaintext voice frames but no active TGID or voice-frequency metadata.
+
+### V0.2T OP25 HTTP runtime probe
+
+`tools/pi5_p25_op25_http_runtime_probe.sh` performs a short live diagnostic of the OP25 HTTP terminal/listener path. It checks the backend start response, polls `/api/status`, extracts runtime HTTP ports such as `18091`, checks TCP listeners, and probes localhost HTTP paths.

@@ -64,3 +64,9 @@ These guardrails capture project-specific lessons learned while building and val
 - Long-running interface probes must extract runtime ports and command metadata from all available sources, including initial status, start response, sampled status, and validated marker files, before deciding what to probe.
 - Fail-fast reports must include enough start/readiness diagnostics to explain why long collection was skipped.
 - Live fail-fast probes must count successful start API responses as status evidence before skipping long collection.
+
+## Runtime HTTP interface diagnostics
+
+- Short runtime diagnostics must distinguish backend start-response success from sustained backend pollability.
+- If OP25 is launched with an HTTP terminal/listener argument such as `-l http:127.0.0.1:18091`, probes must verify both the command argument and the actual TCP listener.
+- Do not assume an OP25 HTTP endpoint exists just because a command line contains an HTTP listener argument.
