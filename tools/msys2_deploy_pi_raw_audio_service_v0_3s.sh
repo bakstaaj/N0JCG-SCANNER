@@ -1,27 +1,33 @@
 #!/usr/bin/env bash
-# Deploy V0.3S backend UDP-output integration and raw audio bridge service to the Pi.
-# Run from MSYS2 UCRT64 repository root.
+# Deploy V0.3S raw browser-audio service files to the Pi using MSYS2 .env + sshpass.
 set -Eeuo pipefail
 
 PASS_COUNT=0
 WARN_COUNT=0
 FAIL_COUNT=0
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-REPORT_DIR="/c/Users/jim/Downloads/pi-p25-command-logs"
-REPORT_FILE="${REPORT_DIR}/deploy_raw_audio_service_v0_3s_${STAMP}.txt"
-PI_HOST="${PI_HOST:-pi@PI-SDR}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
-TARBALL="/tmp/pi_p25_v0_3s_raw_audio_${STAMP}.tgz"
+LOG_DIR="/c/Users/jim/Downloads/pi-p25-command-logs"
+REPORT_FILE="$LOG_DIR/deploy_raw_audio_service_v0_3s_${STAMP}.txt"
+TMP_TARBALL="/tmp/pi_p25_v0_3s_raw_audio_${STAMP}.tgz"
 REMOTE_TARBALL="/tmp/pi_p25_v0_3s_raw_audio_${STAMP}.tgz"
+REMOTE_SCRIPT_LOCAL="/tmp/pi_p25_v0_3s_remote_install_${STAMP}.sh"
+REMOTE_SCRIPT="/tmp/pi_p25_v0_3s_remote_install_${STAMP}.sh"
+PI_HOST_ARG=""
+PI_USER_ARG=""
+PI_REPO_ARG=""
+NO_RESTART_BACKEND=0
 
-mkdir -p "$REPORT_DIR"
+mkdir -p "$LOG_DIR"
 : > "$REPORT_FILE"
+
 pass() { printf 'PASS: %s\n' "$*" | tee -a "$REPORT_FILE"; PASS_COUNT=$((PASS_COUNT + 1)); }
 warn() { printf 'WARN: %s\n' "$*" | tee -a "$REPORT_FILE"; WARN_COUNT=$((WARN_COUNT + 1)); }
 fail() { printf 'FAIL: %s\n' "$*" | tee -a "$REPORT_FILE"; FAIL_COUNT=$((FAIL_COUNT + 1)); }
 finish() {
+  local windows_path
+  windows_path="$(cygpath -w "$REPORT_FILE" 2>/dev/null || printf '%s' "$REPORT_FILE")"
   printf 'UPLOAD_FILE_MSYS=%s\n' "$REPORT_FILE" | tee -a "$REPORT_FILE"
-  printf 'UPLOAD_FILE_WINDOWS=%s\n' "$(cygpath -w "$REPORT_FILE" 2>/dev/null || printf '%s' "$REPORT_FILE")" | tee -a "$REPORT_FILE"
+  printf 'UPLOAD_FILE_WINDOWS=%s\n' "$windows_path" | tee -a "$REPORT_FILE"
   printf 'SUMMARY: PASS=%s WARN=%s FAIL=%s\n' "$PASS_COUNT" "$WARN_COUNT" "$FAIL_COUNT" | tee -a "$REPORT_FILE"
   if [[ "$FAIL_COUNT" -eq 0 ]]; then
     printf 'FINAL: PASS\n' | tee -a "$REPORT_FILE"
@@ -30,69 +36,157 @@ finish() {
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 }
-trap 'rc=$?; if [[ $rc -ne 0 && ${FAIL_COUNT:-0} -eq 0 ]]; then fail "deploy aborted unexpectedly at line $LINENO rc=$rc"; finish; fi' EXIT
+trap 'rc=$?; if [[ $rc -ne 0 ]]; then fail "deploy aborted unexpectedly at line $LINENO rc=$rc"; finish; fi' ERR
+
+usage() {
+  cat <<USAGE
+Usage:
+  ./tools/msys2_deploy_pi_raw_audio_service_v0_3s.sh [--host PI-SDR] [--user pi] [--repo /home/pi/PI-P25-SCANNER]
+
+Uses .env / PI_PASSWORD with sshpass. If PI_PASSWORD is missing, it prompts once and saves it to .env.
+USAGE
+}
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --host) shift; PI_HOST_ARG="$1"; shift ;;
+    --user) shift; PI_USER_ARG="$1"; shift ;;
+    --repo) shift; PI_REPO_ARG="$1"; shift ;;
+    --no-restart-backend) NO_RESTART_BACKEND=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
+  esac
+done
 
 printf '=== PI-P25-SCANNER V0.3S raw audio service deploy ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
+printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "tools" ]]; then
-  pass "running from repository root"
+  pass "running from PI-P25-SCANNER repository root"
 else
   fail "run from PI-P25-SCANNER repository root"
   finish
 fi
-
-if [[ -f tools/msys2_env_common.sh ]]; then
+case "$(uname -s 2>/dev/null || true)" in
+  MINGW*|MSYS*) pass "MSYS2 shell detected" ;;
+  *) warn "shell does not look like MSYS2" ;;
+esac
+if [[ -f "tools/msys2_env_common.sh" ]]; then
   # shellcheck disable=SC1091
   . tools/msys2_env_common.sh
-  warn "loaded tools/msys2_env_common.sh"
+  pass "loaded tools/msys2_env_common.sh"
+else
+  fail "missing tools/msys2_env_common.sh"
+  finish
 fi
 
-for cmd in ssh scp tar python3; do
+if [[ -n "$PI_HOST_ARG" ]]; then export PI_HOST="$PI_HOST_ARG"; fi
+if [[ -n "$PI_USER_ARG" ]]; then export PI_USER="$PI_USER_ARG"; fi
+if [[ -n "$PI_REPO_ARG" ]]; then export PI_REPO="$PI_REPO_ARG"; fi
+ensure_pi_password
+pass "Pi connection settings loaded for ${PI_USER}@${PI_HOST}:${PI_REPO}"
+
+for cmd in sshpass ssh scp tar python3 base64; do
   if command -v "$cmd" >/dev/null 2>&1; then
     pass "command available: $cmd"
   else
-    fail "missing command: $cmd"
+    fail "missing required command: $cmd"
   fi
 done
-if [[ -n "${PI_PASSWORD:-}" ]] && command -v sshpass >/dev/null 2>&1; then
-  SSH=(sshpass -p "$PI_PASSWORD" ssh -o StrictHostKeyChecking=no)
-  SCP=(sshpass -p "$PI_PASSWORD" scp -O -o StrictHostKeyChecking=no)
-  pass "using sshpass with PI_PASSWORD from environment/.env"
-else
-  SSH=(ssh -o StrictHostKeyChecking=no)
-  SCP=(scp -O -o StrictHostKeyChecking=no)
-  warn "PI_PASSWORD/sshpass not available; using default SSH auth"
+if [[ "$FAIL_COUNT" -ne 0 ]]; then
+  finish
 fi
 
-FILES=(
-  src/pi_p25_scanner/backend.py
+SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o PreferredAuthentications=password,keyboard-interactive,publickey)
+SSH=(sshpass -p "$PI_PASSWORD" ssh "${SSH_OPTS[@]}" "${PI_USER}@${PI_HOST}")
+SCP=(sshpass -p "$PI_PASSWORD" scp -O "${SSH_OPTS[@]}")
+
+required_files=(
+  src/pi_p25_scanner/backend_launch.py
   tools/pi5_p25_browser_audio_raw_bridge_server.py
-  tools/pi5_p25_raw_audio_bridge_service_install.sh
+  tools/pi5_p25_install_raw_audio_service_v0_3s.sh
 )
-for file in "${FILES[@]}"; do
-  if [[ -f "$file" ]]; then
-    pass "deploy file exists: $file"
+for path in "${required_files[@]}"; do
+  if [[ -f "$path" ]]; then
+    pass "deploy file exists: $path"
   else
-    fail "missing deploy file: $file"
+    fail "missing deploy file: $path"
   fi
 done
 if [[ "$FAIL_COUNT" -ne 0 ]]; then
   finish
 fi
 
-python3 -m py_compile src/pi_p25_scanner/backend.py tools/pi5_p25_browser_audio_raw_bridge_server.py >>"$REPORT_FILE" 2>&1 && pass "local Python compile passed" || fail "local Python compile failed"
-bash -n tools/pi5_p25_raw_audio_bridge_service_install.sh >>"$REPORT_FILE" 2>&1 && pass "local service installer syntax passed" || fail "local service installer syntax failed"
+if python3 -m py_compile tools/pi5_p25_browser_audio_raw_bridge_server.py >>"$REPORT_FILE" 2>&1; then
+  pass "raw bridge python compile passed"
+else
+  fail "raw bridge python compile failed"
+fi
+if bash -n tools/pi5_p25_install_raw_audio_service_v0_3s.sh >>"$REPORT_FILE" 2>&1; then
+  pass "Pi installer shell syntax passed"
+else
+  fail "Pi installer shell syntax failed"
+fi
 if [[ "$FAIL_COUNT" -ne 0 ]]; then
   finish
 fi
 
-tar -czf "$TARBALL" "${FILES[@]}"
-pass "created deploy tarball: $TARBALL"
-"${SCP[@]}" "$TARBALL" "${PI_HOST}:${REMOTE_TARBALL}" >>"$REPORT_FILE" 2>&1
-pass "copied deploy tarball to ${PI_HOST}:${REMOTE_TARBALL}"
+tar -czf "$TMP_TARBALL" "${required_files[@]}"
+pass "created deploy tarball: $TMP_TARBALL"
 
-"${SSH[@]}" "$PI_HOST" "cd '$PI_REPO' && tar -xzf '$REMOTE_TARBALL' && chmod +x tools/pi5_p25_raw_audio_bridge_service_install.sh && python3 -m py_compile src/pi_p25_scanner/backend.py tools/pi5_p25_browser_audio_raw_bridge_server.py && ./tools/pi5_p25_raw_audio_bridge_service_install.sh --install --yes && sudo systemctl restart pi-p25-scanner.service && sleep 2 && python3 - <<'PY_REMOTE'\nimport json, urllib.request\nfor url in ['http://127.0.0.1:8070/api/status', 'http://127.0.0.1:8072/api/audio/status']:\n    with urllib.request.urlopen(url, timeout=5) as r:\n        data = r.read(512)\n    print('PROBE_OK', url, len(data))\nPY_REMOTE" >>"$REPORT_FILE" 2>&1
-pass "remote deploy, service install, backend restart, and probes passed"
+REMOTE_PASSWORD_B64="$(printf '%s' "$PI_PASSWORD" | base64 | tr -d '\n')"
+cat > "$REMOTE_SCRIPT_LOCAL" <<REMOTE
+#!/usr/bin/env bash
+set -Eeuo pipefail
+REPO='$PI_REPO'
+TARBALL='$REMOTE_TARBALL'
+NO_RESTART_BACKEND='$NO_RESTART_BACKEND'
+export SUDO_PASSWORD="\$(printf '%s' '$REMOTE_PASSWORD_B64' | base64 -d)"
+printf 'Remote deploy repo: %s\n' "\$REPO"
+if [[ ! -d "\$REPO" ]]; then
+  printf 'FAIL: repo directory missing: %s\n' "\$REPO" >&2
+  exit 10
+fi
+cd "\$REPO"
+tar -xzf "\$TARBALL"
+chmod +x tools/pi5_p25_install_raw_audio_service_v0_3s.sh tools/pi5_p25_browser_audio_raw_bridge_server.py
+./tools/pi5_p25_install_raw_audio_service_v0_3s.sh --install --yes
+if [[ "\$NO_RESTART_BACKEND" -ne 1 ]]; then
+  if systemctl list-unit-files pi-p25-scanner.service >/dev/null 2>&1; then
+    printf '%s\n' "\$SUDO_PASSWORD" | sudo -S systemctl restart pi-p25-scanner.service
+    printf 'PASS: restarted pi-p25-scanner.service\n'
+  else
+    printf 'WARN: pi-p25-scanner.service unit not found; backend not restarted\n'
+  fi
+fi
+python3 - <<'PY'
+import json
+import urllib.request
+for url in ('http://127.0.0.1:8070/api/status', 'http://127.0.0.1:8072/api/audio/status'):
+    try:
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            body = resp.read(2000).decode('utf-8', errors='replace')
+        print('PROBE_OK', url, body[:300].replace('\n', ' '))
+    except Exception as exc:
+        print('PROBE_WARN', url, type(exc).__name__, exc)
+PY
+REMOTE
+chmod +x "$REMOTE_SCRIPT_LOCAL"
+pass "created remote install script: $REMOTE_SCRIPT_LOCAL"
 
+"${SCP[@]}" "$TMP_TARBALL" "${PI_USER}@${PI_HOST}:${REMOTE_TARBALL}" >>"$REPORT_FILE" 2>&1
+pass "copied deploy tarball to ${PI_USER}@${PI_HOST}:${REMOTE_TARBALL}"
+"${SCP[@]}" "$REMOTE_SCRIPT_LOCAL" "${PI_USER}@${PI_HOST}:${REMOTE_SCRIPT}" >>"$REPORT_FILE" 2>&1
+pass "copied remote install script to ${PI_USER}@${PI_HOST}:${REMOTE_SCRIPT}"
+
+"${SSH[@]}" "bash '$REMOTE_SCRIPT'" 2>&1 | tee -a "$REPORT_FILE"
+pass "remote raw audio service deploy completed"
+
+"${SSH[@]}" "rm -f '$REMOTE_TARBALL' '$REMOTE_SCRIPT'" >>"$REPORT_FILE" 2>&1 || warn "remote cleanup failed"
+rm -f "$TMP_TARBALL" "$REMOTE_SCRIPT_LOCAL" || true
+pass "local temporary files cleaned"
+
+printf '\nNext test:\n' | tee -a "$REPORT_FILE"
+printf '  Open http://%s:8070\n' "$PI_HOST" | tee -a "$REPORT_FILE"
+printf '  Start Scanner, then open http://%s:8072/audio.wav\n' "$PI_HOST" | tee -a "$REPORT_FILE"
 finish
