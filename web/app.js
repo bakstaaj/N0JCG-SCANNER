@@ -2,8 +2,9 @@
 
 let currentConfig = null;
 let latestStatus = null;
+let browserAudioContext = null;
+let browserAudioEnabled = false;
 let browserAudioLastEvent = 'Enable browser audio to unlock playback.';
-let browserAudioStatus = null;
 
 function formatHz(value) {
   if (!value) return '-';
@@ -41,18 +42,6 @@ function commandText(command) {
   return '';
 }
 
-
-function browserAudioStreamUrl(payload) {
-  const port = Number(payload?.http_port || 8072);
-  return `http://${window.location.hostname}:${port}/audio.wav`;
-}
-
-
-function browserAudioToneUrl(payload) {
-  const port = Number(payload?.http_port || 8072);
-  return `http://${window.location.hostname}:${port}/test-tone.wav`;
-}
-
 function extractOp25HttpListener(status) {
   const process = status?.decoder_process || {};
   const marker = process.validated_marker || {};
@@ -79,33 +68,7 @@ function setButtonsForState(status) {
   if (stopBtn) stopBtn.disabled = !running;
 }
 
-async
 async function fetchJson(url, options = {}) {
-  const controller = new AbortController();
-  const timeoutMs = Number(options.timeoutMs || 6000);
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const { timeoutMs: _ignoredTimeoutMs, ...fetchOptions } = options;
-    const response = await fetch(url, {
-      cache: 'no-store',
-      signal: controller.signal,
-      ...fetchOptions,
-    });
-    const text = await response.text();
-    let payload = {};
-    try {
-      payload = text ? JSON.parse(text) : {};
-    } catch (error) {
-      payload = { ok: false, error: `Invalid JSON: ${error.message}`, raw: text };
-    }
-    if (!response.ok) {
-      throw new Error(payload.error || `HTTP ${response.status}`);
-    }
-    return payload;
-  } finally {
-    clearTimeout(timeout);
-  }
-}) {
   const response = await fetch(url, {
     cache: 'no-store',
     ...options,
@@ -123,100 +86,64 @@ async function fetchJson(url, options = {}) {
   return payload;
 }
 
-function renderBrowserAudioState(payload = browserAudioStatus) {
-  browserAudioStatus = payload || browserAudioStatus;
-  const status = browserAudioStatus || {};
-  const bridge = status.bridge_status || {};
-  const running = Boolean(status.running);
-  const badgeText = running ? 'Raw Audio Ready' : 'Stopped';
-  const badgeKind = running ? 'badge-ok' : 'badge-warn';
+function renderBrowserAudioState() {
+  const contextState = browserAudioContext ? browserAudioContext.state : 'not created';
+  const badgeText = browserAudioEnabled ? 'Enabled' : 'Disabled';
+  const badgeKind = browserAudioEnabled ? 'badge-ok' : 'badge-warn';
   setBadge('browserAudioBadge', badgeText, badgeKind);
-  setText('browserAudioBridgeState', running ? `running pid ${status.pid || '-'}` : 'stopped');
-  setText('browserAudioStreamSource', browserAudioStreamUrl(status));
-  setText('browserAudioPackets', bridge.audio_packets ?? '-');
-  setText('browserAudioFlags', bridge.flag_packets ?? '-');
-  setText('browserAudioClients', bridge.stream_clients ?? '-');
-  setText('browserAudioLastAudio', bridge.last_audio_age_seconds == null ? '-' : `${bridge.last_audio_age_seconds}s ago`);
+  setText('browserAudioContextState', contextState);
   setText('browserAudioDevice', 'Browser default');
+  setText('browserAudioStreamSource', 'pending OP25 audio bridge');
   setText('browserAudioLastEvent', browserAudioLastEvent);
-}
-
-async function refreshAudioStatus() {
-  try {
-    const status = await fetchJson('/api/audio/status');
-    renderBrowserAudioState(status);
-    return status;
-  } catch (error) {
-    browserAudioLastEvent = `Audio status error: ${error.message}`;
-    renderBrowserAudioState({ running: false, bridge_status: {} });
-    return null;
-  }
-}
-
-async function startBrowserAudioBridge() {
-  try {
-    const status = await fetchJson('/api/audio/start', { method: 'POST' });
-    browserAudioLastEvent = 'Raw browser audio bridge started.';
-    renderBrowserAudioState(status);
-    return status;
-  } catch (error) {
-    browserAudioLastEvent = `Audio bridge start failed: ${error.message}`;
-    renderBrowserAudioState();
-    return null;
-  }
-}
-
-async function stopBrowserAudioBridge() {
-  try {
-    const audio = field('browserAudioPlayer');
-    if (audio) {
-      audio.pause();
-      audio.removeAttribute('src');
-      audio.load();
-    }
-    const status = await fetchJson('/api/audio/stop', { method: 'POST' });
-    browserAudioLastEvent = 'Raw browser audio bridge stopped.';
-    renderBrowserAudioState(status);
-  } catch (error) {
-    browserAudioLastEvent = `Audio bridge stop failed: ${error.message}`;
-    renderBrowserAudioState();
-  }
+  const toneBtn = field('playBrowserToneBtn');
+  if (toneBtn) toneBtn.disabled = !browserAudioEnabled;
 }
 
 async function enableBrowserAudio() {
-  const status = browserAudioStatus?.running ? browserAudioStatus : await startBrowserAudioBridge();
-  const audio = field('browserAudioPlayer');
-  if (!audio || !status?.running) {
-    browserAudioLastEvent = 'Audio bridge is not running yet.';
-    renderBrowserAudioState(status);
-    return;
-  }
-  audio.src = browserAudioStreamUrl(status);
   try {
-    await audio.play();
-    browserAudioLastEvent = 'Browser audio stream playing.';
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      throw new Error('Web Audio API is not supported by this browser');
+    }
+    if (!browserAudioContext) {
+      browserAudioContext = new AudioContextClass();
+    }
+    if (browserAudioContext.state === 'suspended') {
+      await browserAudioContext.resume();
+    }
+    browserAudioEnabled = true;
+    browserAudioLastEvent = `Browser audio enabled (${browserAudioContext.state}).`;
   } catch (error) {
-    browserAudioLastEvent = `Press play on the audio control if autoplay was blocked: ${error.message}`;
+    browserAudioEnabled = false;
+    browserAudioLastEvent = `Browser audio enable failed: ${error.message}`;
   }
-  renderBrowserAudioState(status);
+  renderBrowserAudioState();
 }
 
 async function playBrowserTestTone() {
-  const status = browserAudioStatus?.running ? browserAudioStatus : await startBrowserAudioBridge();
-  const audio = field('browserAudioPlayer');
-  if (!audio || !status?.running) {
-    browserAudioLastEvent = 'Audio bridge is not running yet.';
-    renderBrowserAudioState(status);
-    return;
-  }
-  audio.src = browserAudioToneUrl(status);
   try {
-    await audio.play();
-    browserAudioLastEvent = 'Playing bridge-provided test tone.';
+    if (!browserAudioContext || !browserAudioEnabled) {
+      await enableBrowserAudio();
+    }
+    if (!browserAudioContext || !browserAudioEnabled) {
+      return;
+    }
+    const oscillator = browserAudioContext.createOscillator();
+    const gain = browserAudioContext.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, browserAudioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.20, browserAudioContext.currentTime + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, browserAudioContext.currentTime + 0.45);
+    oscillator.connect(gain);
+    gain.connect(browserAudioContext.destination);
+    oscillator.start();
+    oscillator.stop(browserAudioContext.currentTime + 0.5);
+    browserAudioLastEvent = 'Played browser-generated test tone.';
   } catch (error) {
-    browserAudioLastEvent = `Test tone play failed: ${error.message}`;
+    browserAudioLastEvent = `Browser test tone failed: ${error.message}`;
   }
-  renderBrowserAudioState(status);
+  renderBrowserAudioState();
 }
 
 function formatActivityEvent(event) {
@@ -285,7 +212,7 @@ function renderStatus(status) {
   const state = status.scanner_state || '-';
 
   renderDashboard(status);
-  renderBrowserAudioState(status.browser_audio);
+  renderBrowserAudioState();
   setText('scannerState', state);
   setText('decoderEngine', status.decoder_engine || '-');
   setText('configSource', status.config?.source || '-');
@@ -478,12 +405,9 @@ document.getElementById('loadConfigBtn')?.addEventListener('click', refreshConfi
 document.getElementById('initLocalConfigBtn')?.addEventListener('click', initLocalConfig);
 document.getElementById('saveConfigBtn')?.addEventListener('click', saveConfig);
 document.getElementById('enableBrowserAudioBtn')?.addEventListener('click', enableBrowserAudio);
-document.getElementById('startBrowserAudioBridgeBtn')?.addEventListener('click', startBrowserAudioBridge);
-document.getElementById('stopBrowserAudioBridgeBtn')?.addEventListener('click', stopBrowserAudioBridge);
 document.getElementById('playBrowserToneBtn')?.addEventListener('click', playBrowserTestTone);
 
+renderBrowserAudioState();
 refreshStatus();
 refreshConfig();
-refreshAudioStatus();
 setInterval(refreshStatus, 3000);
-setInterval(refreshAudioStatus, 10000);
