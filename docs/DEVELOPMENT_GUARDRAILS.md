@@ -41,3 +41,4 @@ These guardrails capture project-specific lessons learned while building and val
 - Before generating future scripts, include a pre-commit whitespace normalizer/checker in the script design rather than relying on manual cleanup afterward.
 - Avoid embedded Python triple-quoted strings for generating shell scripts, JSONL fixtures, heredocs, or quote-heavy content.
 - Validate JSONL analysis with a real temporary JSONL fixture before commit whenever capture/analyzer behavior changes.
+- Patch scripts must verify the working tree is clean before changing files; if dirty, preserve diffs/backups before any reset or overwrite.

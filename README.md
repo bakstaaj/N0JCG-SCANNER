@@ -298,3 +298,7 @@ V0.2L separates OP25 whitelist/configuration talkgroup log lines from active cal
 ## V0.2M OP25 discovery trust
 
 V0.2M classifies known OP25 source-tree app paths as trusted decoder candidates so the backend no longer warns about a generic `rx.py` when the path is under `op25/op25/gr-op25_repeater/apps`. Generic unrelated `rx.py` paths still warn. Validate with `./tools/pi5_p25_op25_discovery_trust_probe.sh`.
+
+## V0.2N OP25 metadata discovery
+
+V0.2N adds `tools/pi5_p25_op25_metadata_discovery_probe.sh`, a live evidence probe that classifies OP25 backend log-tail lines into active TGID candidates, voice-frequency candidates, configured whitelist/blacklist TGID lines, plaintext voice frames, encrypted metadata, and control-channel lines. This is used to discover the exact active-call metadata format emitted by the installed OP25 build before extending parser behavior.
