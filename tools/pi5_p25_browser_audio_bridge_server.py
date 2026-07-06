@@ -8,6 +8,9 @@ browser host.
 V0.3E adds a small jitter/prebuffer and optional de-click smoothing. This keeps
 short OP25 UDP timing gaps from turning into loud browser-side artifacts while
 still preserving the simple WAV stream path.
+
+V0.3E recovery adds launch hardening: reusable HTTP bind, explicit UDP bind
+failure reporting, and clear startup errors for live-test reports.
 """
 
 from __future__ import annotations
@@ -221,12 +224,13 @@ class UdpReceiver(threading.Thread):
     def run(self) -> None:
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.settimeout(0.5)
             sock.bind((self.host, self.port))
             self.sock = sock
         except OSError as exc:
             with self.state.lock:
-                self.state.bind_errors.append(f"{self.host}:{self.port}: {exc}")
+                self.state.bind_errors.append(f"UDP {self.host}:{self.port}: {exc}")
             return
         while self.keep_running:
             try:
@@ -247,7 +251,7 @@ class UdpReceiver(threading.Thread):
 
 
 class AudioHandler(BaseHTTPRequestHandler):
-    server_version = "PiP25BrowserAudioBridge/0.3E"
+    server_version = "PiP25BrowserAudioBridge/0.3E1"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         return
@@ -274,7 +278,6 @@ class AudioHandler(BaseHTTPRequestHandler):
         try:
             self.wfile.write(wav_header())
             self.wfile.flush()
-            # Give OP25 a small jitter buffer before the first audible packet.
             prebuffer_deadline = time.time() + 1.5
             while self.audio_state.queue_depth() < self.audio_state.prebuffer_chunks and time.time() < prebuffer_deadline:
                 self.wfile.write(SILENCE_FRAME)
@@ -320,6 +323,8 @@ class AudioHandler(BaseHTTPRequestHandler):
 
 
 class AudioServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+
     def __init__(self, server_address: tuple[str, int], handler_class: type[BaseHTTPRequestHandler], audio_state: AudioState) -> None:
         super().__init__(server_address, handler_class)
         self.audio_state = audio_state
@@ -387,8 +392,21 @@ def main() -> int:
     receivers = [UdpReceiver(state, args.udp_host, args.udp_port), UdpReceiver(state, args.udp_host, args.udp_port + 1)]
     for receiver in receivers:
         receiver.start()
+    time.sleep(0.1)
+    if state.bind_errors:
+        for error in state.bind_errors:
+            print(f"FAIL: browser audio UDP bind failed: {error}", flush=True)
+        for receiver in receivers:
+            receiver.stop()
+        return 1
 
-    httpd = AudioServer((args.host, args.port), AudioHandler, state)
+    try:
+        httpd = AudioServer((args.host, args.port), AudioHandler, state)
+    except OSError as exc:
+        print(f"FAIL: browser audio HTTP bind failed on {args.host}:{args.port}: {exc}", flush=True)
+        for receiver in receivers:
+            receiver.stop()
+        return 1
 
     def stop(_signum: int, _frame: Any) -> None:
         for receiver in receivers:

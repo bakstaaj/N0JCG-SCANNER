@@ -23,6 +23,7 @@ Usage:
 
 Runs a bounded browser-audio listening test on the Pi:
   - stops the backend scanner process to free the SDR,
+  - clears stale browser-audio bridge processes for the selected ports,
   - starts the browser audio bridge on port 8072,
   - starts OP25 directly from the validated marker with UDP audio enabled,
   - keeps the stream available for the requested duration.
@@ -70,10 +71,155 @@ cleanup() {
 }
 trap cleanup EXIT
 
+show_bridge_log_tail() {
+  if [[ -f "$BRIDGE_LOG" ]]; then
+    {
+      printf '\n--- bridge log tail: %s ---\n' "$BRIDGE_LOG"
+      tail -80 "$BRIDGE_LOG"
+      printf -- '--- end bridge log tail ---\n'
+    } | tee -a "$REPORT_FILE"
+  else
+    warn "bridge log was not created: $BRIDGE_LOG"
+  fi
+}
+
+cleanup_stale_bridge_processes() {
+  python3 - "$HTTP_PORT" "$UDP_PORT" <<'PY'
+from __future__ import annotations
+
+import os
+import signal
+import sys
+import time
+from pathlib import Path
+
+http_port = sys.argv[1]
+udp_port = sys.argv[2]
+current = os.getpid()
+script_name = "pi5_p25_browser_audio_bridge_server.py"
+
+
+def cmdline_for(pid: int) -> list[str]:
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return []
+    return [part.decode("utf-8", "replace") for part in raw.split(b"\x00") if part]
+
+
+def option_value(args: list[str], name: str) -> str | None:
+    for index, value in enumerate(args):
+        if value == name and index + 1 < len(args):
+            return args[index + 1]
+        prefix = f"{name}="
+        if value.startswith(prefix):
+            return value[len(prefix):]
+    return None
+
+matches: list[int] = []
+for entry in Path("/proc").iterdir():
+    if not entry.name.isdigit():
+        continue
+    pid = int(entry.name)
+    if pid == current or pid == os.getppid():
+        continue
+    args = cmdline_for(pid)
+    if not args or not any(script_name in item for item in args):
+        continue
+    proc_http = option_value(args, "--port") or "8072"
+    proc_udp = option_value(args, "--udp-port") or "23456"
+    if proc_http == http_port or proc_udp == udp_port:
+        matches.append(pid)
+
+for pid in matches:
+    try:
+        os.kill(pid, signal.SIGTERM)
+        print(f"stale bridge SIGTERM pid={pid}")
+    except OSError as exc:
+        print(f"stale bridge SIGTERM skipped pid={pid}: {exc}")
+
+time.sleep(0.75)
+for pid in matches:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        continue
+    try:
+        os.kill(pid, signal.SIGKILL)
+        print(f"stale bridge SIGKILL pid={pid}")
+    except OSError as exc:
+        print(f"stale bridge SIGKILL skipped pid={pid}: {exc}")
+
+print(f"stale bridge cleanup checked={len(matches)}")
+PY
+}
+
+assert_ports_available() {
+  python3 - "$HTTP_PORT" "$UDP_PORT" <<'PY'
+from __future__ import annotations
+
+import socket
+import sys
+
+http_port = int(sys.argv[1])
+udp_port = int(sys.argv[2])
+errors: list[str] = []
+
+try:
+    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    tcp.bind(("0.0.0.0", http_port))
+    tcp.close()
+except OSError as exc:
+    errors.append(f"TCP 0.0.0.0:{http_port}: {exc}")
+
+for port in (udp_port, udp_port + 1):
+    try:
+        udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        udp.bind(("127.0.0.1", port))
+        udp.close()
+    except OSError as exc:
+        errors.append(f"UDP 127.0.0.1:{port}: {exc}")
+
+if errors:
+    for error in errors:
+        print(error)
+    raise SystemExit(1)
+PY
+}
+
+wait_for_bridge_ready() {
+  local attempt
+  for attempt in {1..20}; do
+    if ! kill -0 "$BRIDGE_PID" >/dev/null 2>&1; then
+      fail "browser audio bridge exited before readiness check; see $BRIDGE_LOG"
+      show_bridge_log_tail
+      return 1
+    fi
+    if python3 - "$HTTP_PORT" <<'PY' >/dev/null 2>&1; then
+import json
+import sys
+import urllib.request
+port = sys.argv[1]
+with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/audio/status', timeout=0.5) as resp:
+    data = json.loads(resp.read().decode('utf-8'))
+if not data.get('ok'):
+    raise SystemExit(1)
+PY
+      return 0
+    fi
+    sleep 0.25
+  done
+  fail "browser audio bridge did not become HTTP-ready; see $BRIDGE_LOG"
+  show_bridge_log_tail
+  return 1
+}
+
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
 
-printf '=== PI-P25-SCANNER V0.3E OP25 browser audio live test ===\n' | tee -a "$REPORT_FILE"
+printf '=== PI-P25-SCANNER V0.3E1 OP25 browser audio live test ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 
@@ -162,6 +308,17 @@ except Exception as exc:
 PY
 pass "backend scanner stop requested"
 
+cleanup_stale_bridge_processes | tee -a "$REPORT_FILE"
+pass "stale browser audio bridge cleanup completed"
+if ! assert_ports_available >>"$REPORT_FILE" 2>&1; then
+  fail "browser audio bridge ports are still unavailable before launch"
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnup 2>/dev/null | grep -E ":(${HTTP_PORT}|${UDP_PORT}|$((UDP_PORT + 1)))\b" | tee -a "$REPORT_FILE" || true
+  fi
+  exit 1
+fi
+pass "browser audio bridge ports are available"
+
 python3 tools/pi5_p25_browser_audio_bridge_server.py \
   --host 0.0.0.0 \
   --port "$HTTP_PORT" \
@@ -171,9 +328,7 @@ python3 tools/pi5_p25_browser_audio_bridge_server.py \
   --declick-samples "$DECLICK_SAMPLES" \
   >"$BRIDGE_LOG" 2>&1 &
 BRIDGE_PID=$!
-sleep 1
-if ! kill -0 "$BRIDGE_PID" >/dev/null 2>&1; then
-  fail "browser audio bridge did not stay running; see $BRIDGE_LOG"
+if ! wait_for_bridge_ready; then
   exit 1
 fi
 pass "browser audio bridge started pid=$BRIDGE_PID"
@@ -234,6 +389,7 @@ try:
         'queued_chunks': data.get('queued_chunks'),
         'underruns': data.get('underruns'),
         'silence_chunks_sent': data.get('silence_chunks_sent'),
+        'stream_clients': data.get('stream_clients'),
         'last_audio_age_seconds': data.get('last_audio_age_seconds'),
     }, sort_keys=True))
 except Exception as exc:
