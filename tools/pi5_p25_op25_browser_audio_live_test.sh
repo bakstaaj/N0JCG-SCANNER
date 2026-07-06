@@ -4,6 +4,7 @@ set -Eeuo pipefail
 SECONDS_TO_RUN=600
 HTTP_PORT=8072
 UDP_PORT=23456
+# Accepted for compatibility with V0.3E callers; ignored in raw V0.3F mode.
 PREBUFFER_CHUNKS=0
 DECLICK_SAMPLES=0
 YES=0
@@ -23,6 +24,7 @@ Usage:
 
 Runs a bounded raw browser-audio listening test on the Pi:
   - stops the backend scanner process to free the SDR,
+  - removes stale PI-P25 browser-audio bridge listeners,
   - starts the raw browser audio bridge on port 8072,
   - starts OP25 directly from the validated marker with UDP audio enabled,
   - keeps the stream available for the requested duration.
@@ -33,6 +35,7 @@ Options:
   --udp-port N             OP25 UDP PCM port. Default: 23456
   --prebuffer-chunks N     Accepted for compatibility; ignored in raw V0.3F mode
   --declick-samples N      Accepted for compatibility; ignored in raw V0.3F mode
+  --no-stale-cleanup       Do not kill stale PI-P25 bridge processes before start
   --yes                    Required to run the live test
   -h, --help               Show help
 
@@ -41,6 +44,7 @@ Open this during the test:
 EOF_USAGE
 }
 
+STALE_CLEANUP=1
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --seconds) shift; SECONDS_TO_RUN="$1"; shift ;;
@@ -48,11 +52,15 @@ while [[ "$#" -gt 0 ]]; do
     --udp-port) shift; UDP_PORT="$1"; shift ;;
     --prebuffer-chunks) shift; PREBUFFER_CHUNKS="$1"; shift ;;
     --declick-samples) shift; DECLICK_SAMPLES="$1"; shift ;;
+    --no-stale-cleanup) STALE_CLEANUP=0; shift ;;
     --yes) YES=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "FAIL: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+mkdir -p "$REPORT_DIR"
+: > "$REPORT_FILE"
 
 pass() { printf 'PASS: %s\n' "$*" | tee -a "$REPORT_FILE"; }
 warn() { printf 'WARN: %s\n' "$*" | tee -a "$REPORT_FILE"; }
@@ -70,8 +78,111 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$REPORT_DIR"
-: > "$REPORT_FILE"
+is_uint() { [[ "${1:-}" =~ ^[0-9]+$ ]]; }
+
+pids_for_tcp_port() {
+  local port="$1"
+  ss -ltnp 2>/dev/null | awk -v port=":${port}" '$4 ~ port"$" { print }' | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u
+}
+
+pids_for_udp_port() {
+  local port="$1"
+  ss -lunp 2>/dev/null | awk -v port=":${port}" '$5 ~ port"$" { print }' | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u
+}
+
+cmdline_for_pid() {
+  local pid="$1"
+  if [[ -r "/proc/${pid}/cmdline" ]]; then
+    tr '\0' ' ' < "/proc/${pid}/cmdline"
+  else
+    ps -p "$pid" -o args= 2>/dev/null || true
+  fi
+}
+
+wait_port_clear() {
+  local port="$1"
+  local tries=20
+  while (( tries > 0 )); do
+    if [[ -z "$(pids_for_tcp_port "$port")" ]]; then
+      return 0
+    fi
+    sleep 0.25
+    tries=$((tries - 1))
+  done
+  return 1
+}
+
+stop_stale_browser_audio_bridge() {
+  local http_port="$1"
+  local udp_port="$2"
+  local killed=0
+  local pids=()
+  local pid=""
+  local cmd=""
+
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] && pids+=("$pid")
+  done < <(pids_for_tcp_port "$http_port")
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] && pids+=("$pid")
+  done < <(pids_for_udp_port "$udp_port")
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] && pids+=("$pid")
+  done < <(pids_for_udp_port $((udp_port + 1)))
+
+  if (( ${#pids[@]} == 0 )); then
+    pass "no stale browser audio bridge ports in use"
+    return 0
+  fi
+
+  mapfile -t pids < <(printf '%s\n' "${pids[@]}" | sort -u)
+  for pid in "${pids[@]}"; do
+    cmd="$(cmdline_for_pid "$pid")"
+    if [[ "$cmd" == *"pi5_p25_browser_audio_bridge_server.py"* ]]; then
+      warn "stopping stale browser audio bridge pid=${pid}: ${cmd}"
+      kill "$pid" >/dev/null 2>&1 || true
+      killed=$((killed + 1))
+    else
+      fail "port is in use by non-PI-P25 bridge process pid=${pid}: ${cmd}"
+      ss -ltnp 2>/dev/null | grep -E ":${http_port}[[:space:]]" | tee -a "$REPORT_FILE" || true
+      ss -lunp 2>/dev/null | grep -E ":(${udp_port}|$((udp_port + 1)))[[:space:]]" | tee -a "$REPORT_FILE" || true
+      exit 1
+    fi
+  done
+
+  if (( killed > 0 )); then
+    sleep 0.75
+  fi
+  if ! wait_port_clear "$http_port"; then
+    fail "HTTP port ${http_port} is still in use after stale bridge cleanup"
+    ss -ltnp 2>/dev/null | grep -E ":${http_port}[[:space:]]" | tee -a "$REPORT_FILE" || true
+    exit 1
+  fi
+  pass "stale browser audio bridge cleanup complete"
+}
+
+wait_bridge_ready() {
+  local port="$1"
+  local tries=20
+  while (( tries > 0 )); do
+    if python3 - "$port" <<'PY' >/dev/null 2>&1
+import json
+import sys
+import urllib.request
+port = sys.argv[1]
+with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/audio/status', timeout=0.75) as resp:
+    data = json.loads(resp.read().decode('utf-8'))
+if not data.get('ok'):
+    raise SystemExit(1)
+PY
+    then
+      return 0
+    fi
+    sleep 0.5
+    tries=$((tries - 1))
+  done
+  return 1
+}
 
 printf '=== PI-P25-SCANNER V0.3F raw OP25 browser audio live test ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
@@ -83,7 +194,7 @@ if [[ "$YES" -ne 1 ]]; then
 fi
 for numeric in SECONDS_TO_RUN HTTP_PORT UDP_PORT PREBUFFER_CHUNKS DECLICK_SAMPLES; do
   value="${!numeric}"
-  if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+  if ! is_uint "$value"; then
     fail "${numeric} must be a non-negative integer"
     exit 2
   fi
@@ -107,6 +218,11 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 pass "python3 available"
+if ! command -v ss >/dev/null 2>&1; then
+  fail "ss command missing; install iproute2"
+  exit 1
+fi
+pass "ss available"
 if ! python3 tools/pi5_p25_browser_audio_bridge_server.py --self-test >>"$REPORT_FILE" 2>&1; then
   fail "raw browser audio bridge self-test failed"
   exit 1
@@ -136,10 +252,6 @@ for key in "${required[@]}"; do
 done
 pass "validated OP25 marker fields present"
 
-if [[ "$PREBUFFER_CHUNKS" -ne 0 || "$DECLICK_SAMPLES" -ne 0 ]]; then
-  warn "prebuffer/declick options were supplied but are ignored in raw V0.3F mode"
-fi
-
 LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 if [[ -z "$LAN_IP" ]]; then
   LAN_IP="$(hostname)"
@@ -152,6 +264,8 @@ printf 'BROWSER_AUDIO_URL=%s\n' "$AUDIO_URL" | tee -a "$REPORT_FILE"
 printf 'BROWSER_AUDIO_STATUS=%s\n' "$STATUS_URL" | tee -a "$REPORT_FILE"
 printf 'BROWSER_AUDIO_TEST_TONE=%s\n' "$TEST_URL" | tee -a "$REPORT_FILE"
 printf 'AUDIO_BRIDGE_MODE=raw-v0.3f\n' | tee -a "$REPORT_FILE"
+printf 'COMPAT_PREBUFFER_CHUNKS_IGNORED=%s\n' "$PREBUFFER_CHUNKS" | tee -a "$REPORT_FILE"
+printf 'COMPAT_DECLICK_SAMPLES_IGNORED=%s\n' "$DECLICK_SAMPLES" | tee -a "$REPORT_FILE"
 printf '\nOpen BROWSER_AUDIO_URL in the browser while this script is running.\n\n' | tee -a "$REPORT_FILE"
 
 python3 - <<'PY' >>"$REPORT_FILE" 2>&1 || true
@@ -165,16 +279,10 @@ except Exception as exc:
 PY
 pass "backend scanner stop requested"
 
-# Clear stale bridge processes from prior bounded tests.
-pkill -f 'tools/pi5_p25_browser_audio_bridge_server.py' >/dev/null 2>&1 || true
-sleep 0.7
-
-if command -v ss >/dev/null 2>&1; then
-  if ss -ltn "sport = :${HTTP_PORT}" 2>/dev/null | awk 'NR>1 {found=1} END {exit !found}'; then
-    fail "HTTP port ${HTTP_PORT} is still in use before bridge start"
-    ss -ltnp "sport = :${HTTP_PORT}" 2>/dev/null | tee -a "$REPORT_FILE" || true
-    exit 1
-  fi
+if [[ "$STALE_CLEANUP" -eq 1 ]]; then
+  stop_stale_browser_audio_bridge "$HTTP_PORT" "$UDP_PORT"
+else
+  warn "stale bridge cleanup disabled by --no-stale-cleanup"
 fi
 
 python3 tools/pi5_p25_browser_audio_bridge_server.py \
@@ -185,36 +293,15 @@ python3 tools/pi5_p25_browser_audio_bridge_server.py \
   >"$BRIDGE_LOG" 2>&1 &
 BRIDGE_PID=$!
 
-READY=0
-for _attempt in $(seq 1 20); do
-  if ! kill -0 "$BRIDGE_PID" >/dev/null 2>&1; then
-    break
-  fi
-  if python3 - "$HTTP_PORT" <<'PY' >/dev/null 2>&1
-import json
-import sys
-import urllib.request
-port = sys.argv[1]
-with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/audio/status', timeout=0.5) as resp:
-    data = json.loads(resp.read().decode('utf-8'))
-if not data.get('ok'):
-    raise SystemExit(1)
-PY
-  then
-    READY=1
-    break
-  fi
-  sleep 0.25
-done
-if [[ "$READY" -ne 1 ]]; then
-  fail "raw browser audio bridge did not become ready; see $BRIDGE_LOG"
-  log_tail="$(tail -80 "$BRIDGE_LOG" 2>/dev/null || true)"
-  if [[ -n "$log_tail" ]]; then
-    printf '--- bridge log tail ---\n%s\n--- end bridge log tail ---\n' "$log_tail" | tee -a "$REPORT_FILE"
+if ! wait_bridge_ready "$HTTP_PORT"; then
+  fail "browser audio bridge did not become ready; see $BRIDGE_LOG"
+  if [[ -s "$BRIDGE_LOG" ]]; then
+    printf '\n--- bridge log tail ---\n' | tee -a "$REPORT_FILE"
+    tail -80 "$BRIDGE_LOG" | tee -a "$REPORT_FILE"
   fi
   exit 1
 fi
-pass "raw browser audio bridge ready pid=$BRIDGE_PID"
+pass "browser audio bridge ready pid=$BRIDGE_PID"
 
 OP25_CMD=(
   "$P25_VALIDATED_RX_APP"
@@ -251,13 +338,15 @@ printf '\nListening window active for %s seconds.\n' "$SECONDS_TO_RUN" | tee -a 
 printf 'Open now: %s\n\n' "$AUDIO_URL" | tee -a "$REPORT_FILE"
 
 START_EPOCH="$(date +%s)"
+LAST_STATUS_SECOND=-1
 while kill -0 "$OP25_PID" >/dev/null 2>&1; do
   NOW="$(date +%s)"
   ELAPSED=$((NOW - START_EPOCH))
   if (( ELAPSED >= SECONDS_TO_RUN )); then
     break
   fi
-  if (( ELAPSED % 15 == 0 )); then
+  if (( ELAPSED % 15 == 0 && ELAPSED != LAST_STATUS_SECOND )); then
+    LAST_STATUS_SECOND="$ELAPSED"
     python3 - "$HTTP_PORT" <<'PY' 2>/dev/null | tee -a "$REPORT_FILE" || true
 import json
 import sys
@@ -267,11 +356,9 @@ try:
     with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/audio/status', timeout=2) as resp:
         data = json.loads(resp.read().decode('utf-8'))
     print('AUDIO_STATUS', json.dumps({
-        'mode': data.get('mode'),
         'packets': data.get('packets'),
         'audio_packets': data.get('audio_packets'),
         'queued_chunks': data.get('queued_chunks'),
-        'underruns': data.get('underruns'),
         'silence_chunks_sent': data.get('silence_chunks_sent'),
         'last_audio_age_seconds': data.get('last_audio_age_seconds'),
     }, sort_keys=True))
@@ -295,7 +382,7 @@ try:
         data = json.loads(resp.read().decode('utf-8'))
     print('FINAL_AUDIO_STATUS', json.dumps(data, indent=2, sort_keys=True))
     if int(data.get('audio_packets') or 0) > 0:
-        print('PASS: OP25 UDP audio packets were received by raw browser audio bridge')
+        print('PASS: OP25 UDP audio packets were received by browser audio bridge')
     else:
         print('WARN: no OP25 UDP audio packets were received; this may mean no clear voice grant occurred during the window')
 except Exception as exc:
