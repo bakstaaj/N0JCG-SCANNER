@@ -4,6 +4,8 @@ set -Eeuo pipefail
 SECONDS_TO_RUN=600
 HTTP_PORT=8072
 UDP_PORT=23456
+PREBUFFER_CHUNKS=8
+DECLICK_SAMPLES=12
 YES=0
 REPORT_DIR=".p25_browser_audio_live_reports"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -26,11 +28,13 @@ Runs a bounded browser-audio listening test on the Pi:
   - keeps the stream available for the requested duration.
 
 Options:
-  --seconds N       Test duration. Default: 600
-  --http-port N     Browser audio HTTP port. Default: 8072
-  --udp-port N      OP25 UDP PCM port. Default: 23456
-  --yes             Required to run the live test
-  -h, --help        Show help
+  --seconds N              Test duration. Default: 600
+  --http-port N            Browser audio HTTP port. Default: 8072
+  --udp-port N             OP25 UDP PCM port. Default: 23456
+  --prebuffer-chunks N     Bridge jitter prebuffer. Default: 8
+  --declick-samples N      Samples smoothed at frame boundaries. Default: 12
+  --yes                    Required to run the live test
+  -h, --help               Show help
 
 Open this during the test:
   http://<pi-ip>:8072/audio.wav
@@ -42,6 +46,8 @@ while [[ "$#" -gt 0 ]]; do
     --seconds) shift; SECONDS_TO_RUN="$1"; shift ;;
     --http-port) shift; HTTP_PORT="$1"; shift ;;
     --udp-port) shift; UDP_PORT="$1"; shift ;;
+    --prebuffer-chunks) shift; PREBUFFER_CHUNKS="$1"; shift ;;
+    --declick-samples) shift; DECLICK_SAMPLES="$1"; shift ;;
     --yes) YES=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "FAIL: unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -67,12 +73,23 @@ trap cleanup EXIT
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
 
-printf '=== PI-P25-SCANNER V0.3D OP25 browser audio live test ===\n' | tee -a "$REPORT_FILE"
+printf '=== PI-P25-SCANNER V0.3E OP25 browser audio live test ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 
 if [[ "$YES" -ne 1 ]]; then
   fail "live audio test requires --yes"
+  exit 2
+fi
+for numeric in SECONDS_TO_RUN HTTP_PORT UDP_PORT PREBUFFER_CHUNKS DECLICK_SAMPLES; do
+  value="${!numeric}"
+  if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+    fail "${numeric} must be a non-negative integer"
+    exit 2
+  fi
+done
+if [[ "$SECONDS_TO_RUN" -le 0 || "$HTTP_PORT" -le 0 || "$UDP_PORT" -le 0 ]]; then
+  fail "seconds and ports must be positive"
   exit 2
 fi
 if [[ ! -f "DEV_GUARDRAILS.md" || ! -d "tools" ]]; then
@@ -90,6 +107,11 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 pass "python3 available"
+if ! python3 tools/pi5_p25_browser_audio_bridge_server.py --self-test >>"$REPORT_FILE" 2>&1; then
+  fail "browser audio bridge self-test failed"
+  exit 1
+fi
+pass "browser audio bridge self-test passed"
 
 # shellcheck disable=SC1090
 set -a
@@ -125,9 +147,10 @@ TEST_URL="http://${LAN_IP}:${HTTP_PORT}/test-tone.wav"
 printf 'BROWSER_AUDIO_URL=%s\n' "$AUDIO_URL" | tee -a "$REPORT_FILE"
 printf 'BROWSER_AUDIO_STATUS=%s\n' "$STATUS_URL" | tee -a "$REPORT_FILE"
 printf 'BROWSER_AUDIO_TEST_TONE=%s\n' "$TEST_URL" | tee -a "$REPORT_FILE"
+printf 'PREBUFFER_CHUNKS=%s\n' "$PREBUFFER_CHUNKS" | tee -a "$REPORT_FILE"
+printf 'DECLICK_SAMPLES=%s\n' "$DECLICK_SAMPLES" | tee -a "$REPORT_FILE"
 printf '\nOpen BROWSER_AUDIO_URL in the browser while this script is running.\n\n' | tee -a "$REPORT_FILE"
 
-# Stop backend-managed OP25 first so the direct OP25 audio test can use the SDR.
 python3 - <<'PY' >>"$REPORT_FILE" 2>&1 || true
 import urllib.request
 try:
@@ -144,6 +167,8 @@ python3 tools/pi5_p25_browser_audio_bridge_server.py \
   --port "$HTTP_PORT" \
   --udp-host 127.0.0.1 \
   --udp-port "$UDP_PORT" \
+  --prebuffer-chunks "$PREBUFFER_CHUNKS" \
+  --declick-samples "$DECLICK_SAMPLES" \
   >"$BRIDGE_LOG" 2>&1 &
 BRIDGE_PID=$!
 sleep 1
@@ -207,6 +232,8 @@ try:
         'packets': data.get('packets'),
         'audio_packets': data.get('audio_packets'),
         'queued_chunks': data.get('queued_chunks'),
+        'underruns': data.get('underruns'),
+        'silence_chunks_sent': data.get('silence_chunks_sent'),
         'last_audio_age_seconds': data.get('last_audio_age_seconds'),
     }, sort_keys=True))
 except Exception as exc:
