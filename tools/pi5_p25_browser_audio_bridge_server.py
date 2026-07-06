@@ -5,10 +5,10 @@ Receives OP25 UDP PCM frames on localhost and exposes a browser-readable WAV
 stream. The Raspberry Pi remains the RF/decoder host; playback happens in the
 browser host.
 
-V0.3J is flag-control-hold aware. OP25's socket audio path sends 320-byte PCM frames and
-2-byte control flags. The bridge now honors those flags instead of blindly
-streaming every adjacent PCM frame, which helps suppress encrypted or invalid
-bursts that OP25 is trying to drain/drop.
+V0.3K keeps the simple raw PCM stream, honors OP25 2-byte audio control flags,
+and adds an HTTP log-driven gate so encrypted-call indicators from the OP25 log
+can immediately clear and suppress audio before garbled encrypted vocoder bursts
+reach the browser.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import signal
 import socket
 import struct
 import threading
@@ -25,7 +26,7 @@ from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 PCM_RATE_HZ = 8000
 PCM_CHANNELS = 1
@@ -36,7 +37,8 @@ DEFAULT_UDP_PORT = 23456
 DEFAULT_HTTP_HOST = "0.0.0.0"
 DEFAULT_HTTP_PORT = 8072
 DEFAULT_MAX_QUEUE_CHUNKS = 9000
-DEFAULT_FLAG_DROP_HOLD_MS = 1500
+DEFAULT_FLAG_DROP_HOLD_MS = 2500
+DEFAULT_LOG_GATE_HOLD_MS = 5000
 OP25_AUDIO_FRAME_BYTES = 320
 SILENCE_FRAME = b"\x00" * OP25_AUDIO_FRAME_BYTES
 
@@ -84,16 +86,11 @@ def generated_tone_wav(seconds: float = 1.0, frequency_hz: float = 880.0) -> byt
     return header + bytes(frames)
 
 
-def parse_flag(payload: bytes) -> int | None:
-    if len(payload) != 2:
-        return None
-    return struct.unpack("<h", payload)[0]
-
-
 @dataclass
 class AudioState:
     max_queue_chunks: int = DEFAULT_MAX_QUEUE_CHUNKS
     flag_drop_hold_ms: int = DEFAULT_FLAG_DROP_HOLD_MS
+    default_log_gate_hold_ms: int = DEFAULT_LOG_GATE_HOLD_MS
     chunks: deque[bytes] = field(init=False)
     packets: int = 0
     audio_packets: int = 0
@@ -107,26 +104,36 @@ class AudioState:
     silence_chunks_sent: int = 0
     stream_clients: int = 0
     underruns: int = 0
-    audio_dropped_by_flag: int = 0
     queued_chunks_dropped_by_flag: int = 0
-    last_flag_value: int | None = None
-    last_flag_utc: float | None = None
-    flag_drop_until_utc: float = 0.0
+    audio_dropped_by_flag: int = 0
+    queued_chunks_dropped_by_log_gate: int = 0
+    audio_dropped_by_log_gate: int = 0
+    log_gate_events: int = 0
+    log_gate_reasons: dict[str, int] = field(default_factory=dict)
     started_utc: float = field(default_factory=time.time)
     last_packet_utc: float | None = None
     last_audio_utc: float | None = None
-    last_dropped_audio_utc: float | None = None
     last_sent_utc: float | None = None
+    last_flag_utc: float | None = None
+    last_flag_value: int | None = None
+    last_dropped_audio_utc: float | None = None
+    last_log_gate_utc: float | None = None
+    last_log_gate_reason: str | None = None
+    flag_gate_until_utc: float = 0.0
+    log_gate_until_utc: float = 0.0
     bind_errors: list[str] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def __post_init__(self) -> None:
         self.chunks = deque(maxlen=self.max_queue_chunks)
 
-    def _clear_queue_locked(self) -> int:
+    def _drop_queued_locked(self, *, by_log_gate: bool) -> int:
         dropped = len(self.chunks)
         self.chunks.clear()
-        self.queued_chunks_dropped_by_flag += dropped
+        if by_log_gate:
+            self.queued_chunks_dropped_by_log_gate += dropped
+        else:
+            self.queued_chunks_dropped_by_flag += dropped
         return dropped
 
     def add_packet(self, payload: bytes) -> None:
@@ -136,41 +143,53 @@ class AudioState:
             self.bytes_received += len(payload)
             self.last_packet_utc = now
             if len(payload) == OP25_AUDIO_FRAME_BYTES:
-                if now < self.flag_drop_until_utc:
+                self.audio_packets += 1
+                self.last_audio_utc = now
+                if now < self.log_gate_until_utc:
+                    self.audio_dropped_by_log_gate += 1
+                    self.last_dropped_audio_utc = now
+                    return
+                if now < self.flag_gate_until_utc:
                     self.audio_dropped_by_flag += 1
                     self.last_dropped_audio_utc = now
                     return
-                self.audio_packets += 1
-                self.last_audio_utc = now
                 self.chunks.append(payload)
                 return
-            flag = parse_flag(payload)
-            if flag is not None:
+            if len(payload) == 2:
+                value = int.from_bytes(payload, byteorder="little", signed=False)
                 self.flag_packets += 1
-                self.last_flag_value = flag
                 self.last_flag_utc = now
-                if flag == 0:
+                self.last_flag_value = value
+                if value == 0:
                     self.flag_zero_count += 1
-                    # OP25 socket audio treats flag 0 as drain. In browser streaming,
-                    # draining old audio is not enough: the next UDP audio frames can
-                    # still be encrypted/call-boundary residue. Clear the queue and
-                    # hold/suppress incoming frames for the configured window.
-                    self._clear_queue_locked()
-                    self.flag_drop_until_utc = max(
-                        self.flag_drop_until_utc,
-                        now + (self.flag_drop_hold_ms / 1000.0),
-                    )
-                elif flag == 1:
+                elif value == 1:
                     self.flag_one_count += 1
-                    self._clear_queue_locked()
-                    self.flag_drop_until_utc = max(
-                        self.flag_drop_until_utc,
-                        now + (self.flag_drop_hold_ms / 1000.0),
-                    )
                 else:
                     self.flag_other_count += 1
+                self.flag_gate_until_utc = max(self.flag_gate_until_utc, now + (self.flag_drop_hold_ms / 1000.0))
+                self._drop_queued_locked(by_log_gate=False)
                 return
             self.ignored_packets += 1
+
+    def apply_log_gate(self, hold_ms: int, reason: str) -> dict[str, Any]:
+        now = time.time()
+        safe_reason = (reason or "op25-log").strip()[:96] or "op25-log"
+        with self.lock:
+            self.log_gate_events += 1
+            self.log_gate_reasons[safe_reason] = self.log_gate_reasons.get(safe_reason, 0) + 1
+            self.last_log_gate_utc = now
+            self.last_log_gate_reason = safe_reason
+            self.log_gate_until_utc = max(self.log_gate_until_utc, now + (max(0, hold_ms) / 1000.0))
+            dropped = self._drop_queued_locked(by_log_gate=True)
+            return {
+                "ok": True,
+                "mode": "encrypted-log-gate-v0.3k",
+                "reason": safe_reason,
+                "hold_ms": hold_ms,
+                "queued_chunks_dropped": dropped,
+                "log_gate_events": self.log_gate_events,
+                "log_gate_remaining_seconds": round(max(0.0, self.log_gate_until_utc - now), 3),
+            }
 
     def queue_depth(self) -> int:
         with self.lock:
@@ -203,7 +222,7 @@ class AudioState:
         with self.lock:
             return {
                 "ok": True,
-                "mode": "flag-control-hold-v0.3j",
+                "mode": "encrypted-log-gate-v0.3k",
                 "sample_rate_hz": PCM_RATE_HZ,
                 "channels": PCM_CHANNELS,
                 "bits_per_sample": PCM_BITS,
@@ -214,7 +233,6 @@ class AudioState:
                 "flag_zero_count": self.flag_zero_count,
                 "flag_one_count": self.flag_one_count,
                 "flag_other_count": self.flag_other_count,
-                "last_flag_value": self.last_flag_value,
                 "ignored_packets": self.ignored_packets,
                 "bytes_received": self.bytes_received,
                 "queued_chunks": len(self.chunks),
@@ -222,21 +240,32 @@ class AudioState:
                 "chunks_sent": self.chunks_sent,
                 "silence_chunks_sent": self.silence_chunks_sent,
                 "underruns": self.underruns,
-                "audio_dropped_by_flag": self.audio_dropped_by_flag,
-                "queued_chunks_dropped_by_flag": self.queued_chunks_dropped_by_flag,
-                "flag_drop_hold_ms": self.flag_drop_hold_ms,
-                "flag_drop_active": now < self.flag_drop_until_utc,
-                "flag_drop_remaining_seconds": max(0.0, round(self.flag_drop_until_utc - now, 3)),
                 "stream_clients": self.stream_clients,
+                "flag_drop_hold_ms": self.flag_drop_hold_ms,
+                "flag_drop_active": now < self.flag_gate_until_utc,
+                "flag_drop_remaining_seconds": round(max(0.0, self.flag_gate_until_utc - now), 3),
+                "queued_chunks_dropped_by_flag": self.queued_chunks_dropped_by_flag,
+                "audio_dropped_by_flag": self.audio_dropped_by_flag,
+                "log_gate_hold_ms_default": self.default_log_gate_hold_ms,
+                "log_gate_active": now < self.log_gate_until_utc,
+                "log_gate_remaining_seconds": round(max(0.0, self.log_gate_until_utc - now), 3),
+                "log_gate_events": self.log_gate_events,
+                "log_gate_reasons": dict(self.log_gate_reasons),
+                "last_log_gate_reason": self.last_log_gate_reason,
+                "queued_chunks_dropped_by_log_gate": self.queued_chunks_dropped_by_log_gate,
+                "audio_dropped_by_log_gate": self.audio_dropped_by_log_gate,
                 "last_packet_age_seconds": None if self.last_packet_utc is None else round(now - self.last_packet_utc, 3),
                 "last_audio_age_seconds": None if self.last_audio_utc is None else round(now - self.last_audio_utc, 3),
-                "last_dropped_audio_age_seconds": None if self.last_dropped_audio_utc is None else round(now - self.last_dropped_audio_utc, 3),
-                "last_flag_age_seconds": None if self.last_flag_utc is None else round(now - self.last_flag_utc, 3),
                 "last_sent_age_seconds": None if self.last_sent_utc is None else round(now - self.last_sent_utc, 3),
+                "last_flag_age_seconds": None if self.last_flag_utc is None else round(now - self.last_flag_utc, 3),
+                "last_flag_value": self.last_flag_value,
+                "last_dropped_audio_age_seconds": None if self.last_dropped_audio_utc is None else round(now - self.last_dropped_audio_utc, 3),
+                "last_log_gate_age_seconds": None if self.last_log_gate_utc is None else round(now - self.last_log_gate_utc, 3),
                 "uptime_seconds": round(now - self.started_utc, 3),
                 "bind_errors": list(self.bind_errors),
                 "stream_path": "/audio.wav",
                 "test_tone_path": "/test-tone.wav",
+                "gate_path": "/api/audio/gate",
             }
 
 
@@ -278,7 +307,7 @@ class UdpReceiver(threading.Thread):
 
 
 class AudioHandler(BaseHTTPRequestHandler):
-    server_version = "PiP25BrowserAudioBridge/0.3J"
+    server_version = "PiP25BrowserAudioBridge/0.3K"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         return
@@ -318,10 +347,32 @@ class AudioHandler(BaseHTTPRequestHandler):
         finally:
             self.audio_state.client_ended()
 
+    def _gate_from_query(self, query: str) -> dict[str, Any]:
+        params = parse_qs(query)
+        hold_raw = (params.get("hold_ms") or params.get("ms") or [str(self.audio_state.default_log_gate_hold_ms)])[0]
+        reason = (params.get("reason") or ["op25-log"])[0]
+        try:
+            hold_ms = int(hold_raw)
+        except ValueError:
+            hold_ms = self.audio_state.default_log_gate_hold_ms
+        hold_ms = max(0, min(30000, hold_ms))
+        return self.audio_state.apply_log_gate(hold_ms=hold_ms, reason=reason)
+
+    def do_POST(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/audio/gate":
+            self._send_json(self._gate_from_query(parsed.query))
+            return
+        self._send_json({"ok": False, "error": "not found"}, HTTPStatus.NOT_FOUND)
+
     def do_GET(self) -> None:  # noqa: N802
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
         if path in ("/", "/api/audio/status"):
             self._send_json(self.audio_state.snapshot())
+            return
+        if path == "/api/audio/gate":
+            self._send_json(self._gate_from_query(parsed.query))
             return
         if path == "/test-tone.wav":
             data = generated_tone_wav()
@@ -360,28 +411,21 @@ def self_test() -> int:
     if not tone.startswith(b"RIFF") or len(tone) < 100:
         print("FAIL: generated tone WAV invalid")
         return 1
-    state = AudioState(flag_drop_hold_ms=1000)
-    state.add_packet(b"\x01\x00")
-    state.add_packet(b"\x11" * OP25_AUDIO_FRAME_BYTES)
+    state = AudioState(flag_drop_hold_ms=1000, default_log_gate_hold_ms=2000)
+    state.add_packet(b"\x00" * OP25_AUDIO_FRAME_BYTES)
+    state.add_packet((0).to_bytes(2, "little"))
+    state.add_packet(b"\x01" * OP25_AUDIO_FRAME_BYTES)
     snap = state.snapshot()
-    if snap["flag_one_count"] != 1 or snap["audio_dropped_by_flag"] != 1:
-        print("FAIL: flag-control-hold audio drop accounting invalid")
+    if snap["flag_zero_count"] != 1 or snap["audio_dropped_by_flag"] != 1:
+        print("FAIL: flag gate accounting invalid")
         return 1
-    state.flag_drop_until_utc = 0.0
-    state.add_packet(b"\x22" * OP25_AUDIO_FRAME_BYTES)
-    if state.pop_audio() is None:
-        print("FAIL: ungated audio could not be popped")
-        return 1
-    state.add_packet(b"\x00\x00")
-    state.add_packet(b"\x33" * OP25_AUDIO_FRAME_BYTES)
+    state.apply_log_gate(hold_ms=2000, reason="self-test")
+    state.add_packet(b"\x02" * OP25_AUDIO_FRAME_BYTES)
     snap = state.snapshot()
-    if snap["flag_zero_count"] != 1:
-        print("FAIL: flag zero accounting invalid")
+    if snap["log_gate_events"] != 1 or snap["audio_dropped_by_log_gate"] != 1:
+        print("FAIL: log gate accounting invalid")
         return 1
-    if snap["audio_dropped_by_flag"] < 2:
-        print("FAIL: flag zero hold did not suppress following audio")
-        return 1
-    print("PASS: flag-control-hold browser audio bridge self-test")
+    print("PASS: encrypted-log-gate browser audio bridge self-test")
     print("FINAL: PASS")
     return 0
 
@@ -394,8 +438,9 @@ def main() -> int:
     parser.add_argument("--udp-port", type=int, default=DEFAULT_UDP_PORT)
     parser.add_argument("--max-queue-chunks", type=int, default=DEFAULT_MAX_QUEUE_CHUNKS)
     parser.add_argument("--flag-drop-hold-ms", type=int, default=DEFAULT_FLAG_DROP_HOLD_MS)
-    parser.add_argument("--prebuffer-chunks", type=int, default=0, help="accepted for old wrappers; ignored")
-    parser.add_argument("--declick-samples", type=int, default=0, help="accepted for old wrappers; ignored")
+    parser.add_argument("--encrypted-log-hold-ms", type=int, default=DEFAULT_LOG_GATE_HOLD_MS)
+    parser.add_argument("--prebuffer-chunks", type=int, default=0, help="accepted for compatibility; ignored")
+    parser.add_argument("--declick-samples", type=int, default=0, help="accepted for compatibility; ignored")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
 
@@ -403,18 +448,35 @@ def main() -> int:
         return self_test()
     if args.max_queue_chunks < 10:
         parser.error("--max-queue-chunks must be at least 10")
-    if args.flag_drop_hold_ms < 0 or args.flag_drop_hold_ms > 5000:
-        parser.error("--flag-drop-hold-ms must be between 0 and 5000")
+    if args.flag_drop_hold_ms < 0 or args.flag_drop_hold_ms > 30000:
+        parser.error("--flag-drop-hold-ms must be between 0 and 30000")
+    if args.encrypted_log_hold_ms < 0 or args.encrypted_log_hold_ms > 30000:
+        parser.error("--encrypted-log-hold-ms must be between 0 and 30000")
 
-    state = AudioState(max_queue_chunks=args.max_queue_chunks, flag_drop_hold_ms=args.flag_drop_hold_ms)
+    state = AudioState(
+        max_queue_chunks=args.max_queue_chunks,
+        flag_drop_hold_ms=args.flag_drop_hold_ms,
+        default_log_gate_hold_ms=args.encrypted_log_hold_ms,
+    )
     receivers = [UdpReceiver(state, args.udp_host, args.udp_port), UdpReceiver(state, args.udp_host, args.udp_port + 1)]
     for receiver in receivers:
         receiver.start()
 
     httpd = AudioServer((args.host, args.port), AudioHandler, state)
-    print(f"PI P25 flag-control-hold browser audio bridge listening on http://{args.host}:{args.port}", flush=True)
-    print(f"Receiving OP25 UDP PCM/flags on {args.udp_host}:{args.udp_port} and {args.udp_port + 1}", flush=True)
-    print(f"Flag drop hold: {args.flag_drop_hold_ms} ms", flush=True)
+
+    def stop(_signum: int, _frame: Any) -> None:
+        for receiver in receivers:
+            receiver.stop()
+        threading.Thread(target=httpd.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    print(f"PI P25 browser audio bridge listening on http://{args.host}:{args.port}", flush=True)
+    print(f"Receiving OP25 UDP PCM on {args.udp_host}:{args.udp_port} and {args.udp_port + 1}", flush=True)
+    print(
+        f"Mode encrypted-log-gate-v0.3k flag_drop_hold_ms={args.flag_drop_hold_ms} encrypted_log_hold_ms={args.encrypted_log_hold_ms}",
+        flush=True,
+    )
     try:
         httpd.serve_forever()
     finally:

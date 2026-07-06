@@ -6,42 +6,50 @@ HTTP_PORT=8072
 UDP_PORT=23456
 PREBUFFER_CHUNKS=0
 DECLICK_SAMPLES=0
-FLAG_DROP_HOLD_MS=1500
-OP25_VERBOSITY=0
+FLAG_DROP_HOLD_MS=2500
+ENCRYPTED_LOG_HOLD_MS=5000
+OP25_VERBOSITY=10
+DISABLE_LOG_GATE=0
 YES=0
 REPORT_DIR=".p25_browser_audio_live_reports"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 REPORT_FILE="$REPORT_DIR/browser_audio_live_${STAMP}.txt"
 BRIDGE_LOG="$REPORT_DIR/browser_audio_bridge_${STAMP}.log"
 OP25_LOG="$REPORT_DIR/op25_audio_${STAMP}.log"
+WATCHER_LOG="$REPORT_DIR/op25_audio_gate_watcher_${STAMP}.log"
+WATCHER_JSON="$REPORT_DIR/op25_audio_gate_watcher_${STAMP}.json"
 AUDIO_STATUS_JSON="$REPORT_DIR/audio_status_${STAMP}.json"
 QUALITY_JSON="$REPORT_DIR/audio_quality_${STAMP}.json"
 MARKER="runtime/settings/op25_validated_rx_command.env"
 BRIDGE_PID=""
 OP25_PID=""
+WATCHER_PID=""
 
 usage() {
   cat <<'EOF_USAGE'
 Usage:
   ./tools/pi5_p25_op25_browser_audio_live_test.sh [options]
 
-Runs a bounded flag-control-hold browser-audio listening test on the Pi:
+Runs a bounded browser-audio listening test on the Pi:
   - stops the backend scanner process to free the SDR,
   - force-cleans stale PI-P25 browser-audio bridge processes if required,
-  - starts the flag-control-hold browser audio bridge on port 8072,
+  - starts the encrypted-log-gated browser audio bridge on port 8072,
+  - watches the OP25 log for encrypted-call indicators,
   - starts OP25 directly from the validated marker with UDP audio enabled,
-  - classifies whether bad audio appears encrypted/flagged, RF/simulcast, or stream-gap related.
+  - keeps the stream available for the requested duration.
 
 Options:
-  --seconds N              Test duration. Default: 120
-  --http-port N            Browser audio HTTP port. Default: 8072
-  --udp-port N             OP25 UDP PCM port. Default: 23456
-  --flag-drop-hold-ms N    Clear queue and suppress audio after any OP25 2-byte flag. Default: 1500
-  --op25-verbosity N       Add -v N to OP25. Default: 0
-  --prebuffer-chunks N     Ignored compatibility option
-  --declick-samples N      Ignored compatibility option
-  --yes                    Required to run the live test
-  -h, --help               Show help
+  --seconds N                 Test duration. Default: 120
+  --http-port N               Browser audio HTTP port. Default: 8072
+  --udp-port N                OP25 UDP PCM port. Default: 23456
+  --flag-drop-hold-ms N       Hold after OP25 2-byte audio flags. Default: 2500
+  --encrypted-log-hold-ms N   Hold after OP25 encrypted log indicators. Default: 5000
+  --op25-verbosity N          OP25 -v value. Default: 10
+  --disable-log-gate          Disable OP25 encrypted-log watcher
+  --prebuffer-chunks N        Ignored compatibility option
+  --declick-samples N         Ignored compatibility option
+  --yes                       Required to run the live test
+  -h, --help                  Show help
 
 Open this during the test:
   http://<pi-ip>:8072/audio.wav
@@ -54,7 +62,9 @@ while [[ "$#" -gt 0 ]]; do
     --http-port) shift; HTTP_PORT="$1"; shift ;;
     --udp-port) shift; UDP_PORT="$1"; shift ;;
     --flag-drop-hold-ms) shift; FLAG_DROP_HOLD_MS="$1"; shift ;;
+    --encrypted-log-hold-ms) shift; ENCRYPTED_LOG_HOLD_MS="$1"; shift ;;
     --op25-verbosity) shift; OP25_VERBOSITY="$1"; shift ;;
+    --disable-log-gate) DISABLE_LOG_GATE=1; shift ;;
     --prebuffer-chunks) shift; PREBUFFER_CHUNKS="$1"; shift ;;
     --declick-samples) shift; DECLICK_SAMPLES="$1"; shift ;;
     --yes) YES=1; shift ;;
@@ -92,6 +102,9 @@ terminate_pid() {
 }
 
 cleanup() {
+  if [[ -n "$WATCHER_PID" ]] && kill -0 "$WATCHER_PID" >/dev/null 2>&1; then
+    terminate_pid "$WATCHER_PID" "OP25 encrypted log gate watcher" || true
+  fi
   if [[ -n "$OP25_PID" ]] && kill -0 "$OP25_PID" >/dev/null 2>&1; then
     terminate_pid "$OP25_PID" "OP25 audio test" || true
   fi
@@ -104,7 +117,7 @@ trap cleanup EXIT
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
 
-printf '=== PI-P25-SCANNER V0.3J flag-control-hold OP25 browser audio quality test ===\n' | tee -a "$REPORT_FILE"
+printf '=== PI-P25-SCANNER V0.3K encrypted-log-gated OP25 browser audio quality test ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 
@@ -112,7 +125,7 @@ if [[ "$YES" -ne 1 ]]; then
   fail "live audio test requires --yes"
   exit 2
 fi
-for numeric in SECONDS_TO_RUN HTTP_PORT UDP_PORT PREBUFFER_CHUNKS DECLICK_SAMPLES FLAG_DROP_HOLD_MS OP25_VERBOSITY; do
+for numeric in SECONDS_TO_RUN HTTP_PORT UDP_PORT PREBUFFER_CHUNKS DECLICK_SAMPLES FLAG_DROP_HOLD_MS ENCRYPTED_LOG_HOLD_MS OP25_VERBOSITY; do
   value="${!numeric}"
   if ! [[ "$value" =~ ^[0-9]+$ ]]; then
     fail "${numeric} must be a non-negative integer"
@@ -144,15 +157,15 @@ if ! command -v ss >/dev/null 2>&1; then
 fi
 pass "ss available"
 if ! python3 tools/pi5_p25_browser_audio_bridge_server.py --self-test >>"$REPORT_FILE" 2>&1; then
-  fail "flag-control-hold browser audio bridge self-test failed"
+  fail "encrypted-log-gate browser audio bridge self-test failed"
   exit 1
 fi
-pass "flag-control-hold browser audio bridge self-test passed"
-if ! python3 -m py_compile tools/analyze_p25_audio_quality.py >>"$REPORT_FILE" 2>&1; then
-  fail "audio quality analyzer compile failed"
+pass "encrypted-log-gate browser audio bridge self-test passed"
+if ! python3 -m py_compile tools/pi5_p25_op25_audio_gate_watcher.py >>"$REPORT_FILE" 2>&1; then
+  fail "OP25 audio gate watcher compile failed"
   exit 1
 fi
-pass "audio quality analyzer compile passed"
+pass "OP25 audio gate watcher compile passed"
 
 # shellcheck disable=SC1090
 set -a
@@ -184,13 +197,16 @@ fi
 AUDIO_URL="http://${LAN_IP}:${HTTP_PORT}/audio.wav"
 STATUS_URL="http://${LAN_IP}:${HTTP_PORT}/api/audio/status"
 TEST_URL="http://${LAN_IP}:${HTTP_PORT}/test-tone.wav"
+BRIDGE_URL="http://127.0.0.1:${HTTP_PORT}"
 
 printf 'BROWSER_AUDIO_URL=%s\n' "$AUDIO_URL" | tee -a "$REPORT_FILE"
 printf 'BROWSER_AUDIO_STATUS=%s\n' "$STATUS_URL" | tee -a "$REPORT_FILE"
 printf 'BROWSER_AUDIO_TEST_TONE=%s\n' "$TEST_URL" | tee -a "$REPORT_FILE"
-printf 'AUDIO_BRIDGE_MODE=flag-control-hold-v0.3j\n' | tee -a "$REPORT_FILE"
+printf 'AUDIO_BRIDGE_MODE=encrypted-log-gate-v0.3k\n' | tee -a "$REPORT_FILE"
 printf 'FLAG_DROP_HOLD_MS=%s\n' "$FLAG_DROP_HOLD_MS" | tee -a "$REPORT_FILE"
+printf 'ENCRYPTED_LOG_HOLD_MS=%s\n' "$ENCRYPTED_LOG_HOLD_MS" | tee -a "$REPORT_FILE"
 printf 'OP25_VERBOSITY=%s\n' "$OP25_VERBOSITY" | tee -a "$REPORT_FILE"
+printf 'LOG_GATE_ENABLED=%s\n' "$((1 - DISABLE_LOG_GATE))" | tee -a "$REPORT_FILE"
 printf 'COMPAT_PREBUFFER_CHUNKS_IGNORED=%s\n' "$PREBUFFER_CHUNKS" | tee -a "$REPORT_FILE"
 printf 'COMPAT_DECLICK_SAMPLES_IGNORED=%s\n' "$DECLICK_SAMPLES" | tee -a "$REPORT_FILE"
 printf '\nOpen BROWSER_AUDIO_URL in the browser while this script is running.\n\n' | tee -a "$REPORT_FILE"
@@ -242,7 +258,7 @@ if [[ -n "$(port_listeners "$HTTP_PORT")" ]]; then
   sleep 1
 fi
 if [[ -n "$(port_listeners "$HTTP_PORT")" ]]; then
-  fail "HTTP port $HTTP_PORT is still in use after stale bridge cleanup"
+  fail "HTTP port $HTTP_PORT is still in use after forced stale bridge cleanup"
   port_listeners "$HTTP_PORT" | tee -a "$REPORT_FILE"
   exit 1
 fi
@@ -254,6 +270,7 @@ python3 tools/pi5_p25_browser_audio_bridge_server.py \
   --udp-host 127.0.0.1 \
   --udp-port "$UDP_PORT" \
   --flag-drop-hold-ms "$FLAG_DROP_HOLD_MS" \
+  --encrypted-log-hold-ms "$ENCRYPTED_LOG_HOLD_MS" \
   >"$BRIDGE_LOG" 2>&1 &
 BRIDGE_PID=$!
 
@@ -315,9 +332,28 @@ OP25_CMD+=(-w -W 127.0.0.1 -u "$UDP_PORT")
   printf '\n'
 } | tee -a "$REPORT_FILE"
 
+: > "$OP25_LOG"
+if [[ "$DISABLE_LOG_GATE" -eq 0 ]]; then
+  python3 tools/pi5_p25_op25_audio_gate_watcher.py \
+    --op25-log "$OP25_LOG" \
+    --bridge-url "$BRIDGE_URL" \
+    --hold-ms "$ENCRYPTED_LOG_HOLD_MS" \
+    --duration "$SECONDS_TO_RUN" \
+    --summary-file "$WATCHER_JSON" \
+    >"$WATCHER_LOG" 2>&1 &
+  WATCHER_PID=$!
+  pass "OP25 encrypted log gate watcher started pid=$WATCHER_PID"
+else
+  warn "OP25 encrypted log gate watcher disabled"
+fi
+
 (
   cd "$P25_VALIDATED_RX_APP_DIR"
-  PYTHONPATH="$P25_VALIDATED_RX_PYTHONPATH" timeout "$SECONDS_TO_RUN" "${OP25_CMD[@]}"
+  if command -v stdbuf >/dev/null 2>&1; then
+    PYTHONPATH="$P25_VALIDATED_RX_PYTHONPATH" stdbuf -oL -eL timeout "$SECONDS_TO_RUN" "${OP25_CMD[@]}"
+  else
+    PYTHONPATH="$P25_VALIDATED_RX_PYTHONPATH" timeout "$SECONDS_TO_RUN" "${OP25_CMD[@]}"
+  fi
 ) >"$OP25_LOG" 2>&1 &
 OP25_PID=$!
 pass "OP25 audio command started pid=$OP25_PID for ${SECONDS_TO_RUN}s"
@@ -346,15 +382,14 @@ try:
         'packets': data.get('packets'),
         'audio_packets': data.get('audio_packets'),
         'flag_packets': data.get('flag_packets'),
-        'flag_one_count': data.get('flag_one_count'),
         'flag_zero_count': data.get('flag_zero_count'),
         'audio_dropped_by_flag': data.get('audio_dropped_by_flag'),
-        'queued_chunks_dropped_by_flag': data.get('queued_chunks_dropped_by_flag'),
+        'log_gate_events': data.get('log_gate_events'),
+        'audio_dropped_by_log_gate': data.get('audio_dropped_by_log_gate'),
+        'log_gate_active': data.get('log_gate_active'),
         'queued_chunks': data.get('queued_chunks'),
-        'underruns': data.get('underruns'),
         'silence_chunks_sent': data.get('silence_chunks_sent'),
         'last_audio_age_seconds': data.get('last_audio_age_seconds'),
-        'last_dropped_audio_age_seconds': data.get('last_dropped_audio_age_seconds'),
     }, sort_keys=True))
 except Exception as exc:
     print('AUDIO_STATUS_ERROR', exc)
@@ -366,6 +401,11 @@ done
 wait "$OP25_PID" >/dev/null 2>&1 || true
 OP25_PID=""
 
+if [[ -n "$WATCHER_PID" ]] && kill -0 "$WATCHER_PID" >/dev/null 2>&1; then
+  terminate_pid "$WATCHER_PID" "OP25 encrypted log gate watcher" || true
+fi
+WATCHER_PID=""
+
 python3 - "$HTTP_PORT" "$AUDIO_STATUS_JSON" <<'PY' | tee -a "$REPORT_FILE" || true
 import json
 import sys
@@ -375,26 +415,104 @@ out = sys.argv[2]
 try:
     with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/audio/status', timeout=2) as resp:
         data = json.loads(resp.read().decode('utf-8'))
-    with open(out, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, indent=2, sort_keys=True)
-        fh.write('\n')
+    with open(out, 'w', encoding='utf-8') as handle:
+        json.dump(data, handle, indent=2, sort_keys=True)
+        handle.write('\n')
     print('FINAL_AUDIO_STATUS', json.dumps(data, indent=2, sort_keys=True))
-    if int(data.get('audio_packets') or 0) > 0 or int(data.get('audio_dropped_by_flag') or 0) > 0:
-        print('PASS: OP25 UDP audio/flag activity was received by flag-control-hold browser audio bridge')
+    if int(data.get('audio_packets') or 0) > 0 or int(data.get('flag_packets') or 0) > 0:
+        print('PASS: OP25 UDP audio/flag activity was received by encrypted-log-gated browser audio bridge')
     else:
-        print('WARN: no OP25 UDP audio packets were received; this may mean no clear voice grant occurred during the window')
-    print(f'AUDIO_STATUS_JSON={out}')
+        print('WARN: no OP25 UDP audio/flag activity was received during the window')
 except Exception as exc:
     print('FAIL: final audio bridge status failed:', exc)
 PY
+printf 'AUDIO_STATUS_JSON=%s\n' "$AUDIO_STATUS_JSON" | tee -a "$REPORT_FILE"
 
-python3 tools/analyze_p25_audio_quality.py \
-  --op25-log "$OP25_LOG" \
-  --audio-status-json "$AUDIO_STATUS_JSON" \
-  --output-json "$QUALITY_JSON" | tee -a "$REPORT_FILE" || true
+python3 - "$OP25_LOG" "$AUDIO_STATUS_JSON" "$WATCHER_JSON" "$QUALITY_JSON" <<'PY' | tee -a "$REPORT_FILE" || true
+import json
+import re
+import sys
+from pathlib import Path
+op25_log = Path(sys.argv[1])
+audio_status_json = Path(sys.argv[2])
+watcher_json = Path(sys.argv[3])
+quality_json = Path(sys.argv[4])
+text = op25_log.read_text(encoding='utf-8', errors='replace') if op25_log.exists() else ''
+lines = text.splitlines()
+enc_patterns = ['CIPHERTXT', 'p25_crypt_algs', 'skip encrypted call', 'encrypted skip', 'algorithm module not found', 'algid=']
+voice_patterns = ['IMBE', 'AMBE', 'voice update', 'grant']
+error_patterns = ['timeout', 'expired', 'error', 'sync', 'crc']
+enc_lines = [line for line in lines if any(p.lower() in line.lower() for p in enc_patterns)]
+voice_lines = [line for line in lines if any(p.lower() in line.lower() for p in voice_patterns)]
+err_values = []
+rs_values = []
+for line in lines:
+    for match in re.finditer(r'\berrs\s+(\d+)', line):
+        err_values.append(int(match.group(1)))
+    for match in re.finditer(r'rs_errs=(\d+)', line):
+        rs_values.append(int(match.group(1)))
+status = {}
+if audio_status_json.exists():
+    status = json.loads(audio_status_json.read_text(encoding='utf-8'))
+watcher = {}
+if watcher_json.exists():
+    watcher = json.loads(watcher_json.read_text(encoding='utf-8'))
+classification = 'AUDIO_QUALITY_INCONCLUSIVE'
+if int(status.get('audio_dropped_by_log_gate') or 0) > 0 and len(enc_lines) > 0:
+    classification = 'ENCRYPTED_AUDIO_SUPPRESSED_BY_OP25_LOG_GATE'
+elif int(status.get('audio_dropped_by_flag') or 0) > 0 and len(enc_lines) > 0:
+    classification = 'ENCRYPTED_OR_INVALID_AUDIO_SUPPRESSED_BY_FLAGS'
+elif len(enc_lines) > 0 and int(status.get('audio_packets') or 0) > 0:
+    classification = 'POSSIBLE_ENCRYPTED_BURSTS_REMAIN'
+elif err_values and (max(err_values) >= 8 or (sum(err_values) / len(err_values)) >= 3):
+    classification = 'LIKELY_RF_OR_SIMULCAST_DECODE_ERRORS'
+summary = {
+    'classification': classification,
+    'op25_log_lines': len(lines),
+    'encrypted_line_count': len(enc_lines),
+    'voice_line_count': len(voice_lines),
+    'generic_error_count': sum(1 for line in lines if any(p in line.lower() for p in error_patterns)),
+    'imbe_err_count': len(err_values),
+    'imbe_err_max': max(err_values) if err_values else None,
+    'imbe_err_avg': round(sum(err_values) / len(err_values), 3) if err_values else None,
+    'rs_err_count': len(rs_values),
+    'rs_err_max': max(rs_values) if rs_values else None,
+    'rs_err_avg': round(sum(rs_values) / len(rs_values), 3) if rs_values else None,
+    'audio_packets': status.get('audio_packets'),
+    'flag_packets': status.get('flag_packets'),
+    'audio_dropped_by_flag': status.get('audio_dropped_by_flag'),
+    'log_gate_events': status.get('log_gate_events'),
+    'audio_dropped_by_log_gate': status.get('audio_dropped_by_log_gate'),
+    'watcher_encrypted_matches': watcher.get('encrypted_matches'),
+    'watcher_gate_requests': watcher.get('gate_requests'),
+    'watcher_gate_errors': watcher.get('gate_errors'),
+    'encryption_samples': enc_lines[:8],
+    'error_samples': [line for line in lines if any(p in line.lower() for p in error_patterns)][:8],
+}
+quality_json.write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+print('=== V0.3K Audio Quality Classifier ===')
+print(f"QUALITY_CLASSIFICATION={classification}")
+print(f"OP25_LOG_LINES={summary['op25_log_lines']}")
+print(f"OP25_LINE_COUNTS encrypted={summary['encrypted_line_count']} voice={summary['voice_line_count']} generic_error={summary['generic_error_count']}")
+print(f"IMBE_ERR_COUNT={summary['imbe_err_count']} IMBE_ERR_MAX={summary['imbe_err_max']} IMBE_ERR_AVG={summary['imbe_err_avg']}")
+print(f"RS_ERR_COUNT={summary['rs_err_count']} RS_ERR_MAX={summary['rs_err_max']} RS_ERR_AVG={summary['rs_err_avg']}")
+print('BRIDGE_COUNTS packets={packets} audio_packets={audio_packets} flag_packets={flag_packets} audio_dropped_by_flag={audio_dropped_by_flag} log_gate_events={log_gate_events} audio_dropped_by_log_gate={audio_dropped_by_log_gate} silence_chunks_sent={silence_chunks_sent}'.format(**status))
+print('WATCHER_COUNTS encrypted_matches={encrypted_matches} gate_requests={gate_requests} gate_errors={gate_errors}'.format(**{'encrypted_matches': watcher.get('encrypted_matches'), 'gate_requests': watcher.get('gate_requests'), 'gate_errors': watcher.get('gate_errors')}))
+if summary['encryption_samples']:
+    print('ENCRYPTION_SAMPLES:')
+    for line in summary['encryption_samples']:
+        print('- ' + line[:220])
+print(f'QUALITY_JSON={quality_json}')
+print('FINAL_QUALITY_CLASSIFIER: PASS')
+PY
+printf 'QUALITY_JSON=%s\n' "$QUALITY_JSON" | tee -a "$REPORT_FILE"
+if [[ -f "$WATCHER_JSON" ]]; then
+  printf 'WATCHER_JSON=%s\n' "$WATCHER_JSON" | tee -a "$REPORT_FILE"
+fi
 
 printf '\nBridge log: %s\n' "$BRIDGE_LOG" | tee -a "$REPORT_FILE"
 printf 'OP25 log: %s\n' "$OP25_LOG" | tee -a "$REPORT_FILE"
+printf 'Watcher log: %s\n' "$WATCHER_LOG" | tee -a "$REPORT_FILE"
 printf 'Audio status JSON: %s\n' "$AUDIO_STATUS_JSON" | tee -a "$REPORT_FILE"
 printf 'Quality JSON: %s\n' "$QUALITY_JSON" | tee -a "$REPORT_FILE"
 printf 'Report: %s\n' "$REPORT_FILE" | tee -a "$REPORT_FILE"
