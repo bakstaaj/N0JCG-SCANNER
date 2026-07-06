@@ -40,3 +40,9 @@ Useful options:
 - Interface discovery must parse the live backend decoder command for OP25 terminal HTTP arguments such as `http:127.0.0.1:18091`.
 - Runtime-declared OP25 HTTP ports must be probed before the static default port list.
 - A report that says no OP25 HTTP endpoint responded is not conclusive unless the runtime-declared `-l http:...` port appears in `http_ports_probed`.
+
+## V0.2R port-source and start diagnostics
+
+The interface discovery probe extracts OP25 HTTP terminal ports from every available source before probing endpoints: running status snapshots, the backend start response, and the validated OP25 command marker under `runtime/settings/`. This preserves the configured HTTP port even when fail-fast preflight skips long collection because the decoder did not reach a running state.
+
+The report also records start-response keys and final scanner state so start/readiness failures can be diagnosed without waiting for a long capture window.

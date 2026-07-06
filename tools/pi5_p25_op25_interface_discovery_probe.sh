@@ -130,12 +130,12 @@ def iter_strings_from_obj(value: Any):
             yield from iter_strings_from_obj(item)
 
 
-def extract_http_ports_from_status_samples(samples: list[dict[str, Any]]) -> list[int]:
+def extract_http_ports_from_values(values: list[Any]) -> list[int]:
     ports: list[int] = []
     seen: set[int] = set()
     pattern = re.compile(r'http:(?:\[[^\]]+\]|[^:\s]+):(?P<port>\d{1,5})')
-    for sample in samples:
-        for text_value in iter_strings_from_obj(sample):
+    for value in values:
+        for text_value in iter_strings_from_obj(value):
             for match in pattern.finditer(text_value):
                 try:
                     port = int(match.group('port'))
@@ -144,6 +144,36 @@ def extract_http_ports_from_status_samples(samples: list[dict[str, Any]]) -> lis
                 if 0 < port < 65536 and port not in seen:
                     seen.add(port)
                     ports.append(port)
+    return ports
+
+
+def extract_http_ports_from_status_samples(samples: list[dict[str, Any]]) -> list[int]:
+    return extract_http_ports_from_values(list(samples))
+
+
+def read_validated_marker_texts() -> list[str]:
+    marker_paths = [
+        Path('runtime/settings/op25_validated_rx_command.env'),
+        Path('runtime/settings/op25_validated_command.env'),
+    ]
+    texts: list[str] = []
+    for marker_path in marker_paths:
+        try:
+            if marker_path.exists():
+                texts.append(marker_path.read_text(encoding='utf-8', errors='replace'))
+        except OSError as exc:
+            texts.append(f'{marker_path}: {type(exc).__name__}: {exc}')
+    return texts
+
+
+def unique_ports(*port_lists: list[int]) -> list[int]:
+    ports: list[int] = []
+    seen: set[int] = set()
+    for port_list in port_lists:
+        for port in port_list:
+            if 0 < port < 65536 and port not in seen:
+                seen.add(port)
+                ports.append(port)
     return ports
 
 def status_running(status: dict[str, Any] | None) -> bool:
@@ -399,6 +429,7 @@ def make_report(summary: dict[str, Any]) -> tuple[str, int, int, int]:
     lines.append('```json')
     lines.append(json.dumps({
         'op25_http_ports_from_command': summary.get('op25_http_ports_from_command') or [],
+        'http_port_sources': summary.get('http_port_sources') or {},
         'http_ports_probed': summary.get('http_ports_probed') or [],
     }, indent=2, sort_keys=True))
     lines.append('```')
@@ -473,6 +504,9 @@ def run_self_test(keep: bool) -> int:
         summary = {
             'status_summary': status_summary,
             'backend_probe': {'long_collection_skipped': False},
+            'op25_http_ports_from_command': [18091],
+            'http_port_sources': {'status_samples': [18091], 'start_response': [], 'validated_marker': []},
+            'http_ports_probed': [18091, 8080],
             'listeners': 'LISTEN 0 4096 127.0.0.1:8080',
             'http_results': [{'url': 'http://127.0.0.1:8080/status', 'status': 200, 'content_type': 'application/json', 'sample': '{}'}],
             'source_files': files,
@@ -589,19 +623,36 @@ def main() -> int:
     best_status = final_status or (status_samples[-1] if status_samples else initial_status)
     source_dirs = op25_candidate_dirs(best_status)
     source_files, source_hits = scan_source_paths(source_dirs)
-    command_http_ports = extract_http_ports_from_status_samples(status_samples)
+    marker_texts = read_validated_marker_texts()
+    status_http_ports = extract_http_ports_from_status_samples(status_samples)
+    start_http_ports = extract_http_ports_from_values([start_response] if start_response is not None else [])
+    marker_http_ports = extract_http_ports_from_values(marker_texts)
+    command_http_ports = unique_ports(status_http_ports, start_http_ports, marker_http_ports)
     configured_ports = parse_ports(args.ports)
-    ports = command_http_ports + [port for port in configured_ports if port not in command_http_ports]
+    ports = unique_ports(command_http_ports, configured_ports)
+    final_status_captured = final_status is not None
+    final_state = str(final_status.get('scanner_state')) if isinstance(final_status, dict) else ''
+    start_state = str(start_response.get('scanner_state')) if isinstance(start_response, dict) and start_response.get('scanner_state') is not None else ''
+    start_keys = sorted(start_response.keys()) if isinstance(start_response, dict) else []
     summary = {
         'status_summary': summarize_status(status_samples),
         'op25_http_ports_from_command': command_http_ports,
+        'http_port_sources': {
+            'status_samples': status_http_ports,
+            'start_response': start_http_ports,
+            'validated_marker': marker_http_ports,
+        },
         'http_ports_probed': ports,
         'backend_probe': {
             'backend_url': args.backend_url,
             'initial_status_captured': initial_status is not None,
             'start_requested': not args.no_start and not status_running(initial_status),
             'start_response_seen': start_response is not None,
+            'start_response_keys': start_keys,
+            'start_response_scanner_state': start_state,
             'stop_response_seen': stop_response is not None,
+            'final_status_captured': final_status_captured,
+            'final_scanner_state': final_state,
             'status_samples_total': len(status_samples),
             'preflight_seconds': args.preflight_seconds,
             'preflight_interval': args.preflight_interval,

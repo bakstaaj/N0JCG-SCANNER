@@ -60,3 +60,6 @@ These guardrails capture project-specific lessons learned while building and val
 
 - Long-running interface discovery probes must derive endpoint ports from the actual decoder command before falling back to static defaults.
 - When OP25 is launched with `-l http:host:port`, that port must appear in the probe report before concluding that no OP25 HTTP/status interface is active.
+
+- Long-running interface probes must extract runtime ports and command metadata from all available sources, including initial status, start response, sampled status, and validated marker files, before deciding what to probe.
+- Fail-fast reports must include enough start/readiness diagnostics to explain why long collection was skipped.
