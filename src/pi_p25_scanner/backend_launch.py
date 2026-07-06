@@ -2,6 +2,14 @@
 
 This module intentionally only consumes a command marker produced by the
 bounded Pi-side live command probe. It does not guess OP25 command lines.
+
+V0.3O recovery note:
+The web UI depends on marker metadata from /api/status to decide whether the
+Start Scanner button can be enabled. Earlier metadata only reported that the
+marker file existed, but did not validate the marker fields until Start was
+pressed. This caused the UI to disable Start even though the backend start path
+could launch from the validated marker. Metadata now performs the same safe
+readiness checks used by the launcher and exposes start_ready/validated status.
 """
 
 from __future__ import annotations
@@ -9,9 +17,20 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 MARKER_RELATIVE_PATH = Path("runtime") / "settings" / "op25_validated_rx_command.env"
+REQUIRED_MARKER_FIELDS = [
+    "P25_VALIDATED_RX_APP",
+    "P25_VALIDATED_RX_APP_DIR",
+    "P25_VALIDATED_RX_PYTHONPATH",
+    "P25_VALIDATED_RX_ARGS",
+    "P25_VALIDATED_RX_SAMPLE_RATE",
+    "P25_VALIDATED_RX_GAIN",
+    "P25_VALIDATED_RX_PPM",
+    "P25_VALIDATED_RX_TRUNK_TSV",
+]
 
 
 class LaunchConfigError(RuntimeError):
@@ -36,6 +55,7 @@ class ValidatedOp25Command:
             "source": "validated_marker",
             "exists": True,
             "validated": True,
+            "start_ready": True,
             "path": self.marker_path,
             "app": self.app,
             "cwd": self.cwd,
@@ -67,14 +87,74 @@ def _read_marker(path: Path) -> dict[str, str]:
     return values
 
 
-def validated_command_marker_metadata(project_root: Path) -> dict[str, object]:
-    path = _marker_path(project_root)
-    return {
+def _metadata_from_values(marker: Path, values: dict[str, str]) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
         "source": "validated_marker",
-        "exists": path.exists(),
+        "exists": marker.exists(),
         "validated": False,
-        "path": str(path),
+        "start_ready": False,
+        "path": str(marker),
+        "app": values.get("P25_VALIDATED_RX_APP", ""),
+        "cwd": values.get("P25_VALIDATED_RX_APP_DIR", ""),
+        "device_args": values.get("P25_VALIDATED_RX_ARGS", ""),
+        "trunk_tsv": values.get("P25_VALIDATED_RX_TRUNK_TSV", ""),
+        "pythonpath": values.get("P25_VALIDATED_RX_PYTHONPATH", ""),
+        "report": values.get("P25_VALIDATED_RX_REPORT", ""),
+        "log": values.get("P25_VALIDATED_RX_LOG", ""),
+        "warnings": [],
     }
+
+    missing = [key for key in REQUIRED_MARKER_FIELDS if not values.get(key)]
+    if missing:
+        metadata["error"] = f"validated OP25 marker is missing required fields: {', '.join(missing)}"
+        return metadata
+
+    app = Path(values["P25_VALIDATED_RX_APP"])
+    cwd = Path(values["P25_VALIDATED_RX_APP_DIR"])
+    trunk_tsv = Path(values["P25_VALIDATED_RX_TRUNK_TSV"])
+
+    if not app.exists():
+        metadata["error"] = f"validated OP25 app does not exist: {app}"
+        return metadata
+    if not cwd.is_dir():
+        metadata["error"] = f"validated OP25 app directory does not exist: {cwd}"
+        return metadata
+
+    # Start first regenerates the runtime OP25 config, so a missing trunk.tsv at
+    # idle status time should not disable the UI Start button. Report it as a
+    # warning, but keep the marker start-ready if the launcher inputs are valid.
+    if not trunk_tsv.exists():
+        metadata["warnings"].append(f"validated OP25 trunk TSV is not present yet; Start will regenerate config: {trunk_tsv}")
+
+    metadata["validated"] = True
+    metadata["start_ready"] = True
+    return metadata
+
+
+def validated_command_marker_metadata(project_root: Path) -> dict[str, Any]:
+    """Return safe marker metadata suitable for UI launch readiness."""
+
+    marker = _marker_path(project_root)
+    if not marker.exists():
+        return {
+            "source": "validated_marker",
+            "exists": False,
+            "validated": False,
+            "start_ready": False,
+            "path": str(marker),
+        }
+    try:
+        values = _read_marker(marker)
+    except LaunchConfigError as exc:
+        return {
+            "source": "validated_marker",
+            "exists": True,
+            "validated": False,
+            "start_ready": False,
+            "path": str(marker),
+            "error": str(exc),
+        }
+    return _metadata_from_values(marker, values)
 
 
 def build_validated_op25_command(project_root: Path) -> ValidatedOp25Command | None:
@@ -85,17 +165,7 @@ def build_validated_op25_command(project_root: Path) -> ValidatedOp25Command | N
         return None
 
     values = _read_marker(marker)
-    required = [
-        "P25_VALIDATED_RX_APP",
-        "P25_VALIDATED_RX_APP_DIR",
-        "P25_VALIDATED_RX_PYTHONPATH",
-        "P25_VALIDATED_RX_ARGS",
-        "P25_VALIDATED_RX_SAMPLE_RATE",
-        "P25_VALIDATED_RX_GAIN",
-        "P25_VALIDATED_RX_PPM",
-        "P25_VALIDATED_RX_TRUNK_TSV",
-    ]
-    missing = [key for key in required if not values.get(key)]
+    missing = [key for key in REQUIRED_MARKER_FIELDS if not values.get(key)]
     if missing:
         raise LaunchConfigError(f"validated OP25 marker is missing required fields: {', '.join(missing)}")
 
