@@ -6,12 +6,15 @@ HTTP_PORT=8072
 UDP_PORT=23456
 PREBUFFER_CHUNKS=0
 DECLICK_SAMPLES=0
+OP25_VERBOSITY=0
 YES=0
 REPORT_DIR=".p25_browser_audio_live_reports"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 REPORT_FILE="$REPORT_DIR/browser_audio_live_${STAMP}.txt"
 BRIDGE_LOG="$REPORT_DIR/browser_audio_bridge_${STAMP}.log"
 OP25_LOG="$REPORT_DIR/op25_audio_${STAMP}.log"
+AUDIO_STATUS_JSON="$REPORT_DIR/audio_status_${STAMP}.json"
+QUALITY_JSON="$REPORT_DIR/audio_quality_${STAMP}.json"
 MARKER="runtime/settings/op25_validated_rx_command.env"
 BRIDGE_PID=""
 OP25_PID=""
@@ -26,19 +29,24 @@ Runs a bounded raw browser-audio listening test on the Pi:
   - force-cleans stale PI-P25 browser-audio bridge processes if required,
   - starts the raw browser audio bridge on port 8072,
   - starts OP25 directly from the validated marker with UDP audio enabled,
-  - keeps the stream available for the requested duration.
+  - keeps the stream available for the requested duration,
+  - classifies RF/decode, encrypted, no-traffic, and stream-gap evidence.
 
 Options:
   --seconds N              Test duration. Default: 600
   --http-port N            Browser audio HTTP port. Default: 8072
   --udp-port N             OP25 UDP PCM port. Default: 23456
-  --prebuffer-chunks N     Ignored compatibility option in raw V0.3G mode
-  --declick-samples N      Ignored compatibility option in raw V0.3G mode
+  --prebuffer-chunks N     Ignored compatibility option in raw V0.3H mode
+  --declick-samples N      Ignored compatibility option in raw V0.3H mode
+  --op25-verbosity N       Add OP25 -v N for diagnostics. Default: 0
   --yes                    Required to run the live test
   -h, --help               Show help
 
 Open this during the test:
   http://<pi-ip>:8072/audio.wav
+
+For D-Error/BER/frequency diagnostics, try:
+  --op25-verbosity 10
 EOF_USAGE
 }
 
@@ -49,6 +57,7 @@ while [[ "$#" -gt 0 ]]; do
     --udp-port) shift; UDP_PORT="$1"; shift ;;
     --prebuffer-chunks) shift; PREBUFFER_CHUNKS="$1"; shift ;;
     --declick-samples) shift; DECLICK_SAMPLES="$1"; shift ;;
+    --op25-verbosity) shift; OP25_VERBOSITY="$1"; shift ;;
     --yes) YES=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "FAIL: unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -96,7 +105,7 @@ trap cleanup EXIT
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
 
-printf '=== PI-P25-SCANNER V0.3G raw OP25 browser audio live test ===\n' | tee -a "$REPORT_FILE"
+printf '=== PI-P25-SCANNER V0.3H raw OP25 browser audio quality test ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 
@@ -104,7 +113,7 @@ if [[ "$YES" -ne 1 ]]; then
   fail "live audio test requires --yes"
   exit 2
 fi
-for numeric in SECONDS_TO_RUN HTTP_PORT UDP_PORT PREBUFFER_CHUNKS DECLICK_SAMPLES; do
+for numeric in SECONDS_TO_RUN HTTP_PORT UDP_PORT PREBUFFER_CHUNKS DECLICK_SAMPLES OP25_VERBOSITY; do
   value="${!numeric}"
   if ! [[ "$value" =~ ^[0-9]+$ ]]; then
     fail "${numeric} must be a non-negative integer"
@@ -140,6 +149,11 @@ if ! python3 tools/pi5_p25_browser_audio_bridge_server.py --self-test >>"$REPORT
   exit 1
 fi
 pass "raw browser audio bridge self-test passed"
+if ! python3 -m py_compile tools/pi5_p25_analyze_audio_quality.py >>"$REPORT_FILE" 2>&1; then
+  fail "audio quality analyzer compile failed"
+  exit 1
+fi
+pass "audio quality analyzer compile passed"
 
 # shellcheck disable=SC1090
 set -a
@@ -175,9 +189,10 @@ TEST_URL="http://${LAN_IP}:${HTTP_PORT}/test-tone.wav"
 printf 'BROWSER_AUDIO_URL=%s\n' "$AUDIO_URL" | tee -a "$REPORT_FILE"
 printf 'BROWSER_AUDIO_STATUS=%s\n' "$STATUS_URL" | tee -a "$REPORT_FILE"
 printf 'BROWSER_AUDIO_TEST_TONE=%s\n' "$TEST_URL" | tee -a "$REPORT_FILE"
-printf 'AUDIO_BRIDGE_MODE=raw-v0.3g\n' | tee -a "$REPORT_FILE"
+printf 'AUDIO_BRIDGE_MODE=raw-v0.3h\n' | tee -a "$REPORT_FILE"
 printf 'COMPAT_PREBUFFER_CHUNKS_IGNORED=%s\n' "$PREBUFFER_CHUNKS" | tee -a "$REPORT_FILE"
 printf 'COMPAT_DECLICK_SAMPLES_IGNORED=%s\n' "$DECLICK_SAMPLES" | tee -a "$REPORT_FILE"
+printf 'OP25_VERBOSITY=%s\n' "$OP25_VERBOSITY" | tee -a "$REPORT_FILE"
 printf '\nOpen BROWSER_AUDIO_URL in the browser while this script is running.\n\n' | tee -a "$REPORT_FILE"
 
 python3 - <<'PY' >>"$REPORT_FILE" 2>&1 || true
@@ -238,8 +253,6 @@ python3 tools/pi5_p25_browser_audio_bridge_server.py \
   --port "$HTTP_PORT" \
   --udp-host 127.0.0.1 \
   --udp-port "$UDP_PORT" \
-  --prebuffer-chunks "$PREBUFFER_CHUNKS" \
-  --declick-samples "$DECLICK_SAMPLES" \
   >"$BRIDGE_LOG" 2>&1 &
 BRIDGE_PID=$!
 
@@ -284,6 +297,9 @@ OP25_CMD=(
   -V
   -2
 )
+if [[ "$OP25_VERBOSITY" -gt 0 ]]; then
+  OP25_CMD+=(-v "$OP25_VERBOSITY")
+fi
 if [[ -n "${P25_VALIDATED_RX_TERMINAL:-}" ]]; then
   OP25_CMD+=(-l "$P25_VALIDATED_RX_TERMINAL")
 fi
@@ -343,24 +359,41 @@ done
 wait "$OP25_PID" >/dev/null 2>&1 || true
 OP25_PID=""
 
-python3 - "$HTTP_PORT" <<'PY' | tee -a "$REPORT_FILE" || true
+python3 - "$HTTP_PORT" "$AUDIO_STATUS_JSON" <<'PY' | tee -a "$REPORT_FILE" || true
 import json
 import sys
 import urllib.request
 port = sys.argv[1]
+out_path = sys.argv[2]
 try:
     with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/audio/status', timeout=2) as resp:
         data = json.loads(resp.read().decode('utf-8'))
+    with open(out_path, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, indent=2, sort_keys=True)
+        fh.write('\n')
     print('FINAL_AUDIO_STATUS', json.dumps(data, indent=2, sort_keys=True))
     if int(data.get('audio_packets') or 0) > 0:
         print('PASS: OP25 UDP audio packets were received by raw browser audio bridge')
     else:
         print('WARN: no OP25 UDP audio packets were received; this may mean no clear voice grant occurred during the window')
+    print(f'AUDIO_STATUS_JSON={out_path}')
 except Exception as exc:
     print('FAIL: final audio bridge status failed:', exc)
 PY
 
+if [[ -f tools/pi5_p25_analyze_audio_quality.py ]]; then
+  python3 tools/pi5_p25_analyze_audio_quality.py \
+    --op25-log "$OP25_LOG" \
+    --bridge-status-json "$AUDIO_STATUS_JSON" \
+    --live-report "$REPORT_FILE" \
+    --output-json "$QUALITY_JSON" | tee -a "$REPORT_FILE" || warn "audio quality classifier failed"
+else
+  warn "audio quality classifier missing"
+fi
+
 printf '\nBridge log: %s\n' "$BRIDGE_LOG" | tee -a "$REPORT_FILE"
 printf 'OP25 log: %s\n' "$OP25_LOG" | tee -a "$REPORT_FILE"
+printf 'Audio status JSON: %s\n' "$AUDIO_STATUS_JSON" | tee -a "$REPORT_FILE"
+printf 'Quality JSON: %s\n' "$QUALITY_JSON" | tee -a "$REPORT_FILE"
 printf 'Report: %s\n' "$REPORT_FILE" | tee -a "$REPORT_FILE"
 printf 'FINAL: PASS\n' | tee -a "$REPORT_FILE"
