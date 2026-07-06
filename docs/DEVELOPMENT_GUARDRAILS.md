@@ -85,3 +85,9 @@ These guardrails capture project-specific lessons learned while building and val
 - Transcript helpers must print the absolute log directory and absolute log file path, verify that the file exists, and include the command exit status.
 - When a command runs on the Raspberry Pi, the handoff must include a supported MSYS2 pull path or helper so the Pi-side transcript can be copied into a Windows-local upload folder.
 - Relative report paths may be printed for convenience, but they must not be the only way to locate an upload artifact.
+
+## HTTP JSON probe handling
+
+- Probe helpers that parse backend JSON must read the full HTTP response before calling `json.loads`; only report samples and terminal display snippets may be truncated.
+- Long or repetitive HTTP probe result arrays should be summarized in terminal Markdown, with complete details preserved in the generated JSON artifact.
+- Pi-side command logs must include an absolute Pi path, and MSYS2-side instructions must provide a one-step pull command or helper that places the log in Windows Downloads for upload.

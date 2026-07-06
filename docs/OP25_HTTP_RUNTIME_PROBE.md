@@ -13,3 +13,7 @@ The normal live command is:
 The expected OP25 terminal port from the current validated command is `18091` because the backend launches OP25 with `-l http:127.0.0.1:18091`.
 
 If the report shows a running start response but port `18091` never appears as a TCP listener, the next fix should focus on the OP25 launch mode or terminal-server arguments rather than adding more backend parsers.
+
+## Backend JSON response handling
+
+The HTTP runtime probe reads full backend `/api/status`, `/api/scanner/start`, and `/api/scanner/stop` JSON bodies before parsing. OP25 endpoint probes may still store bounded body samples in the human-readable report, while the generated JSON artifact preserves the structured probe results.

@@ -45,22 +45,24 @@ def run_command(args: list[str], timeout: float = 3.0) -> tuple[int, str]:
     return result.returncode, (result.stdout + result.stderr).strip()
 
 
-def http_request(method: str, url: str, timeout: float = 1.0) -> tuple[int, str, str, str]:
+def http_request(method: str, url: str, timeout: float = 1.0, max_body_bytes: int | None = 8192) -> tuple[int, str, str, str]:
     request = urllib.request.Request(url=url, method=method)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = response.read(8192).decode('utf-8', errors='replace')
+            raw_body = response.read() if max_body_bytes is None else response.read(max_body_bytes)
+            body = raw_body.decode('utf-8', errors='replace')
             content_type = response.headers.get('content-type', '')
             return int(response.status), content_type, body, ''
     except urllib.error.HTTPError as exc:
-        body = exc.read(4096).decode('utf-8', errors='replace')
+        raw_body = exc.read() if max_body_bytes is None else exc.read(max_body_bytes)
+        body = raw_body.decode('utf-8', errors='replace')
         return int(exc.code), exc.headers.get('content-type', ''), body, ''
     except Exception as exc:
         return 0, '', '', f'{type(exc).__name__}: {exc}'
 
 
 def get_json_detailed(url: str, timeout: float = 1.0) -> tuple[dict[str, Any] | None, str]:
-    status, _content_type, body, error = http_request('GET', url, timeout=timeout)
+    status, _content_type, body, error = http_request('GET', url, timeout=timeout, max_body_bytes=None)
     if error:
         return None, error
     if status <= 0:
@@ -75,7 +77,7 @@ def get_json_detailed(url: str, timeout: float = 1.0) -> tuple[dict[str, Any] | 
 
 
 def post_json_detailed(url: str, timeout: float = 4.0) -> tuple[dict[str, Any] | None, str]:
-    status, _content_type, body, error = http_request('POST', url, timeout=timeout)
+    status, _content_type, body, error = http_request('POST', url, timeout=timeout, max_body_bytes=None)
     if error:
         return None, error
     if status <= 0:
@@ -369,7 +371,8 @@ def make_report(summary: dict[str, Any]) -> tuple[str, int, int, int]:
     probe_results = summary.get('http_probe_results') or []
     if probe_results:
         lines.append('```json')
-        lines.append(json.dumps(probe_results[:80], indent=2, sort_keys=True))
+        lines.append(f'Showing first {min(len(probe_results), 20)} of {len(probe_results)} results; full details are in the Summary JSON file.')
+        lines.append(json.dumps(probe_results[:20], indent=2, sort_keys=True))
         lines.append('```')
     else:
         lines.append('- none')
