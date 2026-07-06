@@ -91,6 +91,27 @@ def post_json_detailed(url: str, timeout: float = 4.0) -> tuple[dict[str, Any] |
     return value, ''
 
 
+def wait_for_backend_status(
+    backend_url: str,
+    timeout: float,
+    ready_seconds: int,
+    ready_interval: float,
+) -> tuple[dict[str, Any] | None, str, int]:
+    deadline = time.time() + max(0, ready_seconds)
+    attempts = 0
+    last_error = ''
+    while True:
+        attempts += 1
+        status, error = get_json_detailed(f'{backend_url}/api/status', timeout=timeout)
+        if status is not None:
+            return status, '', attempts
+        if error:
+            last_error = error
+        if time.time() >= deadline:
+            return None, last_error or 'backend status was not reachable', attempts
+        time.sleep(max(0.1, ready_interval))
+
+
 def boolish(value: Any) -> bool | None:
     if isinstance(value, bool):
         return value
@@ -466,16 +487,24 @@ def run_live(args: argparse.Namespace) -> int:
     listener_hits: Counter[str] = Counter()
     http_probe_results: list[dict[str, Any]] = []
 
-    initial_status, initial_error = get_json_detailed(f'{args.backend_url}/api/status', timeout=args.status_timeout)
+    initial_status, initial_error, backend_ready_attempts = wait_for_backend_status(
+        args.backend_url,
+        args.status_timeout,
+        args.backend_ready_seconds,
+        args.backend_ready_interval,
+    )
     if initial_status is not None:
         status_samples.append(initial_status)
     else:
-        status_errors.append(f'initial /api/status: {initial_error}')
+        status_errors.append(
+            f'initial /api/status after backend readiness wait: {initial_error}'
+        )
 
     start_response: dict[str, Any] | None = None
     start_error = ''
     started_by_probe = False
-    if initial_status is not None and not status_running(initial_status) and not args.no_start:
+    start_requested = initial_status is not None and not status_running(initial_status) and not args.no_start
+    if start_requested:
         start_response, start_error = post_json_detailed(f'{args.backend_url}/api/scanner/start', timeout=4.0)
         if start_response is not None:
             status_samples.append(start_response)
@@ -536,7 +565,7 @@ def run_live(args: argparse.Namespace) -> int:
         'backend_url': args.backend_url,
         'initial_status_captured': initial_status is not None,
         'start': {
-            'requested': initial_status is not None and not status_running(initial_status) and not args.no_start,
+            'requested': start_requested,
             'response_seen': start_response is not None,
             'scanner_state': state_name(start_response),
             'error': start_error,
@@ -570,6 +599,15 @@ def run_live(args: argparse.Namespace) -> int:
             'status_error_count': len(status_errors),
             'started_by_probe': started_by_probe,
             'final_status_captured': final_status is not None,
+            'backend_ready_seconds': args.backend_ready_seconds,
+            'backend_ready_interval': args.backend_ready_interval,
+            'backend_ready_attempts': backend_ready_attempts,
+            'backend_ready_seconds': args.backend_ready_seconds,
+            'backend_ready_interval': args.backend_ready_interval,
+            'backend_ready_attempts': backend_ready_attempts,
+            'backend_ready_seconds': args.backend_ready_seconds,
+            'backend_ready_interval': args.backend_ready_interval,
+            'backend_ready_attempts': backend_ready_attempts,
         },
     }
     report_path, _summary_path = write_outputs(summary, 'op25_http_runtime_probe')
@@ -583,6 +621,8 @@ def main() -> int:
     parser.add_argument('--interval', type=int, default=1)
     parser.add_argument('--status-timeout', type=float, default=1.0)
     parser.add_argument('--http-timeout', type=float, default=0.5)
+    parser.add_argument('--backend-ready-seconds', type=int, default=15)
+    parser.add_argument('--backend-ready-interval', type=float, default=1.0)
     parser.add_argument('--ports', default='')
     parser.add_argument('--paths', default=','.join(DEFAULT_PATHS))
     parser.add_argument('--no-start', action='store_true')
@@ -600,6 +640,11 @@ def main() -> int:
         return 1
     if args.seconds <= 0 or args.interval <= 0:
         print('FAIL: --seconds and --interval must be positive integers')
+        print('SUMMARY: PASS=0 WARN=0 FAIL=1')
+        print('FINAL: FAIL')
+        return 1
+    if args.backend_ready_seconds < 0 or args.backend_ready_interval <= 0:
+        print('FAIL: --backend-ready-seconds must be non-negative and --backend-ready-interval must be positive')
         print('SUMMARY: PASS=0 WARN=0 FAIL=1')
         print('FINAL: FAIL')
         return 1

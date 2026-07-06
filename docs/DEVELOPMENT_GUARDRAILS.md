@@ -95,3 +95,9 @@ These guardrails capture project-specific lessons learned while building and val
 ## GUARDRAIL: MSYS2 Pi log pulls must use sshpass and Jim/Pi paths
 
 For Pi-hosted probes, do not ask the user to manually copy files from the Pi. The Pi user is `pi`, the Windows/MSYS2 user is `jim`, the Pi repo path is `/home/pi/PI-P25-SCANNER`, and local upload logs must be copied to `/c/Users/jim/Downloads/pi-p25-command-logs` before asking the user to upload them. MSYS2-side helper commands must use `sshpass` plus `scp -O`/`ssh`, not generic `ssh`/`scp` instructions that assume agent auth. Prefer `tools/msys2_run_pi_http_runtime_probe_and_pull_log.sh` or `tools/msys2_pull_latest_p25_log.sh` so the final output prints `UPLOAD_FILE_MSYS` and `UPLOAD_FILE_WINDOWS`.
+
+## Backend readiness after service restart
+
+Probe scripts that restart or immediately follow a restart of `pi-p25-scanner.service` must wait for `/api/status` to become reachable before making scanner start/no-start decisions. A transient connection-refused response during backend startup must not be treated as "already running," "no-start," or a final runtime state.
+
+For Pi probes run from Windows/MSYS2, instructions must use the repo helper that runs the Pi command and pulls the latest upload-ready log back to `/c/Users/jim/Downloads/pi-p25-command-logs` using `sshpass` and `scp -O`.

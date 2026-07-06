@@ -17,3 +17,12 @@ If the report shows a running start response but port `18091` never appears as a
 ## Backend JSON response handling
 
 The HTTP runtime probe reads full backend `/api/status`, `/api/scanner/start`, and `/api/scanner/stop` JSON bodies before parsing. OP25 endpoint probes may still store bounded body samples in the human-readable report, while the generated JSON artifact preserves the structured probe results.
+
+## V0.2Y backend readiness wait
+
+When the backend service has just been restarted, the runtime probe waits for `/api/status` to become reachable before deciding whether to start the scanner. This prevents a transient connection-refused response during service startup from being misclassified as `--no-start` or already-running behavior.
+
+Useful options:
+
+- `--backend-ready-seconds N` controls how long to wait for `/api/status` before the first start decision. The default is 15 seconds.
+- `--backend-ready-interval N` controls the polling interval during that readiness wait. The default is 1 second.
