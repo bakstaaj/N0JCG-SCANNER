@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Deploy V0.3S raw browser-audio service files to the Pi using MSYS2 .env + sshpass.
+# Self-contained password handling: does not depend on helper function names.
 set -Eeuo pipefail
 
 PASS_COUNT=0
@@ -15,6 +16,7 @@ REMOTE_SCRIPT="/tmp/pi_p25_v0_3s_remote_install_${STAMP}.sh"
 PI_HOST_ARG=""
 PI_USER_ARG=""
 PI_REPO_ARG=""
+PI_PASSWORD_ARG=""
 NO_RESTART_BACKEND=0
 
 mkdir -p "$LOG_DIR"
@@ -41,7 +43,7 @@ trap 'rc=$?; if [[ $rc -ne 0 ]]; then fail "deploy aborted unexpectedly at line 
 usage() {
   cat <<USAGE
 Usage:
-  ./tools/msys2_deploy_pi_raw_audio_service_v0_3s.sh [--host PI-SDR] [--user pi] [--repo /home/pi/PI-P25-SCANNER]
+  ./tools/msys2_deploy_pi_raw_audio_service_v0_3s.sh [--host PI-SDR] [--user pi] [--repo /home/pi/PI-P25-SCANNER] [--password PASSWORD]
 
 Uses .env / PI_PASSWORD with sshpass. If PI_PASSWORD is missing, it prompts once and saves it to .env.
 USAGE
@@ -51,6 +53,7 @@ while [[ $# -gt 0 ]]; do
     --host) shift; PI_HOST_ARG="$1"; shift ;;
     --user) shift; PI_USER_ARG="$1"; shift ;;
     --repo) shift; PI_REPO_ARG="$1"; shift ;;
+    --password) shift; PI_PASSWORD_ARG="$1"; shift ;;
     --no-restart-backend) NO_RESTART_BACKEND=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
@@ -71,19 +74,87 @@ case "$(uname -s 2>/dev/null || true)" in
   MINGW*|MSYS*) pass "MSYS2 shell detected" ;;
   *) warn "shell does not look like MSYS2" ;;
 esac
+
+# Load existing helper if present, but do not rely on any specific function names.
 if [[ -f "tools/msys2_env_common.sh" ]]; then
   # shellcheck disable=SC1091
   . tools/msys2_env_common.sh
   pass "loaded tools/msys2_env_common.sh"
 else
-  fail "missing tools/msys2_env_common.sh"
-  finish
+  warn "tools/msys2_env_common.sh missing; using deploy-local .env loader"
 fi
 
+# Self-contained .env loader/saver fallback.
+p25_deploy_env_file() { printf '%s' "${P25_ENV_FILE:-.env}"; }
+p25_deploy_load_dotenv() {
+  local env_file
+  env_file="$(p25_deploy_env_file)"
+  if [[ -f "$env_file" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$env_file"
+    set +a
+    pass "loaded local .env: $env_file"
+  else
+    warn "local .env not found; will prompt if PI_PASSWORD is not provided"
+  fi
+}
+p25_deploy_dotenv_set() {
+  local key="$1" value="$2" env_file tmp quoted
+  env_file="$(p25_deploy_env_file)"
+  mkdir -p "$(dirname "$env_file")"
+  touch "$env_file"
+  chmod 600 "$env_file" 2>/dev/null || true
+  tmp="${env_file}.tmp.$$"
+  printf -v quoted '%q' "$value"
+  awk -v key="$key" -v line="$key=$quoted" '
+    BEGIN { done = 0 }
+    $0 ~ "^[[:space:]]*" key "=" { if (!done) { print line; done = 1 } ; next }
+    { print }
+    END { if (!done) print line }
+  ' "$env_file" > "$tmp"
+  mv "$tmp" "$env_file"
+  chmod 600 "$env_file" 2>/dev/null || true
+}
+p25_deploy_require_password() {
+  local prompted=0
+  : "${PI_USER:=pi}"
+  : "${PI_HOST:=PI-SDR}"
+  : "${PI_REPO:=/home/pi/PI-P25-SCANNER}"
+  if [[ -n "$PI_PASSWORD_ARG" ]]; then
+    PI_PASSWORD="$PI_PASSWORD_ARG"
+  elif [[ -n "${PI_PASSWORD:-}" ]]; then
+    PI_PASSWORD="$PI_PASSWORD"
+  elif [[ -n "${SSHPASS:-}" ]]; then
+    PI_PASSWORD="$SSHPASS"
+  else
+    read -r -s -p "Pi password for ${PI_USER}@${PI_HOST}: " PI_PASSWORD
+    echo
+    prompted=1
+  fi
+  if [[ -z "${PI_PASSWORD:-}" ]]; then
+    fail "empty Pi password"
+    finish
+  fi
+  export PI_USER PI_HOST PI_REPO PI_PASSWORD
+  if [[ "$prompted" -eq 1 || -n "$PI_PASSWORD_ARG" || ! -f "$(p25_deploy_env_file)" ]]; then
+    p25_deploy_dotenv_set PI_USER "$PI_USER"
+    p25_deploy_dotenv_set PI_HOST "$PI_HOST"
+    p25_deploy_dotenv_set PI_REPO "$PI_REPO"
+    p25_deploy_dotenv_set PI_PASSWORD "$PI_PASSWORD"
+    pass "saved Pi SSH settings to $(p25_deploy_env_file)"
+    warn "$(p25_deploy_env_file) is local plaintext; keep it ignored and do not upload it"
+  fi
+}
+
+p25_deploy_load_dotenv
 if [[ -n "$PI_HOST_ARG" ]]; then export PI_HOST="$PI_HOST_ARG"; fi
 if [[ -n "$PI_USER_ARG" ]]; then export PI_USER="$PI_USER_ARG"; fi
 if [[ -n "$PI_REPO_ARG" ]]; then export PI_REPO="$PI_REPO_ARG"; fi
-ensure_pi_password
+: "${PI_USER:=pi}"
+: "${PI_HOST:=PI-SDR}"
+: "${PI_REPO:=/home/pi/PI-P25-SCANNER}"
+p25_deploy_require_password
 pass "Pi connection settings loaded for ${PI_USER}@${PI_HOST}:${PI_REPO}"
 
 for cmd in sshpass ssh scp tar python3 base64; do
@@ -97,7 +168,14 @@ if [[ "$FAIL_COUNT" -ne 0 ]]; then
   finish
 fi
 
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o PreferredAuthentications=password,keyboard-interactive,publickey)
+SSH_OPTS=(
+  -o StrictHostKeyChecking=accept-new
+  -o UserKnownHostsFile="$HOME/.ssh/known_hosts"
+  -o PreferredAuthentications=password,keyboard-interactive,publickey
+  -o PubkeyAuthentication=yes
+  -o BatchMode=no
+  -o ConnectTimeout=15
+)
 SSH=(sshpass -p "$PI_PASSWORD" ssh "${SSH_OPTS[@]}" "${PI_USER}@${PI_HOST}")
 SCP=(sshpass -p "$PI_PASSWORD" scp -O "${SSH_OPTS[@]}")
 
