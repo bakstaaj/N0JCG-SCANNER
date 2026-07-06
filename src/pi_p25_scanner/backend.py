@@ -70,6 +70,8 @@ LOG_TAIL_LIMIT = 80
 MAX_JSON_BODY_BYTES = 512 * 1024
 OP25_HTTP_PORT_RE = re.compile(r'http:(?:\[[^\]]+\]|[^:\s]+):(?P<port>\d{1,5})')
 OP25_PROXY_MAX_BYTES = 2 * 1024 * 1024
+OP25_AUDIO_UDP_HOST = "127.0.0.1"
+OP25_AUDIO_UDP_PORT = int(os.environ.get("P25_SCANNER_AUDIO_UDP_PORT", "23456"))
 
 
 def iter_status_strings(value: Any):
@@ -281,6 +283,22 @@ class ScannerManager:
         rendered = template.format(**values)
         return shlex.split(rendered)
 
+    def _with_browser_audio_udp(self, command: list[str]) -> list[str]:
+        """Return OP25 command with raw browser-audio UDP output enabled.
+
+        The raw audio bridge runs independently as a service. This method only
+        appends OP25 UDP output flags; it does not manage audio bridge process
+        state and it does not add any filtered/encrypted audio gates.
+        """
+        updated = list(command)
+        if "-w" not in updated:
+            updated.append("-w")
+        if "-W" not in updated:
+            updated.extend(["-W", OP25_AUDIO_UDP_HOST])
+        if "-u" not in updated:
+            updated.extend(["-u", str(OP25_AUDIO_UDP_PORT)])
+        return updated
+
     def start(self) -> tuple[dict[str, Any], HTTPStatus]:
         with self.lock:
             if self.process is not None and self.process.poll() is None:
@@ -328,6 +346,9 @@ class ScannerManager:
                     "exists": True,
                     "validated": False,
                 }
+
+        if command:
+            command = self._with_browser_audio_udp(command)
 
         with self.lock:
             self.status.decoder_process["start_enabled"] = bool(command)
