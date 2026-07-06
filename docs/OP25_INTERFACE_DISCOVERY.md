@@ -23,3 +23,14 @@ Reports are written under `.p25_op25_interface_discovery_reports/`.
 ## Status capture behavior
 
 The interface discovery probe must preserve the initial `/api/status` snapshot before it starts the scanner. If scanner startup temporarily prevents additional status polling, that condition is diagnostic evidence and should be reported as WARN, not as a hard failure, as long as the backend was initially reachable and the probe can still inspect OP25 source/interface candidates.
+
+## Fail-fast preflight
+
+The live interface discovery probe first performs a short readiness preflight before long evidence collection.
+If the backend is reachable but the scanner does not reach a running state during preflight, the probe reports a hard failure and skips the long collection window unless `--force-collect` is supplied.
+
+Useful options:
+
+- `--preflight-seconds N`: readiness window before long collection, default 20.
+- `--preflight-interval N`: status polling interval during preflight, default 1.
+- `--force-collect`: collect the full window even when preflight does not observe a running decoder.

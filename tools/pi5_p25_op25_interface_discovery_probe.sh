@@ -320,8 +320,11 @@ def make_report(summary: dict[str, Any]) -> tuple[str, int, int, int]:
         add('PASS', f"backend status snapshots captured: {status_summary.get('snapshot_count')}")
     else:
         add('FAIL', 'backend status snapshots were not captured')
+    backend_probe = summary.get('backend_probe') or {}
     if status_summary.get('running_snapshots', 0) > 0:
         add('PASS', f"decoder running snapshots observed: {status_summary.get('running_snapshots')}")
+    elif backend_probe.get('long_collection_skipped'):
+        add('FAIL', 'fail-fast preflight did not observe decoder running; long collection skipped')
     else:
         add('WARN', 'decoder running snapshots were not observed')
     if status_summary.get('control_frequencies'):
@@ -431,6 +434,7 @@ def run_self_test(keep: bool) -> int:
         status_summary = summarize_status(status_samples)
         summary = {
             'status_summary': status_summary,
+            'backend_probe': {'long_collection_skipped': False},
             'listeners': 'LISTEN 0 4096 127.0.0.1:8080',
             'http_results': [{'url': 'http://127.0.0.1:8080/status', 'status': 200, 'content_type': 'application/json', 'sample': '{}'}],
             'source_files': files,
@@ -469,6 +473,9 @@ def main() -> int:
     parser.add_argument('--backend-url', default=DEFAULT_BACKEND_URL)
     parser.add_argument('--seconds', type=int, default=180)
     parser.add_argument('--interval', type=int, default=2)
+    parser.add_argument('--preflight-seconds', type=int, default=20)
+    parser.add_argument('--preflight-interval', type=int, default=1)
+    parser.add_argument('--force-collect', action='store_true')
     parser.add_argument('--ports', default=','.join(str(port) for port in DEFAULT_PORTS))
     parser.add_argument('--no-start', action='store_true')
     parser.add_argument('--yes', action='store_true')
@@ -486,6 +493,11 @@ def main() -> int:
         return 1
     if args.seconds <= 0 or args.interval <= 0:
         print('FAIL: --seconds and --interval must be positive integers')
+        print('SUMMARY: PASS=0 WARN=0 FAIL=1')
+        print('FINAL: FAIL')
+        return 1
+    if args.preflight_seconds <= 0 or args.preflight_interval <= 0:
+        print('FAIL: --preflight-seconds and --preflight-interval must be positive integers')
         print('SUMMARY: PASS=0 WARN=0 FAIL=1')
         print('FINAL: FAIL')
         return 1
@@ -509,11 +521,26 @@ def main() -> int:
             started_by_probe = True
             time.sleep(2)
 
-    collected_samples, _running_seen = collect_status_samples(args.backend_url, args.seconds, args.interval)
-    status_samples.extend(collected_samples)
-    final_status = get_json(f'{args.backend_url}/api/status', timeout=2.0)
-    if final_status is not None:
-        status_samples.append(final_status)
+    preflight_samples: list[dict[str, Any]] = []
+    preflight_running_seen = status_running(initial_status)
+    collection_skipped = False
+    if not preflight_running_seen:
+        preflight_samples, preflight_running_seen = collect_status_samples(
+            args.backend_url, args.preflight_seconds, args.preflight_interval
+        )
+        status_samples.extend(preflight_samples)
+
+    if not preflight_running_seen and not args.force_collect:
+        collection_skipped = True
+        final_status = get_json(f'{args.backend_url}/api/status', timeout=2.0)
+        if final_status is not None:
+            status_samples.append(final_status)
+    else:
+        collected_samples, _running_seen = collect_status_samples(args.backend_url, args.seconds, args.interval)
+        status_samples.extend(collected_samples)
+        final_status = get_json(f'{args.backend_url}/api/status', timeout=2.0)
+        if final_status is not None:
+            status_samples.append(final_status)
     if started_by_probe:
         stop_response = post_json(f'{args.backend_url}/api/scanner/stop', timeout=4.0)
         stopped_status = get_json(f'{args.backend_url}/api/status', timeout=2.0)
@@ -533,6 +560,13 @@ def main() -> int:
             'start_response_seen': start_response is not None,
             'stop_response_seen': stop_response is not None,
             'status_samples_total': len(status_samples),
+            'preflight_seconds': args.preflight_seconds,
+            'preflight_interval': args.preflight_interval,
+            'preflight_samples': len(preflight_samples),
+            'preflight_running_seen': preflight_running_seen,
+            'long_collection_skipped': collection_skipped,
+            'long_collection_seconds': 0 if collection_skipped else args.seconds,
+            'force_collect': args.force_collect,
         },
         'op25_candidate_dirs': [str(path) for path in source_dirs],
         'listeners': probe_listeners(),

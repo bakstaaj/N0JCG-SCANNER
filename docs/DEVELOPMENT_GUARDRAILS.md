@@ -27,6 +27,8 @@ These guardrails capture project-specific lessons learned while building and val
 
 ## Runtime safety
 
+- Long live probes must perform a short fail-fast readiness preflight before long evidence collection; skip long collection on startup/readiness failure unless an explicit force flag is used.
+
 - Live OP25 launch must stay gated by `runtime/settings/op25_validated_rx_command.env`.
 - Backend service startup must not automatically start RF decoding.
 - Encrypted calls are metadata only: detect, show, mute/skip, and count. Do not attempt decryption, key recovery, bypass, key loading, or protected audio reconstruction.
