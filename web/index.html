@@ -10,8 +10,9 @@
   <main class="shell">
     <header class="hero">
       <div>
+        <p class="eyebrow">V0.3A Scanner Control Dashboard</p>
         <h1>PI P25 Scanner</h1>
-        <p>Validated OP25 trunk scanner control surface on port <strong>8070</strong></p>
+        <p>Web-controlled OP25 trunk scanner on port <strong>8070</strong>.</p>
       </div>
       <div class="hero-status">
         <span id="connectionStatus" class="badge badge-warn">Connecting</span>
@@ -19,48 +20,43 @@
       </div>
     </header>
 
-    <section class="panel controls-panel" aria-label="scanner controls">
-      <div class="controls">
+    <section class="panel dashboard-panel" aria-label="scanner dashboard">
+      <div class="dashboard-topline">
+        <div>
+          <h2>Scanner Control</h2>
+          <p id="dashboardSummary" class="hint">Loading scanner state...</p>
+        </div>
+        <span id="dashboardStateBadge" class="badge">-</span>
+      </div>
+      <div class="controls primary-controls">
         <button id="startBtn" type="button" class="primary">Start Scanner</button>
         <button id="stopBtn" type="button" class="danger">Stop Scanner</button>
         <button id="refreshBtn" type="button">Refresh Status</button>
         <button id="generateConfigBtn" type="button">Generate OP25 Config</button>
       </div>
-      <p id="controlHint" class="hint">Start uses the validated runtime marker only: runtime/settings/op25_validated_rx_command.env</p>
-    </section>
-
-    <section class="panel dashboard-panel" aria-label="scanner control dashboard">
-      <div class="section-title">
-        <h2>Scanner Control Dashboard</h2>
-        <span id="dashboardHealthBadge" class="badge badge-warn">Loading</span>
-      </div>
-      <div class="dashboard-grid">
-        <div class="dashboard-card primary-card">
+      <div class="dashboard-cards">
+        <article class="metric-card">
           <span>Scanner State</span>
-          <strong id="dashboardScannerState">-</strong>
-          <small id="dashboardAction">Waiting for status.</small>
-        </div>
-        <div class="dashboard-card">
-          <span>Decoder Process</span>
-          <strong id="dashboardProcessState">-</strong>
-          <small id="dashboardCommandHealth">-</small>
-        </div>
-        <div class="dashboard-card">
+          <strong id="scannerStateCard">-</strong>
+          <small id="scannerStateDetail">-</small>
+        </article>
+        <article class="metric-card">
           <span>Control Channel</span>
-          <strong id="dashboardControlFrequency">-</strong>
-          <small>Configured active control frequency</small>
-        </div>
-        <div class="dashboard-card">
-          <span>OP25 HTTP UI</span>
-          <strong id="op25HttpPort">-</strong>
-          <small>Reachable: <span id="op25HttpReachable">-</span></small>
-          <a id="op25UiLink" class="dashboard-link disabled" href="#" target="_blank" rel="noopener">OP25 UI unavailable</a>
-        </div>
+          <strong id="controlFrequencyCard">-</strong>
+          <small id="controlFrequencyDetail">configured active control</small>
+        </article>
+        <article class="metric-card">
+          <span>OP25 Launch</span>
+          <strong id="launchStateCard">-</strong>
+          <small id="launchStateDetail">validated marker required</small>
+        </article>
+        <article class="metric-card">
+          <span>OP25 Web UI</span>
+          <strong id="op25UiCard">-</strong>
+          <small id="op25UiDetail">available after scanner start</small>
+        </article>
       </div>
-      <div class="dashboard-warning">
-        <span>Latest warning / event</span>
-        <pre id="dashboardWarning">No backend warnings.</pre>
-      </div>
+      <p id="controlHint" class="hint">Start uses the validated runtime marker only: runtime/settings/op25_validated_rx_command.env</p>
     </section>
 
     <section class="panel">
@@ -118,6 +114,8 @@
         <div><span>OP25 CWD</span><strong id="op25Cwd">-</strong></div>
         <div><span>Device Args</span><strong id="op25DeviceArgs">-</strong></div>
         <div><span>Trunk TSV</span><strong id="op25TrunkTsv">-</strong></div>
+        <div><span>OP25 HTTP Listener</span><strong id="op25HttpListener">-</strong></div>
+        <div><span>Browser Access</span><strong id="op25BrowserAccess">Pi-local until proxy milestone</strong></div>
       </div>
       <details>
         <summary>Validated Command</summary>

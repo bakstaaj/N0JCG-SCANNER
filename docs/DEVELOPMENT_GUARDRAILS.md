@@ -112,3 +112,17 @@ MSYS2 helper scripts that connect to the Pi must use Jim's standard defaults unl
 - Copy method: `sshpass` plus `scp -O`
 
 Helpers must source `tools/msys2_env_common.sh`, load local `.env` values, and create `.env` with mode `600` when prompting for `PI_PASSWORD`. The `.env` file must remain ignored by git, must never be staged, and scripts must never print the password value. Tracked examples belong in `.env.example` only.
+
+
+## Source patching guardrail: no loose partial text markers
+
+Generated patch and recovery scripts must not modify source files by searching loose snippets and expecting a single match. Do not use fragile paths such as "expected one marker" checks, count-based source substitutions, or broad string matches against Python, JavaScript, HTML, CSS, or shell source.
+
+Allowed source-update approaches:
+
+- full-file rewrites for small owned files such as web UI files, helper scripts, and docs;
+- structured parsers or format-aware tools when changing Python, JSON, HTML, or JavaScript;
+- exact whole-function or whole-class replacement only when the full boundary can be identified safely;
+- fail before touching files when a change cannot be applied deterministically.
+
+Documentation files may receive an append-only note, but source code must not be patched through loose partial-text marker matching.
