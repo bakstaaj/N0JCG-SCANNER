@@ -70,6 +70,12 @@ LOG_TAIL_LIMIT = 80
 MAX_JSON_BODY_BYTES = 512 * 1024
 OP25_HTTP_PORT_RE = re.compile(r'http:(?:\[[^\]]+\]|[^:\s]+):(?P<port>\d{1,5})')
 OP25_PROXY_MAX_BYTES = 2 * 1024 * 1024
+AUDIO_BRIDGE_PORT = int(os.environ.get("P25_SCANNER_AUDIO_BRIDGE_PORT", "8072"))
+AUDIO_BRIDGE_UDP_PORT = int(os.environ.get("P25_SCANNER_AUDIO_UDP_PORT", "23456"))
+AUDIO_BRIDGE_HOST = os.environ.get("P25_SCANNER_AUDIO_BRIDGE_HOST", "0.0.0.0")
+AUDIO_BRIDGE_LOCAL_HOST = "127.0.0.1"
+AUDIO_BRIDGE_SCRIPT = PROJECT_ROOT / "tools" / "pi5_p25_browser_audio_raw_bridge_server.py"
+AUDIO_BRIDGE_LOG = PROJECT_ROOT / "runtime" / "logs" / "browser_audio_raw_bridge.log"
 
 
 def iter_status_strings(value: Any):
@@ -109,6 +115,16 @@ def unique_ports(*groups: list[int]) -> list[int]:
     return ports
 
 
+def request_hostname(host_header: str | None) -> str:
+    value = (host_header or "").strip()
+    if value:
+        return value.split(":", 1)[0]
+    try:
+        return socket.gethostbyname(socket.gethostname())
+    except OSError:
+        return "127.0.0.1"
+
+
 @dataclass
 class ScannerStatus:
     ok: bool = True
@@ -143,7 +159,8 @@ class ScannerStatus:
     generated_op25_config: dict[str, Any] = field(default_factory=dict)
     runtime_status: dict[str, Any] = field(default_factory=dict)
     activity_summary: dict[str, Any] = field(default_factory=dict)
-    last_event: str = "V0.2H backend idle; runtime activity summary ready"
+    browser_audio: dict[str, Any] = field(default_factory=dict)
+    last_event: str = "V0.3O backend idle; raw browser audio baseline ready"
     warnings: list[str] = field(default_factory=list)
     log_tail: list[str] = field(default_factory=list)
     updated_utc: float = field(default_factory=time.time)
@@ -153,12 +170,15 @@ class ScannerManager:
     def __init__(self) -> None:
         self.status = ScannerStatus()
         self.process: subprocess.Popen[str] | None = None
+        self.audio_process: subprocess.Popen[str] | None = None
+        self.audio_log_handle: Any | None = None
         self.log_lines: deque[str] = deque(maxlen=LOG_TAIL_LIMIT)
         self.runtime_parser = RuntimeStatusParser()
         self.activity_tracker = RuntimeActivityTracker()
         self.lock = threading.RLock()
         self.refresh_capability()
         self.refresh_config_summary()
+        self.status.browser_audio = self.audio_status()
 
     def _set_event(self, message: str) -> None:
         self.status.last_event = message
@@ -281,12 +301,154 @@ class ScannerManager:
         rendered = template.format(**values)
         return shlex.split(rendered)
 
+    def _add_browser_audio_args(self, command: list[str]) -> list[str]:
+        updated = list(command)
+        if "-w" not in updated:
+            updated.append("-w")
+        if "-W" not in updated:
+            updated.extend(["-W", AUDIO_BRIDGE_LOCAL_HOST])
+        if "-u" not in updated:
+            updated.extend(["-u", str(AUDIO_BRIDGE_UDP_PORT)])
+        return updated
+
+    def _read_audio_bridge_status(self) -> dict[str, Any]:
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{AUDIO_BRIDGE_PORT}/api/audio/status", timeout=1.0
+            ) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+        except Exception as exc:  # noqa: BLE001 - status report only
+            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        return {"ok": False, "error": "audio bridge status payload was not an object"}
+
+    def audio_status(self, host_header: str | None = None) -> dict[str, Any]:
+        with self.lock:
+            process = self.audio_process
+            running = process is not None and process.poll() is None
+            pid = process.pid if running else None
+            if process is not None and not running:
+                self.audio_process = None
+        bridge_payload = self._read_audio_bridge_status() if running else {}
+        hostname = request_hostname(host_header)
+        stream_url = f"http://{hostname}:{AUDIO_BRIDGE_PORT}/audio.wav"
+        test_tone_url = f"http://{hostname}:{AUDIO_BRIDGE_PORT}/test-tone.wav"
+        return {
+            "ok": True,
+            "enabled": True,
+            "mode": "raw-clear-v0.3o",
+            "running": running,
+            "pid": pid,
+            "http_port": AUDIO_BRIDGE_PORT,
+            "udp_port": AUDIO_BRIDGE_UDP_PORT,
+            "stream_url": stream_url,
+            "test_tone_url": test_tone_url,
+            "script": str(AUDIO_BRIDGE_SCRIPT),
+            "log": str(AUDIO_BRIDGE_LOG),
+            "bridge_status": bridge_payload,
+        }
+
+    def start_audio_bridge(self, host_header: str | None = None) -> tuple[dict[str, Any], HTTPStatus]:
+        with self.lock:
+            if self.audio_process is not None and self.audio_process.poll() is None:
+                self.status.browser_audio = self.audio_status(host_header)
+                self._set_event("Raw browser audio bridge already running")
+                return self.status.browser_audio, HTTPStatus.ACCEPTED
+        if not AUDIO_BRIDGE_SCRIPT.exists():
+            payload = {"ok": False, "error": f"raw audio bridge script missing: {AUDIO_BRIDGE_SCRIPT}"}
+            with self.lock:
+                self.status.browser_audio = payload
+                self._append_warning(str(payload["error"]))
+                self._set_event(str(payload["error"]))
+            return payload, HTTPStatus.INTERNAL_SERVER_ERROR
+
+        AUDIO_BRIDGE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        if self.audio_log_handle is not None:
+            try:
+                self.audio_log_handle.close()
+            except OSError:
+                pass
+            self.audio_log_handle = None
+        self.audio_log_handle = AUDIO_BRIDGE_LOG.open("a", encoding="utf-8")
+        cmd = [
+            sys.executable or "/usr/bin/python3",
+            str(AUDIO_BRIDGE_SCRIPT),
+            "--host",
+            AUDIO_BRIDGE_HOST,
+            "--port",
+            str(AUDIO_BRIDGE_PORT),
+            "--udp-host",
+            AUDIO_BRIDGE_LOCAL_HOST,
+            "--udp-port",
+            str(AUDIO_BRIDGE_UDP_PORT),
+        ]
+        try:
+            process = subprocess.Popen(
+                cmd,
+                cwd=str(PROJECT_ROOT),
+                stdout=self.audio_log_handle,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+        except OSError as exc:
+            payload = {"ok": False, "error": f"audio bridge start failed: {exc}"}
+            with self.lock:
+                self.status.browser_audio = payload
+                self._append_warning(str(payload["error"]))
+                self._set_event(str(payload["error"]))
+            return payload, HTTPStatus.INTERNAL_SERVER_ERROR
+
+        with self.lock:
+            self.audio_process = process
+        ready = False
+        for _ in range(20):
+            if process.poll() is not None:
+                break
+            payload = self._read_audio_bridge_status()
+            if payload.get("ok"):
+                ready = True
+                break
+            time.sleep(0.25)
+        status = self.audio_status(host_header)
+        with self.lock:
+            self.status.browser_audio = status
+            if ready:
+                self._set_event(f"Raw browser audio bridge started on port {AUDIO_BRIDGE_PORT}")
+                return status, HTTPStatus.ACCEPTED
+            self._append_warning("raw browser audio bridge did not become ready")
+            self._set_event("Raw browser audio bridge did not become ready")
+        return status, HTTPStatus.INTERNAL_SERVER_ERROR
+
+    def stop_audio_bridge(self, host_header: str | None = None) -> tuple[dict[str, Any], HTTPStatus]:
+        with self.lock:
+            process = self.audio_process
+        if process is not None and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        with self.lock:
+            self.audio_process = None
+            if self.audio_log_handle is not None:
+                try:
+                    self.audio_log_handle.close()
+                except OSError:
+                    pass
+                self.audio_log_handle = None
+            self.status.browser_audio = self.audio_status(host_header)
+            self._set_event("Raw browser audio bridge stopped")
+            return self.status.browser_audio, HTTPStatus.ACCEPTED
+
     def start(self) -> tuple[dict[str, Any], HTTPStatus]:
         with self.lock:
             if self.process is not None and self.process.poll() is None:
                 self.status.scanner_state = "running"
                 self.status.decoder_process["running"] = True
                 self.status.decoder_process["pid"] = self.process.pid
+                self.status.browser_audio = self.audio_status()
                 self._set_event("Scanner already running")
                 return asdict(self.status), HTTPStatus.ACCEPTED
 
@@ -329,6 +491,9 @@ class ScannerManager:
                     "validated": False,
                 }
 
+        if command:
+            command = self._add_browser_audio_args(command)
+
         with self.lock:
             self.status.decoder_process["start_enabled"] = bool(command)
             self.status.decoder_process["command"] = command
@@ -349,6 +514,16 @@ class ScannerManager:
                     "Start requested; live launch disabled until runtime/settings/op25_validated_rx_command.env exists"
                 )
             return asdict(self.status), HTTPStatus.ACCEPTED
+
+        audio_payload, audio_http_status = self.start_audio_bridge()
+        if audio_http_status.value >= 400 or not audio_payload.get("running"):
+            with self.lock:
+                self.status.ok = False
+                self.status.scanner_state = "audio_bridge_start_failed"
+                self.status.browser_audio = audio_payload
+                self._append_warning(str(audio_payload.get("error") or "raw browser audio bridge start failed"))
+                self._set_event("Scanner start blocked because raw browser audio bridge did not start")
+            return asdict(self.status), HTTPStatus.INTERNAL_SERVER_ERROR
 
         with self.lock:
             self.status.activity_summary = self.activity_tracker.reset()
@@ -382,7 +557,8 @@ class ScannerManager:
             self.status.decoder_process["cwd"] = command_cwd
             self.status.decoder_process["command_source"] = command_meta.get("source", "none")
             self.status.decoder_process["validated_marker"] = command_meta
-            self._set_event("Decoder process started from validated OP25 command marker")
+            self.status.browser_audio = self.audio_status()
+            self._set_event("Decoder process started with raw browser audio bridge enabled")
         threading.Thread(target=self._reader_thread, args=(process,), daemon=True).start()
         return asdict(self.status), HTTPStatus.ACCEPTED
 
@@ -409,6 +585,7 @@ class ScannerManager:
                 self.status.decoder_process["pid"] = None
                 self.status.scanner_state = "stopped"
                 self._set_event("Stop requested; no decoder process was running")
+        self.stop_audio_bridge()
         return asdict(self.status), HTTPStatus.ACCEPTED
 
     def op25_http_interface(self) -> dict[str, Any]:
@@ -474,6 +651,7 @@ class ScannerManager:
             self.status.decoder_process["validated_marker"] = validated_command_marker_metadata(PROJECT_ROOT)
             self.status.log_tail = list(self.log_lines)
             self.status.activity_summary = self.activity_tracker.snapshot()
+            self.status.browser_audio = self.audio_status()
             self.status.updated_utc = time.time()
             return asdict(self.status)
 
@@ -497,7 +675,7 @@ def load_config_payload() -> dict[str, Any]:
 
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "PiP25Scanner/0.3A"
+    server_version = "PiP25Scanner/0.3O"
 
     def _send_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         data = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
@@ -540,6 +718,9 @@ class Handler(SimpleHTTPRequestHandler):
         self._send_bytes(data, status, content_type)
 
     def do_GET(self) -> None:  # noqa: N802 - http.server method name
+        if self.path == "/api/audio/status":
+            self._send_json(MANAGER.audio_status(self.headers.get("Host")))
+            return
         if self.path == "/api/op25/http-interface":
             self._send_json(MANAGER.op25_http_interface())
             return
@@ -563,6 +744,14 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802 - http.server method name
+        if self.path == "/api/audio/start":
+            payload, status = MANAGER.start_audio_bridge(self.headers.get("Host"))
+            self._send_json(payload, status)
+            return
+        if self.path == "/api/audio/stop":
+            payload, status = MANAGER.stop_audio_bridge(self.headers.get("Host"))
+            self._send_json(payload, status)
+            return
         if self.path == "/api/scanner/start":
             payload, status = MANAGER.start()
             self._send_json(payload, status)

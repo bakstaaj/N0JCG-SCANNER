@@ -10,7 +10,7 @@
   <main class="shell">
     <header class="hero">
       <div>
-        <p class="eyebrow">V0.3C Browser Audio Scaffold</p>
+        <p class="eyebrow">V0.3O Raw Browser Audio Baseline</p>
         <h1>PI P25 Scanner</h1>
         <p>Web-controlled OP25 trunk scanner on port <strong>8070</strong>.</p>
       </div>
@@ -56,25 +56,32 @@
           <small id="op25UiDetail">available after scanner start</small>
         </article>
       </div>
-      <p id="controlHint" class="hint">Start uses the validated runtime marker only: runtime/settings/op25_validated_rx_command.env</p>
+      <p id="controlHint" class="hint">Start uses the validated runtime marker and automatically enables raw browser audio on port 8072.</p>
     </section>
 
     <section class="panel browser-audio-panel" aria-label="browser audio output">
       <div class="section-title">
         <div>
           <h2>Browser Audio Output</h2>
-          <p class="hint">Scanner audio is intended to play on this browser host, not through a Pi speaker.</p>
+          <p class="hint">Normal mode uses the proven raw OP25 UDP PCM path. Filtered/encrypted gates are diagnostic-only.</p>
         </div>
-        <span id="browserAudioBadge" class="badge badge-warn">Disabled</span>
+        <span id="browserAudioBadge" class="badge badge-warn">Stopped</span>
       </div>
       <div class="controls primary-controls">
         <button id="enableBrowserAudioBtn" type="button" class="primary">Enable Browser Audio</button>
-        <button id="playBrowserToneBtn" type="button" disabled>Play Browser Test Tone</button>
+        <button id="startBrowserAudioBridgeBtn" type="button">Start Audio Bridge</button>
+        <button id="stopBrowserAudioBridgeBtn" type="button">Stop Audio Bridge</button>
+        <button id="playBrowserToneBtn" type="button">Play Bridge Test Tone</button>
       </div>
+      <audio id="browserAudioPlayer" controls preload="none"></audio>
       <div class="grid status-grid audio-grid">
+        <div><span>Bridge</span><strong id="browserAudioBridgeState">-</strong></div>
+        <div><span>Stream Source</span><strong id="browserAudioStreamSource">-</strong></div>
+        <div><span>Audio Packets</span><strong id="browserAudioPackets">-</strong></div>
+        <div><span>Flag Packets</span><strong id="browserAudioFlags">-</strong></div>
+        <div><span>Clients</span><strong id="browserAudioClients">-</strong></div>
+        <div><span>Last Audio</span><strong id="browserAudioLastAudio">-</strong></div>
         <div><span>Output Device</span><strong id="browserAudioDevice">Browser default</strong></div>
-        <div><span>Audio Context</span><strong id="browserAudioContextState">not created</strong></div>
-        <div><span>Stream Source</span><strong id="browserAudioStreamSource">pending OP25 audio bridge</strong></div>
         <div><span>Last Audio Event</span><strong id="browserAudioLastEvent">Enable browser audio to unlock playback.</strong></div>
       </div>
     </section>
