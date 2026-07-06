@@ -320,3 +320,7 @@ For long-running Pi validation commands, capture the full terminal transcript to
 ```
 
 The helper writes stdout and stderr to `.p25_command_logs/<label>_<timestamp>.txt` and prints the log path at the beginning and end of the run.
+
+## V0.3A scanner control dashboard
+
+V0.3A starts application-facing dashboard work. The web UI now highlights scanner state, decoder health, control frequency, latest warning/event, and OP25 HTTP UI reachability. The backend exposes `/api/op25/http-interface` and a same-host `/op25/` proxy so the OP25 UI can be opened from the scanner dashboard when the OP25 HTTP terminal is running.

@@ -7,6 +7,10 @@ import argparse
 import json
 import mimetypes
 import os
+import re
+import socket
+import urllib.error
+import urllib.request
 import shlex
 import subprocess
 import sys
@@ -64,6 +68,45 @@ WEB_ROOT = PROJECT_ROOT / "web"
 OP25_OUTPUT_DIR = Path(os.environ.get("P25_SCANNER_OP25_OUTPUT", str(DEFAULT_OUTPUT_DIR)))
 LOG_TAIL_LIMIT = 80
 MAX_JSON_BODY_BYTES = 512 * 1024
+OP25_HTTP_PORT_RE = re.compile(r'http:(?:\[[^\]]+\]|[^:\s]+):(?P<port>\d{1,5})')
+OP25_PROXY_MAX_BYTES = 2 * 1024 * 1024
+
+
+def iter_status_strings(value: Any):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from iter_status_strings(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from iter_status_strings(item)
+
+
+def op25_http_ports_from_value(value: Any) -> list[int]:
+    ports: list[int] = []
+    seen: set[int] = set()
+    for text_value in iter_status_strings(value):
+        for match in OP25_HTTP_PORT_RE.finditer(text_value):
+            try:
+                port = int(match.group('port'))
+            except ValueError:
+                continue
+            if 0 < port < 65536 and port not in seen:
+                seen.add(port)
+                ports.append(port)
+    return ports
+
+
+def unique_ports(*groups: list[int]) -> list[int]:
+    ports: list[int] = []
+    seen: set[int] = set()
+    for group in groups:
+        for port in group:
+            if 0 < int(port) < 65536 and int(port) not in seen:
+                seen.add(int(port))
+                ports.append(int(port))
+    return ports
 
 
 @dataclass
@@ -368,6 +411,57 @@ class ScannerManager:
                 self._set_event("Stop requested; no decoder process was running")
         return asdict(self.status), HTTPStatus.ACCEPTED
 
+    def op25_http_interface(self) -> dict[str, Any]:
+        with self.lock:
+            self.status.decoder_process["validated_marker"] = validated_command_marker_metadata(PROJECT_ROOT)
+            snapshot = asdict(self.status)
+        process = snapshot.get("decoder_process") or {}
+        marker = process.get("validated_marker") or {}
+        command_ports = op25_http_ports_from_value(process.get("command") or [])
+        marker_ports = op25_http_ports_from_value(marker)
+        ports = unique_ports(command_ports, marker_ports)
+        port = ports[0] if ports else None
+        tcp_reachable = False
+        tcp_error = ""
+        if port is not None:
+            try:
+                with socket.create_connection(("127.0.0.1", int(port)), timeout=0.35):
+                    tcp_reachable = True
+            except OSError as exc:
+                tcp_error = str(exc)
+        return {
+            "ok": True,
+            "enabled": port is not None,
+            "running": bool(process.get("running")),
+            "port": port,
+            "ports": ports,
+            "local_url": f"http://127.0.0.1:{port}/" if port is not None else "",
+            "proxy_url": "/op25/" if port is not None else "",
+            "tcp_reachable": tcp_reachable,
+            "tcp_error": tcp_error,
+            "sources": {"command": command_ports, "validated_marker": marker_ports},
+        }
+
+    def op25_proxy_fetch(self, rel_path: str) -> tuple[int, str, bytes]:
+        interface = self.op25_http_interface()
+        port = interface.get("port")
+        if port is None:
+            return 503, "text/plain; charset=utf-8", b"OP25 HTTP interface port is not known\n"
+        clean_path = rel_path.lstrip("/")
+        target_url = f"http://127.0.0.1:{int(port)}/{clean_path}"
+        try:
+            with urllib.request.urlopen(target_url, timeout=2.0) as response:
+                body = response.read(OP25_PROXY_MAX_BYTES)
+                content_type = response.headers.get("content-type", "application/octet-stream")
+                return int(response.status), content_type, body
+        except urllib.error.HTTPError as exc:
+            body = exc.read(OP25_PROXY_MAX_BYTES)
+            content_type = exc.headers.get("content-type", "text/plain; charset=utf-8")
+            return int(exc.code), content_type, body
+        except Exception as exc:
+            message = f"OP25 proxy error: {type(exc).__name__}: {exc}\n".encode("utf-8")
+            return 502, "text/plain; charset=utf-8", message
+
     def status_payload(self) -> dict[str, Any]:
         with self.lock:
             self.status.config = active_config_metadata()
@@ -403,12 +497,20 @@ def load_config_payload() -> dict[str, Any]:
 
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "PiP25Scanner/0.1E"
+    server_version = "PiP25Scanner/0.3A"
 
     def _send_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         data = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _send_bytes(self, data: bytes, status: int = 200, content_type: str = "application/octet-stream") -> None:
+        self.send_response(int(status))
+        self.send_header("Content-Type", content_type or "application/octet-stream")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -429,7 +531,21 @@ class Handler(SimpleHTTPRequestHandler):
             raise ConfigError("request JSON body must be an object")
         return payload
 
+    def _proxy_op25(self) -> None:
+        if self.path == "/op25":
+            rel_path = ""
+        else:
+            rel_path = self.path[len("/op25/"):]
+        status, content_type, data = MANAGER.op25_proxy_fetch(rel_path)
+        self._send_bytes(data, status, content_type)
+
     def do_GET(self) -> None:  # noqa: N802 - http.server method name
+        if self.path == "/api/op25/http-interface":
+            self._send_json(MANAGER.op25_http_interface())
+            return
+        if self.path == "/op25" or self.path.startswith("/op25/"):
+            self._proxy_op25()
+            return
         if self.path == "/api/status":
             self._send_json(MANAGER.status_payload())
             return

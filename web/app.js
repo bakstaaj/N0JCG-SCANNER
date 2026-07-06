@@ -37,7 +37,8 @@ function setButtonsForState(status) {
   const startBtn = field('startBtn');
   const stopBtn = field('stopBtn');
   const running = Boolean(status?.decoder_process?.running);
-  const startEnabled = Boolean(status?.decoder_process?.start_enabled);
+  const marker = status?.decoder_process?.validated_marker || {};
+  const startEnabled = Boolean(status?.decoder_process?.start_enabled || (marker.exists && marker.validated));
   if (startBtn) startBtn.disabled = running || !startEnabled;
   if (stopBtn) stopBtn.disabled = !running;
 }
@@ -73,6 +74,64 @@ function formatActivityEvent(event) {
   return pieces.length ? pieces.join(' | ') : (event.line || '-');
 }
 
+
+function lastWarning(status) {
+  const warnings = Array.isArray(status?.warnings) ? status.warnings : [];
+  if (warnings.length > 0) return warnings[warnings.length - 1];
+  return status?.last_event || "No backend warnings.";
+}
+
+function renderDashboard(status) {
+  const process = status?.decoder_process || {};
+  const marker = process.validated_marker || {};
+  const running = Boolean(process.running);
+  const markerReady = Boolean(marker.exists && marker.validated);
+  const state = status?.scanner_state || "-";
+  setText("dashboardScannerState", state);
+  setText("dashboardProcessState", running ? `running pid ${process.pid || "-"}` : "stopped");
+  setText("dashboardControlFrequency", formatHz(status?.active_control_frequency_hz));
+  setText("dashboardCommandHealth", process.command_source ? `source: ${process.command_source}` : "no command source yet");
+  setText("dashboardWarning", lastWarning(status));
+  if (running) {
+    setText("dashboardAction", "Scanner is running. Use Stop Scanner before changing receiver roles or control channels.");
+  } else if (markerReady) {
+    setText("dashboardAction", "Ready to start from the validated OP25 marker.");
+  } else if (marker.exists) {
+    setText("dashboardAction", "Validated marker is present but not fully trusted yet.");
+  } else {
+    setText("dashboardAction", "Validated OP25 marker is missing; live start is not ready.");
+  }
+  setBadge("dashboardHealthBadge", running ? "Running" : (status?.ok ? "Ready" : "Needs attention"), running ? "badge-ok" : (status?.ok ? "badge-warn" : "badge-bad"));
+}
+
+function renderOp25Interface(info) {
+  const link = field("op25UiLink");
+  const port = info?.port;
+  const reachable = Boolean(info?.tcp_reachable);
+  setText("op25HttpPort", port ? `port ${port}` : "-");
+  setText("op25HttpReachable", port ? (reachable ? "yes" : "not yet") : "-");
+  if (!link) return;
+  if (info?.enabled) {
+    link.href = info.proxy_url || "/op25/";
+    link.textContent = reachable ? "Open OP25 UI" : "Open OP25 UI when running";
+    link.classList.toggle("disabled", !reachable);
+  } else {
+    link.href = "#";
+    link.textContent = "OP25 UI unavailable";
+    link.classList.add("disabled");
+  }
+}
+
+async function refreshOp25Interface() {
+  try {
+    const info = await fetchJson("/api/op25/http-interface");
+    renderOp25Interface(info);
+  } catch (error) {
+    renderOp25Interface({ enabled: false });
+    setText("op25HttpReachable", `error: ${error.message}`);
+  }
+}
+
 function renderActivitySummary(activity) {
   const parsed = Number(activity?.parsed_status_lines || 0);
   setText('activityParsedLines', parsed);
@@ -96,6 +155,7 @@ function renderStatus(status) {
   const markerReady = Boolean(marker.exists && marker.validated);
   const state = status.scanner_state || '-';
 
+  renderDashboard(status);
   setText('scannerState', state);
   setText('decoderEngine', status.decoder_engine || '-');
   setText('configSource', status.config?.source || '-');
@@ -131,6 +191,7 @@ async function refreshStatus() {
   try {
     const status = await fetchJson('/api/status');
     renderStatus(status);
+    await refreshOp25Interface();
   } catch (error) {
     setBadge('connectionStatus', 'Offline', 'badge-bad');
     setText('lastEvent', `Status error: ${error.message}`);

@@ -29,6 +29,40 @@
       <p id="controlHint" class="hint">Start uses the validated runtime marker only: runtime/settings/op25_validated_rx_command.env</p>
     </section>
 
+    <section class="panel dashboard-panel" aria-label="scanner control dashboard">
+      <div class="section-title">
+        <h2>Scanner Control Dashboard</h2>
+        <span id="dashboardHealthBadge" class="badge badge-warn">Loading</span>
+      </div>
+      <div class="dashboard-grid">
+        <div class="dashboard-card primary-card">
+          <span>Scanner State</span>
+          <strong id="dashboardScannerState">-</strong>
+          <small id="dashboardAction">Waiting for status.</small>
+        </div>
+        <div class="dashboard-card">
+          <span>Decoder Process</span>
+          <strong id="dashboardProcessState">-</strong>
+          <small id="dashboardCommandHealth">-</small>
+        </div>
+        <div class="dashboard-card">
+          <span>Control Channel</span>
+          <strong id="dashboardControlFrequency">-</strong>
+          <small>Configured active control frequency</small>
+        </div>
+        <div class="dashboard-card">
+          <span>OP25 HTTP UI</span>
+          <strong id="op25HttpPort">-</strong>
+          <small>Reachable: <span id="op25HttpReachable">-</span></small>
+          <a id="op25UiLink" class="dashboard-link disabled" href="#" target="_blank" rel="noopener">OP25 UI unavailable</a>
+        </div>
+      </div>
+      <div class="dashboard-warning">
+        <span>Latest warning / event</span>
+        <pre id="dashboardWarning">No backend warnings.</pre>
+      </div>
+    </section>
+
     <section class="panel">
       <div class="section-title">
         <h2>Live Scanner Status</h2>
