@@ -5,7 +5,7 @@ Receives OP25 UDP PCM frames on localhost and exposes a browser-readable WAV
 stream. The Raspberry Pi remains the RF/decoder host; playback happens in the
 browser host.
 
-V0.3I is flag-aware. OP25's socket audio path sends 320-byte PCM frames and
+V0.3J is flag-control-hold aware. OP25's socket audio path sends 320-byte PCM frames and
 2-byte control flags. The bridge now honors those flags instead of blindly
 streaming every adjacent PCM frame, which helps suppress encrypted or invalid
 bursts that OP25 is trying to drain/drop.
@@ -36,7 +36,7 @@ DEFAULT_UDP_PORT = 23456
 DEFAULT_HTTP_HOST = "0.0.0.0"
 DEFAULT_HTTP_PORT = 8072
 DEFAULT_MAX_QUEUE_CHUNKS = 9000
-DEFAULT_FLAG_DROP_HOLD_MS = 750
+DEFAULT_FLAG_DROP_HOLD_MS = 1500
 OP25_AUDIO_FRAME_BYTES = 320
 SILENCE_FRAME = b"\x00" * OP25_AUDIO_FRAME_BYTES
 
@@ -151,10 +151,15 @@ class AudioState:
                 self.last_flag_utc = now
                 if flag == 0:
                     self.flag_zero_count += 1
-                    # OP25 socket audio treats flag 0 as drain. For an HTTP stream
-                    # there is no PCM device to drain, but clearing any stale backlog
-                    # prevents old bursts from leaking after call transitions.
+                    # OP25 socket audio treats flag 0 as drain. In browser streaming,
+                    # draining old audio is not enough: the next UDP audio frames can
+                    # still be encrypted/call-boundary residue. Clear the queue and
+                    # hold/suppress incoming frames for the configured window.
                     self._clear_queue_locked()
+                    self.flag_drop_until_utc = max(
+                        self.flag_drop_until_utc,
+                        now + (self.flag_drop_hold_ms / 1000.0),
+                    )
                 elif flag == 1:
                     self.flag_one_count += 1
                     self._clear_queue_locked()
@@ -198,7 +203,7 @@ class AudioState:
         with self.lock:
             return {
                 "ok": True,
-                "mode": "flag-gated-v0.3i",
+                "mode": "flag-control-hold-v0.3j",
                 "sample_rate_hz": PCM_RATE_HZ,
                 "channels": PCM_CHANNELS,
                 "bits_per_sample": PCM_BITS,
@@ -273,7 +278,7 @@ class UdpReceiver(threading.Thread):
 
 
 class AudioHandler(BaseHTTPRequestHandler):
-    server_version = "PiP25BrowserAudioBridge/0.3I"
+    server_version = "PiP25BrowserAudioBridge/0.3J"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         return
@@ -360,7 +365,7 @@ def self_test() -> int:
     state.add_packet(b"\x11" * OP25_AUDIO_FRAME_BYTES)
     snap = state.snapshot()
     if snap["flag_one_count"] != 1 or snap["audio_dropped_by_flag"] != 1:
-        print("FAIL: flag-gated audio drop accounting invalid")
+        print("FAIL: flag-control-hold audio drop accounting invalid")
         return 1
     state.flag_drop_until_utc = 0.0
     state.add_packet(b"\x22" * OP25_AUDIO_FRAME_BYTES)
@@ -368,10 +373,15 @@ def self_test() -> int:
         print("FAIL: ungated audio could not be popped")
         return 1
     state.add_packet(b"\x00\x00")
-    if state.snapshot()["flag_zero_count"] != 1:
+    state.add_packet(b"\x33" * OP25_AUDIO_FRAME_BYTES)
+    snap = state.snapshot()
+    if snap["flag_zero_count"] != 1:
         print("FAIL: flag zero accounting invalid")
         return 1
-    print("PASS: flag-gated browser audio bridge self-test")
+    if snap["audio_dropped_by_flag"] < 2:
+        print("FAIL: flag zero hold did not suppress following audio")
+        return 1
+    print("PASS: flag-control-hold browser audio bridge self-test")
     print("FINAL: PASS")
     return 0
 
@@ -402,7 +412,7 @@ def main() -> int:
         receiver.start()
 
     httpd = AudioServer((args.host, args.port), AudioHandler, state)
-    print(f"PI P25 flag-gated browser audio bridge listening on http://{args.host}:{args.port}", flush=True)
+    print(f"PI P25 flag-control-hold browser audio bridge listening on http://{args.host}:{args.port}", flush=True)
     print(f"Receiving OP25 UDP PCM/flags on {args.udp_host}:{args.udp_port} and {args.udp_port + 1}", flush=True)
     print(f"Flag drop hold: {args.flag_drop_hold_ms} ms", flush=True)
     try:

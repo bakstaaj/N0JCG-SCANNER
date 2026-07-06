@@ -5,12 +5,12 @@ PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
 PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
 LOCAL_DOWNLOAD_DIR="${LOCAL_DOWNLOAD_DIR:-/c/Users/jim/Downloads/pi-p25-command-logs}"
-SECONDS_TO_RUN=600
+SECONDS_TO_RUN=120
 HTTP_PORT=8072
 UDP_PORT=23456
 PREBUFFER_CHUNKS=0
 DECLICK_SAMPLES=0
-FLAG_DROP_HOLD_MS=750
+FLAG_DROP_HOLD_MS=1500
 OP25_VERBOSITY=0
 PI_PASSWORD_ARG=""
 
@@ -30,17 +30,17 @@ usage() {
 Usage:
   ./tools/msys2_run_pi_browser_audio_live_test.sh [options]
 
-Runs the V0.3I flag-gated browser-audio live listening test on the Pi and pulls
+Runs the V0.3I flag-control-hold browser-audio live listening test on the Pi and pulls
 its upload-ready log back to /c/Users/jim/Downloads/pi-p25-command-logs.
 
 Options:
   --host HOST              Pi host name or pi@HOST. Default: PI-SDR
   --user USER              Pi SSH user. Default: pi
   --repo PATH              Pi repo path. Default: /home/pi/PI-P25-SCANNER
-  --seconds N              Test duration. Default: 600
+  --seconds N              Test duration. Default: 120
   --http-port N            Browser audio HTTP port. Default: 8072
   --udp-port N             OP25 UDP PCM port. Default: 23456
-  --flag-drop-hold-ms N    Drop audio after OP25 drop flag for N ms. Default: 750
+  --flag-drop-hold-ms N    Clear queue and suppress audio after any OP25 2-byte flag. Default: 1500
   --op25-verbosity N       Add -v N to OP25. Default: 0
   --prebuffer-chunks N     Accepted for compatibility; ignored in V0.3I
   --declick-samples N      Accepted for compatibility; ignored in V0.3I
