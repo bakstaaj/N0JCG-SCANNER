@@ -46,3 +46,8 @@ Useful options:
 The interface discovery probe extracts OP25 HTTP terminal ports from every available source before probing endpoints: running status snapshots, the backend start response, and the validated OP25 command marker under `runtime/settings/`. This preserves the configured HTTP port even when fail-fast preflight skips long collection because the decoder did not reach a running state.
 
 The report also records start-response keys and final scanner state so start/readiness failures can be diagnosed without waiting for a long capture window.
+
+## Start response preflight handling
+
+- The `/api/scanner/start` response is a status snapshot and must be counted as evidence.
+- If that response reports a running decoder, fail-fast preflight must treat it as a successful running sample before deciding whether to skip long collection.

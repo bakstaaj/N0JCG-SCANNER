@@ -592,10 +592,12 @@ def main() -> int:
         start_response = post_json(f'{args.backend_url}/api/scanner/start', timeout=4.0)
         if start_response is not None:
             started_by_probe = True
+            if isinstance(start_response, dict):
+                status_samples.append(start_response)
             time.sleep(2)
 
     preflight_samples: list[dict[str, Any]] = []
-    preflight_running_seen = status_running(initial_status)
+    preflight_running_seen = status_running(initial_status) or status_running(start_response)
     collection_skipped = False
     if not preflight_running_seen:
         preflight_samples, preflight_running_seen = collect_status_samples(

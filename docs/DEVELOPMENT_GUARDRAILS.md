@@ -63,3 +63,4 @@ These guardrails capture project-specific lessons learned while building and val
 
 - Long-running interface probes must extract runtime ports and command metadata from all available sources, including initial status, start response, sampled status, and validated marker files, before deciding what to probe.
 - Fail-fast reports must include enough start/readiness diagnostics to explain why long collection was skipped.
+- Live fail-fast probes must count successful start API responses as status evidence before skipping long collection.
