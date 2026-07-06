@@ -1,42 +1,39 @@
-# V0.3 Browser Audio Plan
+# Browser Audio Plan
 
-The PI-P25-SCANNER application uses the Raspberry Pi as the RF and decoder host.
-Scanner listening audio should play on the browser host, not on the Pi audio
-device.
+The Raspberry Pi is the RF and OP25 decoder host. Scanner listening audio is
+played on the browser host, not on the Pi speaker, HDMI audio, ALSA device, or
+Pi desktop audio session.
 
-## V0.3C scaffold
+## Proven milestones
 
-V0.3C proves the browser-side audio permission and playback path first:
+- V0.3C proved browser-host playback with a generated Web Audio test tone.
+- V0.3D proved real clear OP25 voice audio through the browser path.
+- V0.3E attempted jitter buffering and de-click smoothing, but live testing made
+  the audio worse, producing metallic/garbled voice-like bursts.
+- V0.3F restores the raw V0.3D-style bridge as the working baseline.
 
-- the dashboard includes a Browser Audio Output panel,
-- the user must click Enable Browser Audio to satisfy browser autoplay policy,
-- the browser creates a Web Audio API context, and
-- the browser can play a generated test tone without any committed WAV assets.
+## Current baseline
 
-No Pi speaker, ALSA output, HDMI audio, or desktop audio configuration is
-required for this milestone.
+The working audio path is:
 
-## V0.3D live bridge
+```text
+OP25 UDP PCM audio -> Pi browser-audio bridge -> HTTP WAV stream -> browser host speakers
+```
 
-V0.3D proves clear OP25 decoded audio can be delivered to a browser host:
+The bridge serves:
 
-- OP25 runs from the validated runtime marker,
-- OP25 UDP audio output is directed to localhost on the Pi,
-- a small Python bridge exposes a browser-readable WAV stream at `/audio.wav`,
-- encrypted traffic remains muted/skipped by the OP25 crypt behavior, and
-- audio playback happens on the browser host.
+```text
+/audio.wav
+/api/audio/status
+/test-tone.wav
+```
 
-## V0.3E audio quality stabilization
+The raw bridge intentionally does not smooth, de-click, or mix PCM frames across
+P25 voice gaps. It fills no-audio periods with silence frames so the browser
+stream stays open.
 
-V0.3E adds conservative stream-quality improvements to the bridge:
+## Safety
 
-- a small jitter/prebuffer before audible packets,
-- frame-boundary de-click smoothing,
-- underrun and silence-chunk counters in `/api/audio/status`, and
-- live-test options for tuning prebuffer and de-click behavior.
-
-The first known-good values are `--prebuffer-chunks 8` and
-`--declick-samples 12`. If audio sounds delayed but clean, reduce prebuffer. If
-metallic clicks remain around transmission starts/stops, increase de-click
-slightly. P25 vocoder artifacts caused by weak RF or marginal decode may still
-be audible and should be treated separately from browser stream artifacts.
+Encrypted traffic remains out of scope for playback. Encrypted calls must be
+muted/skipped only. The project must not attempt decryption, key recovery, key
+loading, or bypass.

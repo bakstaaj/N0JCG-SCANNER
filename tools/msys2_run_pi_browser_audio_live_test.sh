@@ -8,8 +8,8 @@ LOCAL_DOWNLOAD_DIR="${LOCAL_DOWNLOAD_DIR:-/c/Users/jim/Downloads/pi-p25-command-
 SECONDS_TO_RUN=600
 HTTP_PORT=8072
 UDP_PORT=23456
-PREBUFFER_CHUNKS=8
-DECLICK_SAMPLES=12
+PREBUFFER_CHUNKS=0
+DECLICK_SAMPLES=0
 PI_PASSWORD_ARG=""
 
 if [[ -f .env ]]; then
@@ -28,7 +28,7 @@ usage() {
 Usage:
   ./tools/msys2_run_pi_browser_audio_live_test.sh [options]
 
-Runs the V0.3E browser-audio live listening test on the Pi and pulls the log
+Runs the V0.3F raw browser-audio live listening test on the Pi and pulls the log
 back to /c/Users/jim/Downloads/pi-p25-command-logs after it finishes.
 
 Options:
@@ -38,8 +38,8 @@ Options:
   --seconds N              Test duration. Default: 600
   --http-port N            Browser audio HTTP port. Default: 8072
   --udp-port N             OP25 UDP PCM port. Default: 23456
-  --prebuffer-chunks N     Bridge jitter prebuffer. Default: 8
-  --declick-samples N      Samples smoothed at frame boundaries. Default: 12
+  --prebuffer-chunks N     Accepted for compatibility; ignored in raw V0.3F mode
+  --declick-samples N      Accepted for compatibility; ignored in raw V0.3F mode
   --dest PATH              Local MSYS2 destination directory
   --password PASS          Pi password for sshpass. Prefer PI_PASSWORD in .env.
   -h, --help               Show this help
@@ -64,18 +64,6 @@ while [[ "$#" -gt 0 ]]; do
     *) echo "FAIL: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
-
-for numeric in SECONDS_TO_RUN HTTP_PORT UDP_PORT PREBUFFER_CHUNKS DECLICK_SAMPLES; do
-  value="${!numeric}"
-  if ! [[ "$value" =~ ^[0-9]+$ ]]; then
-    echo "FAIL: ${numeric} must be a non-negative integer" >&2
-    exit 2
-  fi
-done
-if [[ "$SECONDS_TO_RUN" -le 0 || "$HTTP_PORT" -le 0 || "$UDP_PORT" -le 0 ]]; then
-  echo "FAIL: seconds and ports must be positive" >&2
-  exit 2
-fi
 
 if [[ "$PI_HOST" == *@* ]]; then
   PI_USER="${PI_HOST%@*}"
