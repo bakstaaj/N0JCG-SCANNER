@@ -41,14 +41,16 @@ function commandText(command) {
   return '';
 }
 
+
 function browserAudioStreamUrl(payload) {
-  if (payload?.stream_url) return payload.stream_url;
-  return `http://${window.location.hostname}:8072/audio.wav`;
+  const port = Number(payload?.http_port || 8072);
+  return `http://${window.location.hostname}:${port}/audio.wav`;
 }
 
+
 function browserAudioToneUrl(payload) {
-  if (payload?.test_tone_url) return payload.test_tone_url;
-  return `http://${window.location.hostname}:8072/test-tone.wav`;
+  const port = Number(payload?.http_port || 8072);
+  return `http://${window.location.hostname}:${port}/test-tone.wav`;
 }
 
 function extractOp25HttpListener(status) {
@@ -77,7 +79,33 @@ function setButtonsForState(status) {
   if (stopBtn) stopBtn.disabled = !running;
 }
 
+async
 async function fetchJson(url, options = {}) {
+  const controller = new AbortController();
+  const timeoutMs = Number(options.timeoutMs || 6000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const { timeoutMs: _ignoredTimeoutMs, ...fetchOptions } = options;
+    const response = await fetch(url, {
+      cache: 'no-store',
+      signal: controller.signal,
+      ...fetchOptions,
+    });
+    const text = await response.text();
+    let payload = {};
+    try {
+      payload = text ? JSON.parse(text) : {};
+    } catch (error) {
+      payload = { ok: false, error: `Invalid JSON: ${error.message}`, raw: text };
+    }
+    if (!response.ok) {
+      throw new Error(payload.error || `HTTP ${response.status}`);
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeout);
+  }
+}) {
   const response = await fetch(url, {
     cache: 'no-store',
     ...options,
@@ -111,10 +139,6 @@ function renderBrowserAudioState(payload = browserAudioStatus) {
   setText('browserAudioLastAudio', bridge.last_audio_age_seconds == null ? '-' : `${bridge.last_audio_age_seconds}s ago`);
   setText('browserAudioDevice', 'Browser default');
   setText('browserAudioLastEvent', browserAudioLastEvent);
-  const audio = field('browserAudioPlayer');
-  if (audio && running && !audio.src) {
-    audio.src = browserAudioStreamUrl(status);
-  }
 }
 
 async function refreshAudioStatus() {
@@ -462,4 +486,4 @@ refreshStatus();
 refreshConfig();
 refreshAudioStatus();
 setInterval(refreshStatus, 3000);
-setInterval(refreshAudioStatus, 3000);
+setInterval(refreshAudioStatus, 10000);

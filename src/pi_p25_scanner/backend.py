@@ -115,15 +115,35 @@ def unique_ports(*groups: list[int]) -> list[int]:
     return ports
 
 
+
 def request_hostname(host_header: str | None) -> str:
+    """Return a browser-usable host for companion services such as audio.
+
+    The browser must not receive 127.x or localhost for a Pi-hosted stream,
+    because that would point back at the browser machine. Prefer the HTTP Host
+    header that loaded the scanner UI; otherwise choose a non-loopback local IP.
+    """
     value = (host_header or "").strip()
     if value:
-        return value.split(":", 1)[0]
+        host = value.split(":", 1)[0].strip("[]")
+        if host and host not in {"localhost", "127.0.0.1", "127.0.1.1", "::1"}:
+            return host
+    candidates: list[str] = []
     try:
-        return socket.gethostbyname(socket.gethostname())
+        _hostname, _aliases, addrs = socket.gethostbyname_ex(socket.gethostname())
+        candidates.extend(addrs)
     except OSError:
-        return "127.0.0.1"
-
+        pass
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            candidates.append(sock.getsockname()[0])
+    except OSError:
+        pass
+    for candidate in candidates:
+        if candidate and not candidate.startswith("127."):
+            return candidate
+    return "127.0.0.1"
 
 @dataclass
 class ScannerStatus:
@@ -323,6 +343,7 @@ class ScannerManager:
             return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
         return {"ok": False, "error": "audio bridge status payload was not an object"}
 
+
     def audio_status(self, host_header: str | None = None) -> dict[str, Any]:
         with self.lock:
             process = self.audio_process
@@ -337,7 +358,7 @@ class ScannerManager:
         return {
             "ok": True,
             "enabled": True,
-            "mode": "raw-clear-v0.3o",
+            "mode": "raw-clear-v0.3q",
             "running": running,
             "pid": pid,
             "http_port": AUDIO_BRIDGE_PORT,
@@ -639,7 +660,8 @@ class ScannerManager:
             message = f"OP25 proxy error: {type(exc).__name__}: {exc}\n".encode("utf-8")
             return 502, "text/plain; charset=utf-8", message
 
-    def status_payload(self) -> dict[str, Any]:
+
+    def status_payload(self, host_header: str | None = None) -> dict[str, Any]:
         with self.lock:
             self.status.config = active_config_metadata()
             if self.process is not None and self.process.poll() is None:
@@ -648,13 +670,38 @@ class ScannerManager:
             else:
                 self.status.decoder_process["running"] = False
                 self.status.decoder_process["pid"] = None
-            self.status.decoder_process["validated_marker"] = validated_command_marker_metadata(PROJECT_ROOT)
+            audio_process = self.audio_process
+            audio_running = audio_process is not None and audio_process.poll() is None
+            if audio_process is not None and not audio_running:
+                self.audio_process = None
+            hostname = request_hostname(host_header)
+            self.status.browser_audio = {
+                "ok": True,
+                "enabled": True,
+                "mode": "raw-clear-v0.3q",
+                "running": audio_running,
+                "pid": audio_process.pid if audio_running else None,
+                "http_port": AUDIO_BRIDGE_PORT,
+                "udp_port": AUDIO_BRIDGE_UDP_PORT,
+                "stream_url": f"http://{hostname}:{AUDIO_BRIDGE_PORT}/audio.wav",
+                "test_tone_url": f"http://{hostname}:{AUDIO_BRIDGE_PORT}/test-tone.wav",
+                "script": str(AUDIO_BRIDGE_SCRIPT),
+                "log": str(AUDIO_BRIDGE_LOG),
+                "bridge_status": {},
+            }
+            marker_meta = validated_command_marker_metadata(PROJECT_ROOT)
+            try:
+                validated = build_validated_op25_command(PROJECT_ROOT)
+            except LaunchConfigError:
+                validated = None
+            if validated is not None:
+                marker_meta = validated.to_status_dict()
+                self.status.decoder_process["start_enabled"] = True
+            self.status.decoder_process["validated_marker"] = marker_meta
             self.status.log_tail = list(self.log_lines)
             self.status.activity_summary = self.activity_tracker.snapshot()
-            self.status.browser_audio = self.audio_status()
             self.status.updated_utc = time.time()
             return asdict(self.status)
-
 
 MANAGER = ScannerManager()
 
@@ -675,7 +722,7 @@ def load_config_payload() -> dict[str, Any]:
 
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "PiP25Scanner/0.3O"
+    server_version = "PiP25Scanner/0.3Q"
 
     def _send_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         data = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
@@ -728,7 +775,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._proxy_op25()
             return
         if self.path == "/api/status":
-            self._send_json(MANAGER.status_payload())
+            self._send_json(MANAGER.status_payload(self.headers.get("Host")))
             return
         if self.path == "/api/config":
             self._send_json(load_config_payload())
