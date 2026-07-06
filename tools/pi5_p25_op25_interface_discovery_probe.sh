@@ -357,6 +357,11 @@ def make_report(summary: dict[str, Any]) -> tuple[str, int, int, int]:
     lines.append(json.dumps(status_summary, indent=2, sort_keys=True))
     lines.append('```')
     lines.append('')
+    lines.append('## Backend Probe Diagnostics')
+    lines.append('```json')
+    lines.append(json.dumps(summary.get('backend_probe') or {}, indent=2, sort_keys=True))
+    lines.append('```')
+    lines.append('')
     lines.append('## Listening TCP Sockets')
     lines.append('```text')
     listener_text = str(summary.get('listeners') or 'none')
@@ -488,23 +493,29 @@ def main() -> int:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = utc_stamp()
     started_by_probe = False
+    start_response: dict[str, Any] | None = None
+    stop_response: dict[str, Any] | None = None
     initial_status = get_json(f'{args.backend_url}/api/status', timeout=2.0)
     if initial_status is None:
         print(f'FAIL: backend not reachable: {args.backend_url}')
         print('SUMMARY: PASS=0 WARN=0 FAIL=1')
         print('FINAL: FAIL')
         return 1
+
+    status_samples: list[dict[str, Any]] = [initial_status]
     if not status_running(initial_status) and not args.no_start:
-        started = post_json(f'{args.backend_url}/api/scanner/start', timeout=4.0)
-        if started is not None:
+        start_response = post_json(f'{args.backend_url}/api/scanner/start', timeout=4.0)
+        if start_response is not None:
             started_by_probe = True
             time.sleep(2)
-    status_samples, _running_seen = collect_status_samples(args.backend_url, args.seconds, args.interval)
+
+    collected_samples, _running_seen = collect_status_samples(args.backend_url, args.seconds, args.interval)
+    status_samples.extend(collected_samples)
     final_status = get_json(f'{args.backend_url}/api/status', timeout=2.0)
     if final_status is not None:
         status_samples.append(final_status)
     if started_by_probe:
-        post_json(f'{args.backend_url}/api/scanner/stop', timeout=4.0)
+        stop_response = post_json(f'{args.backend_url}/api/scanner/stop', timeout=4.0)
         stopped_status = get_json(f'{args.backend_url}/api/status', timeout=2.0)
         if stopped_status is not None:
             status_samples.append(stopped_status)
@@ -515,6 +526,14 @@ def main() -> int:
     ports = parse_ports(args.ports)
     summary = {
         'status_summary': summarize_status(status_samples),
+        'backend_probe': {
+            'backend_url': args.backend_url,
+            'initial_status_captured': initial_status is not None,
+            'start_requested': not args.no_start and not status_running(initial_status),
+            'start_response_seen': start_response is not None,
+            'stop_response_seen': stop_response is not None,
+            'status_samples_total': len(status_samples),
+        },
         'op25_candidate_dirs': [str(path) for path in source_dirs],
         'listeners': probe_listeners(),
         'http_results': probe_http_interfaces(ports),

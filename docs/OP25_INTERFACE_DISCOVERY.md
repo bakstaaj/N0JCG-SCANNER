@@ -20,3 +20,6 @@ Run:
 ```
 
 Reports are written under `.p25_op25_interface_discovery_reports/`.
+## Status capture behavior
+
+The interface discovery probe must preserve the initial `/api/status` snapshot before it starts the scanner. If scanner startup temporarily prevents additional status polling, that condition is diagnostic evidence and should be reported as WARN, not as a hard failure, as long as the backend was initially reachable and the probe can still inspect OP25 source/interface candidates.
