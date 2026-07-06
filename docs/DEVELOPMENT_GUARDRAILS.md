@@ -42,3 +42,9 @@ These guardrails capture project-specific lessons learned while building and val
 - Avoid embedded Python triple-quoted strings for generating shell scripts, JSONL fixtures, heredocs, or quote-heavy content.
 - Validate JSONL analysis with a real temporary JSONL fixture before commit whenever capture/analyzer behavior changes.
 - Patch scripts must verify the working tree is clean before changing files; if dirty, preserve diffs/backups before any reset or overwrite.
+
+## OP25 metadata discovery guardrails
+
+- Interface/metadata discovery patches must avoid guessing OP25 parser behavior when live evidence shows no active TGID or voice-frequency lines.
+- Before adding a new active-call parser, first capture source/interface evidence or a real OP25 log sample containing the field being parsed.
+- Discovery probes should warn, not fail, when an optional OP25 HTTP/terminal/status interface is not present.

@@ -302,3 +302,7 @@ V0.2M classifies known OP25 source-tree app paths as trusted decoder candidates 
 ## V0.2N OP25 metadata discovery
 
 V0.2N adds `tools/pi5_p25_op25_metadata_discovery_probe.sh`, a live evidence probe that classifies OP25 backend log-tail lines into active TGID candidates, voice-frequency candidates, configured whitelist/blacklist TGID lines, plaintext voice frames, encrypted metadata, and control-channel lines. This is used to discover the exact active-call metadata format emitted by the installed OP25 build before extending parser behavior.
+
+## V0.2O OP25 interface discovery
+
+V0.2O adds `tools/pi5_p25_op25_interface_discovery_probe.sh`, a Pi-side discovery probe that checks backend status snapshots, localhost listeners, possible OP25 HTTP/status endpoints, and OP25 source/app files for metadata interface clues. This is used after V0.2N when OP25 log text shows control lock and plaintext voice frames but no active TGID or voice-frequency metadata.
