@@ -3,13 +3,14 @@
 This module intentionally only consumes a command marker produced by the
 bounded Pi-side live command probe. It does not guess OP25 command lines.
 
-V0.3O recovery note:
 The web UI depends on marker metadata from /api/status to decide whether the
-Start Scanner button can be enabled. Earlier metadata only reported that the
-marker file existed, but did not validate the marker fields until Start was
-pressed. This caused the UI to disable Start even though the backend start path
-could launch from the validated marker. Metadata now performs the same safe
-readiness checks used by the launcher and exposes start_ready/validated status.
+Start Scanner button can be enabled. Metadata performs the same safe readiness
+checks used by the launcher and exposes start_ready/validated status.
+
+V0.3U note:
+The validated OP25 command also enables UDP PCM output for the independent raw
+browser-audio bridge service:
+  -w -W 127.0.0.1 -u 23456
 """
 
 from __future__ import annotations
@@ -31,6 +32,8 @@ REQUIRED_MARKER_FIELDS = [
     "P25_VALIDATED_RX_PPM",
     "P25_VALIDATED_RX_TRUNK_TSV",
 ]
+DEFAULT_AUDIO_HOST = "127.0.0.1"
+DEFAULT_AUDIO_PORT = "23456"
 
 
 class LaunchConfigError(RuntimeError):
@@ -120,11 +123,10 @@ def _metadata_from_values(marker: Path, values: dict[str, str]) -> dict[str, Any
         metadata["error"] = f"validated OP25 app directory does not exist: {cwd}"
         return metadata
 
-    # Start first regenerates the runtime OP25 config, so a missing trunk.tsv at
-    # idle status time should not disable the UI Start button. Report it as a
-    # warning, but keep the marker start-ready if the launcher inputs are valid.
     if not trunk_tsv.exists():
-        metadata["warnings"].append(f"validated OP25 trunk TSV is not present yet; Start will regenerate config: {trunk_tsv}")
+        metadata["warnings"].append(
+            f"validated OP25 trunk TSV is not present yet; Start will regenerate config: {trunk_tsv}"
+        )
 
     metadata["validated"] = True
     metadata["start_ready"] = True
@@ -155,6 +157,19 @@ def validated_command_marker_metadata(project_root: Path) -> dict[str, Any]:
             "error": str(exc),
         }
     return _metadata_from_values(marker, values)
+
+
+def _add_raw_audio_udp_args(command: list[str], values: dict[str, str]) -> list[str]:
+    updated = list(command)
+    audio_host = values.get("P25_VALIDATED_RX_AUDIO_HOST", DEFAULT_AUDIO_HOST).strip() or DEFAULT_AUDIO_HOST
+    audio_port = values.get("P25_VALIDATED_RX_AUDIO_PORT", DEFAULT_AUDIO_PORT).strip() or DEFAULT_AUDIO_PORT
+    if "-w" not in updated:
+        updated.append("-w")
+    if "-W" not in updated:
+        updated.extend(["-W", audio_host])
+    if "-u" not in updated:
+        updated.extend(["-u", audio_port])
+    return updated
 
 
 def build_validated_op25_command(project_root: Path) -> ValidatedOp25Command | None:
@@ -203,6 +218,8 @@ def build_validated_op25_command(project_root: Path) -> ValidatedOp25Command | N
     crypt_behavior = values.get("P25_VALIDATED_RX_CRYPT_BEHAVIOR", "").strip()
     if crypt_behavior:
         command.extend(["--crypt-behavior", crypt_behavior])
+
+    command = _add_raw_audio_udp_args(command, values)
 
     env = os.environ.copy()
     env["PYTHONPATH"] = values["P25_VALIDATED_RX_PYTHONPATH"]

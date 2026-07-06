@@ -10,7 +10,7 @@
   <main class="shell">
     <header class="hero">
       <div>
-        <p class="eyebrow">V0.3C Browser Audio Scaffold</p>
+        <p class="eyebrow">V0.3U One-Button Browser Audio</p>
         <h1>PI P25 Scanner</h1>
         <p>Web-controlled OP25 trunk scanner on port <strong>8070</strong>.</p>
       </div>
@@ -29,7 +29,7 @@
         <span id="dashboardStateBadge" class="badge">-</span>
       </div>
       <div class="controls primary-controls">
-        <button id="startBtn" type="button" class="primary">Start Scanner</button>
+        <button id="startBtn" type="button" class="primary">Start Scanner + Browser Audio</button>
         <button id="stopBtn" type="button" class="danger">Stop Scanner</button>
         <button id="refreshBtn" type="button">Refresh Status</button>
         <button id="generateConfigBtn" type="button">Generate OP25 Config</button>
@@ -63,19 +63,20 @@
       <div class="section-title">
         <div>
           <h2>Browser Audio Output</h2>
-          <p class="hint">Scanner audio is intended to play on this browser host, not through a Pi speaker.</p>
+          <p class="hint">Start Scanner is the primary audio gesture. Audio plays through this browser host, not through a Pi speaker.</p>
         </div>
-        <span id="browserAudioBadge" class="badge badge-warn">Disabled</span>
+        <span id="browserAudioBadge" class="badge badge-warn">Stopped</span>
       </div>
       <div class="controls primary-controls">
-        <button id="enableBrowserAudioBtn" type="button" class="primary">Enable Browser Audio</button>
-        <button id="playBrowserToneBtn" type="button" disabled>Play Browser Test Tone</button>
+        <button id="enableBrowserAudioBtn" type="button" class="primary">Enable / Resume Browser Audio</button>
+        <button id="playBrowserToneBtn" type="button">Play Browser Test Tone</button>
       </div>
+      <audio id="browserAudioPlayer" controls preload="none"></audio>
       <div class="grid status-grid audio-grid">
         <div><span>Output Device</span><strong id="browserAudioDevice">Browser default</strong></div>
-        <div><span>Audio Context</span><strong id="browserAudioContextState">not created</strong></div>
-        <div><span>Stream Source</span><strong id="browserAudioStreamSource">pending OP25 audio bridge</strong></div>
-        <div><span>Last Audio Event</span><strong id="browserAudioLastEvent">Enable browser audio to unlock playback.</strong></div>
+        <div><span>Audio Context</span><strong id="browserAudioContextState">HTML audio stream</strong></div>
+        <div><span>Stream Source</span><strong id="browserAudioStreamSource">pending scanner start</strong></div>
+        <div><span>Last Audio Event</span><strong id="browserAudioLastEvent">Click Start Scanner + Browser Audio.</strong></div>
       </div>
     </section>
 
