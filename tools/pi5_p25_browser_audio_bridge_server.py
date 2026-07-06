@@ -5,10 +5,8 @@ Receives OP25 UDP PCM frames on localhost and exposes a browser-readable WAV
 stream. The Raspberry Pi remains the RF/decoder host; playback happens in the
 browser host.
 
-V0.3F deliberately restores the raw V0.3D-style stream because the V0.3E
-jitter/de-click path made audio quality worse during live testing. This bridge
-keeps useful counters and startup behavior, but does not smooth or mix PCM
-frames across P25 voice gaps.
+V0.3G keeps the raw V0.3D-style PCM path and fixes shutdown behavior so stale
+bridge processes do not keep port 8072 bound after SIGTERM.
 """
 
 from __future__ import annotations
@@ -95,8 +93,8 @@ class AudioState:
     bytes_received: int = 0
     chunks_sent: int = 0
     silence_chunks_sent: int = 0
-    underruns: int = 0
     stream_clients: int = 0
+    underruns: int = 0
     started_utc: float = field(default_factory=time.time)
     last_packet_utc: float | None = None
     last_audio_utc: float | None = None
@@ -149,7 +147,7 @@ class AudioState:
         with self.lock:
             return {
                 "ok": True,
-                "mode": "raw-v0.3f",
+                "mode": "raw-v0.3g",
                 "sample_rate_hz": PCM_RATE_HZ,
                 "channels": PCM_CHANNELS,
                 "bits_per_sample": PCM_BITS,
@@ -214,7 +212,7 @@ class UdpReceiver(threading.Thread):
 
 
 class AudioHandler(BaseHTTPRequestHandler):
-    server_version = "PiP25BrowserAudioBridge/0.3F"
+    server_version = "PiP25BrowserAudioBridge/0.3G"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         return
@@ -279,11 +277,9 @@ class AudioHandler(BaseHTTPRequestHandler):
         self._send_json({"ok": False, "error": "not found"}, HTTPStatus.NOT_FOUND)
 
 
-class ReusableThreadingHTTPServer(ThreadingHTTPServer):
+class AudioServer(ThreadingHTTPServer):
     allow_reuse_address = True
 
-
-class AudioServer(ReusableThreadingHTTPServer):
     def __init__(self, server_address: tuple[str, int], handler_class: type[BaseHTTPRequestHandler], audio_state: AudioState) -> None:
         super().__init__(server_address, handler_class)
         self.audio_state = audio_state
@@ -326,9 +322,8 @@ def main() -> int:
     parser.add_argument("--udp-host", default=DEFAULT_UDP_HOST)
     parser.add_argument("--udp-port", type=int, default=DEFAULT_UDP_PORT)
     parser.add_argument("--max-queue-chunks", type=int, default=DEFAULT_MAX_QUEUE_CHUNKS)
-    # Kept for wrapper compatibility, intentionally ignored by the raw V0.3F bridge.
-    parser.add_argument("--prebuffer-chunks", type=int, default=0)
-    parser.add_argument("--declick-samples", type=int, default=0)
+    parser.add_argument("--prebuffer-chunks", type=int, default=0, help="ignored compatibility option")
+    parser.add_argument("--declick-samples", type=int, default=0, help="ignored compatibility option")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
 
@@ -336,8 +331,6 @@ def main() -> int:
         return self_test()
     if args.max_queue_chunks < 10:
         parser.error("--max-queue-chunks must be at least 10")
-    if args.port <= 0 or args.port > 65535 or args.udp_port <= 0 or args.udp_port > 65534:
-        parser.error("ports out of range")
 
     state = AudioState(max_queue_chunks=args.max_queue_chunks)
     receivers = [UdpReceiver(state, args.udp_host, args.udp_port), UdpReceiver(state, args.udp_host, args.udp_port + 1)]
@@ -347,23 +340,23 @@ def main() -> int:
     try:
         httpd = AudioServer((args.host, args.port), AudioHandler, state)
     except OSError as exc:
-        print(f"FAIL: HTTP bind failed on {args.host}:{args.port}: {exc}", flush=True)
+        print(f"FAIL: HTTP bind failed for {args.host}:{args.port}: {exc}", flush=True)
         for receiver in receivers:
             receiver.stop()
         return 1
 
-    def stop(_signum: int, _frame: Any) -> None:
-        for receiver in receivers:
-            receiver.stop()
-        httpd.shutdown()
+    def stop_now(_signum: int, _frame: Any) -> None:
+        raise SystemExit(0)
 
-    signal.signal(signal.SIGTERM, stop)
-    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGTERM, stop_now)
+    signal.signal(signal.SIGINT, stop_now)
     print(f"PI P25 raw browser audio bridge listening on http://{args.host}:{args.port}", flush=True)
     print(f"Receiving OP25 UDP PCM on {args.udp_host}:{args.udp_port} and {args.udp_port + 1}", flush=True)
-    print("Raw V0.3F mode: no jitter prebuffer, no de-click smoothing", flush=True)
+    print("Raw PCM mode: jitter/declick options are ignored", flush=True)
     try:
-        httpd.serve_forever()
+        httpd.serve_forever(poll_interval=0.5)
+    except (KeyboardInterrupt, SystemExit):
+        pass
     finally:
         for receiver in receivers:
             receiver.stop()
