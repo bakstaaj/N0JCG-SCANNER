@@ -2,6 +2,9 @@
 
 let currentConfig = null;
 let latestStatus = null;
+let browserAudioContext = null;
+let browserAudioEnabled = false;
+let browserAudioLastEvent = 'Enable browser audio to unlock playback.';
 
 function formatHz(value) {
   if (!value) return '-';
@@ -83,6 +86,66 @@ async function fetchJson(url, options = {}) {
   return payload;
 }
 
+function renderBrowserAudioState() {
+  const contextState = browserAudioContext ? browserAudioContext.state : 'not created';
+  const badgeText = browserAudioEnabled ? 'Enabled' : 'Disabled';
+  const badgeKind = browserAudioEnabled ? 'badge-ok' : 'badge-warn';
+  setBadge('browserAudioBadge', badgeText, badgeKind);
+  setText('browserAudioContextState', contextState);
+  setText('browserAudioDevice', 'Browser default');
+  setText('browserAudioStreamSource', 'pending OP25 audio bridge');
+  setText('browserAudioLastEvent', browserAudioLastEvent);
+  const toneBtn = field('playBrowserToneBtn');
+  if (toneBtn) toneBtn.disabled = !browserAudioEnabled;
+}
+
+async function enableBrowserAudio() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      throw new Error('Web Audio API is not supported by this browser');
+    }
+    if (!browserAudioContext) {
+      browserAudioContext = new AudioContextClass();
+    }
+    if (browserAudioContext.state === 'suspended') {
+      await browserAudioContext.resume();
+    }
+    browserAudioEnabled = true;
+    browserAudioLastEvent = `Browser audio enabled (${browserAudioContext.state}).`;
+  } catch (error) {
+    browserAudioEnabled = false;
+    browserAudioLastEvent = `Browser audio enable failed: ${error.message}`;
+  }
+  renderBrowserAudioState();
+}
+
+async function playBrowserTestTone() {
+  try {
+    if (!browserAudioContext || !browserAudioEnabled) {
+      await enableBrowserAudio();
+    }
+    if (!browserAudioContext || !browserAudioEnabled) {
+      return;
+    }
+    const oscillator = browserAudioContext.createOscillator();
+    const gain = browserAudioContext.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, browserAudioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.20, browserAudioContext.currentTime + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, browserAudioContext.currentTime + 0.45);
+    oscillator.connect(gain);
+    gain.connect(browserAudioContext.destination);
+    oscillator.start();
+    oscillator.stop(browserAudioContext.currentTime + 0.5);
+    browserAudioLastEvent = 'Played browser-generated test tone.';
+  } catch (error) {
+    browserAudioLastEvent = `Browser test tone failed: ${error.message}`;
+  }
+  renderBrowserAudioState();
+}
+
 function formatActivityEvent(event) {
   const pieces = [];
   if (event.tgid) pieces.push(`TGID ${event.tgid}`);
@@ -149,6 +212,7 @@ function renderStatus(status) {
   const state = status.scanner_state || '-';
 
   renderDashboard(status);
+  renderBrowserAudioState();
   setText('scannerState', state);
   setText('decoderEngine', status.decoder_engine || '-');
   setText('configSource', status.config?.source || '-');
@@ -340,7 +404,10 @@ document.getElementById('generateConfigBtn')?.addEventListener('click', () => po
 document.getElementById('loadConfigBtn')?.addEventListener('click', refreshConfig);
 document.getElementById('initLocalConfigBtn')?.addEventListener('click', initLocalConfig);
 document.getElementById('saveConfigBtn')?.addEventListener('click', saveConfig);
+document.getElementById('enableBrowserAudioBtn')?.addEventListener('click', enableBrowserAudio);
+document.getElementById('playBrowserToneBtn')?.addEventListener('click', playBrowserTestTone);
 
+renderBrowserAudioState();
 refreshStatus();
 refreshConfig();
 setInterval(refreshStatus, 3000);

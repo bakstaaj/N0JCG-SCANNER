@@ -67,6 +67,10 @@ body {
   background: linear-gradient(180deg, #243244, #1f2937);
 }
 
+.browser-audio-panel {
+  border-color: #2563eb;
+}
+
 .dashboard-topline,
 .section-title {
   align-items: center;
@@ -131,7 +135,8 @@ body {
 }
 
 .controls-panel .hint,
-.dashboard-panel .hint {
+.dashboard-panel .hint,
+.browser-audio-panel .hint {
   margin: 12px 0 0;
 }
 
@@ -196,6 +201,10 @@ button:disabled {
 
 .marker-grid {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.audio-grid {
+  margin-top: 14px;
 }
 
 .grid span {
@@ -275,7 +284,8 @@ summary {
 
 @media (max-width: 700px) {
   .hero,
-  .dashboard-topline {
+  .dashboard-topline,
+  .section-title {
     display: block;
   }
 
@@ -285,7 +295,8 @@ summary {
     text-align: left;
   }
 
-  .dashboard-topline .badge {
+  .dashboard-topline .badge,
+  .section-title .badge {
     margin-top: 10px;
   }
 }
