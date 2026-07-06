@@ -78,3 +78,10 @@ These guardrails capture project-specific lessons learned while building and val
 - Do not rely on terminal scrollback as the only evidence. Reports and summaries are useful, but a raw command transcript is required for troubleshooting failed runs.
 - Prefer task-specific report directories such as `.p25_<task>_reports/`. For ad-hoc Pi validation commands, use `tools/pi5_p25_run_with_log.sh` or an equivalent built-in tee capture.
 - When a command can run for more than a few seconds, preserve both the structured report files and the raw transcript path so the user can upload one local file instead of pasting a long console dump.
+
+## Upload-ready command transcripts
+
+- Long-running patch, recovery, validation, and live probe commands must preserve stdout/stderr in a local upload-ready transcript file instead of relying only on terminal scrollback.
+- Transcript helpers must print the absolute log directory and absolute log file path, verify that the file exists, and include the command exit status.
+- When a command runs on the Raspberry Pi, the handoff must include a supported MSYS2 pull path or helper so the Pi-side transcript can be copied into a Windows-local upload folder.
+- Relative report paths may be printed for convenience, but they must not be the only way to locate an upload artifact.
