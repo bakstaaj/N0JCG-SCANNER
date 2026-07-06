@@ -70,3 +70,11 @@ These guardrails capture project-specific lessons learned while building and val
 - Short runtime diagnostics must distinguish backend start-response success from sustained backend pollability.
 - If OP25 is launched with an HTTP terminal/listener argument such as `-l http:127.0.0.1:18091`, probes must verify both the command argument and the actual TCP listener.
 - Do not assume an OP25 HTTP endpoint exists just because a command line contains an HTTP listener argument.
+
+## Upload-ready command output logs
+
+- Future patch, recovery, and live probe scripts must write a complete upload-ready stdout/stderr transcript to a local timestamped text file.
+- The transcript path must be printed near the beginning of the script and again in the final summary.
+- Do not rely on terminal scrollback as the only evidence. Reports and summaries are useful, but a raw command transcript is required for troubleshooting failed runs.
+- Prefer task-specific report directories such as `.p25_<task>_reports/`. For ad-hoc Pi validation commands, use `tools/pi5_p25_run_with_log.sh` or an equivalent built-in tee capture.
+- When a command can run for more than a few seconds, preserve both the structured report files and the raw transcript path so the user can upload one local file instead of pasting a long console dump.

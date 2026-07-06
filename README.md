@@ -310,3 +310,13 @@ V0.2O adds `tools/pi5_p25_op25_interface_discovery_probe.sh`, a Pi-side discover
 ### V0.2T OP25 HTTP runtime probe
 
 `tools/pi5_p25_op25_http_runtime_probe.sh` performs a short live diagnostic of the OP25 HTTP terminal/listener path. It checks the backend start response, polls `/api/status`, extracts runtime HTTP ports such as `18091`, checks TCP listeners, and probes localhost HTTP paths.
+
+## Upload-ready command logs
+
+For long-running Pi validation commands, capture the full terminal transcript to an upload-ready local file:
+
+```bash
+./tools/pi5_p25_run_with_log.sh --label op25_probe -- ./tools/pi5_p25_op25_http_runtime_probe.sh --seconds 30 --interval 1 --yes
+```
+
+The helper writes stdout and stderr to `.p25_command_logs/<label>_<timestamp>.txt` and prints the log path at the beginning and end of the run.

@@ -81,3 +81,5 @@ Thumbs.db
 
 # V0.1K force LF index recovery reports
 .p25_v0_1k_force_lf_index_recovery_reports/
+
+.p25_command_logs/
