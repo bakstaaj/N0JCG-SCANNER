@@ -86,3 +86,40 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
   .checkbox-grid { grid-template-columns: repeat(5, 1fr); }
   .wizard-results { grid-template-columns: 260px 1fr; }
 }
+
+/* V0.4D RadioReference import panel */
+.rr-panel {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.06);
+}
+.section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.section-row p {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted, #aab2c0);
+}
+.compact-actions {
+  flex-wrap: wrap;
+}
+#rrStatusText {
+  max-height: 145px;
+  overflow: auto;
+  font-size: 0.76rem;
+}
+@media (max-width: 850px) {
+  .rr-panel {
+    padding: 10px;
+  }
+  #rrStatusText {
+    max-height: 110px;
+  }
+}

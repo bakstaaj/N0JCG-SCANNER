@@ -43,6 +43,13 @@ if __package__ in (None, ""):
     from pi_p25_scanner.op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
     from pi_p25_scanner.runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from pi_p25_scanner.runtime_activity import RuntimeActivityTracker
+    from pi_p25_scanner.radioreference_import import (
+        RadioReferenceError,
+        import_trunked_system,
+        radioreference_status,
+        save_credentials as save_radioreference_credentials,
+        test_login as test_radioreference_login,
+    )
 else:
     from .config_model import ConfigError
     from .config_store import (
@@ -62,6 +69,13 @@ else:
     from .op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
     from .runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from .runtime_activity import RuntimeActivityTracker
+    from .radioreference_import import (
+        RadioReferenceError,
+        import_trunked_system,
+        radioreference_status,
+        save_credentials as save_radioreference_credentials,
+        test_login as test_radioreference_login,
+    )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "web"
@@ -594,6 +608,9 @@ class Handler(SimpleHTTPRequestHandler):
         self._send_bytes(data, status, content_type)
 
     def do_GET(self) -> None:  # noqa: N802 - http.server method name
+        if self.path == "/api/radioreference/status":
+            self._send_json(radioreference_status())
+            return
         if self.path == "/api/op25/http-interface":
             self._send_json(MANAGER.op25_http_interface())
             return
@@ -617,6 +634,34 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802 - http.server method name
+        if self.path == "/api/radioreference/save-credentials":
+            try:
+                self._send_json(save_radioreference_credentials(self._read_json()), HTTPStatus.ACCEPTED)
+            except RadioReferenceError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if self.path == "/api/radioreference/test-login":
+            try:
+                self._send_json(test_radioreference_login(), HTTPStatus.ACCEPTED)
+            except RadioReferenceError as exc:
+                self._send_json({"ok": False, "error": str(exc), "status": radioreference_status()}, HTTPStatus.BAD_REQUEST)
+            return
+        if self.path == "/api/radioreference/import":
+            try:
+                request = self._read_json()
+                result = import_trunked_system(request)
+                if result.get("ok") and isinstance(result.get("config"), dict):
+                    saved = MANAGER.save_config(result["config"])
+                    manifest = MANAGER.generate_config()
+                    result["saved"] = saved
+                    result["generated_op25_config"] = manifest
+                    result["status"] = MANAGER.status_payload()
+                    self._send_json(result, HTTPStatus.ACCEPTED)
+                else:
+                    self._send_json(result, HTTPStatus.ACCEPTED)
+            except (RadioReferenceError, ConfigError) as exc:
+                self._send_json({"ok": False, "error": str(exc), "status": radioreference_status()}, HTTPStatus.BAD_REQUEST)
+            return
         if self.path == "/api/scanner/start":
             payload, status = MANAGER.start()
             self._send_json(payload, status)

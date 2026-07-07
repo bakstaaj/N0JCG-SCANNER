@@ -78,6 +78,28 @@
           <label>County<input id="wizardCounty" type="text" value="Maricopa" autocomplete="off"></label>
           <label>City<input id="wizardCity" type="text" value="Mesa" autocomplete="off"></label>
         </div>
+        <div class="rr-panel">
+          <div class="section-row">
+            <div>
+              <strong>RadioReference Import</strong>
+              <p>Uses the official RadioReference SOAP API. Credentials stay local on this Pi.</p>
+            </div>
+            <span id="rrStatusBadge" class="pill warn">Not configured</span>
+          </div>
+          <div class="wizard-grid">
+            <label>RR API Key<input id="rrAppKey" type="password" autocomplete="off"></label>
+            <label>RR Username<input id="rrUsername" type="text" autocomplete="username"></label>
+            <label>RR Password<input id="rrPassword" type="password" autocomplete="current-password"></label>
+            <label>RR System ID, optional<input id="rrSystemId" type="number" inputmode="numeric" placeholder="Use when location search returns multiple systems"></label>
+            <label>RR Site ID, optional<input id="rrSiteId" type="number" inputmode="numeric" placeholder="Optional exact trunked site"></label>
+          </div>
+          <div class="wizard-actions compact-actions">
+            <button id="saveRrCredentialsBtn" type="button">Save RR Login</button>
+            <button id="testRrLoginBtn" type="button">Test Login</button>
+            <button id="importRrBtn" type="button" class="primary">Import from RadioReference</button>
+          </div>
+          <pre id="rrStatusText">RadioReference credentials are not configured.</pre>
+        </div>
         <div class="category-panel">
           <span class="label">Talkgroup Categories</span>
           <div id="categoryChoices" class="checkbox-grid"></div>

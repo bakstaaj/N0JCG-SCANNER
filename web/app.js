@@ -67,6 +67,20 @@ function containsQuery(values, query) {
 
 function audioStreamUrl() { return `http://${window.location.hostname}:8072/audio.wav`; }
 function testToneUrl() { return `http://${window.location.hostname}:8072/test-tone.wav`; }
+function optionalNumber(id) {
+  const value = String(field(id)?.value || '').trim();
+  return value ? Number(value) : null;
+}
+function selectedLocationPayload() {
+  return {
+    state: String(field('wizardState')?.value || '').trim(),
+    county: String(field('wizardCounty')?.value || '').trim(),
+    city: String(field('wizardCity')?.value || '').trim(),
+    categories: selectedCategories(),
+    system_id: optionalNumber('rrSystemId'),
+    site_id: optionalNumber('rrSiteId'),
+  };
+}
 
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, { cache: 'no-store', ...options });
@@ -490,6 +504,82 @@ async function applyWizardConfig() {
   } catch (error) { setText('wizardPreview', `Apply failed: ${error.message}`); }
 }
 
+function renderRadioReferenceStatus(payload) {
+  const configured = Boolean(payload?.configured);
+  const zeepOk = Boolean(payload?.zeep?.available);
+  const badgeText = configured ? (zeepOk ? 'RR Ready' : 'Need zeep') : 'Not configured';
+  const badgeKind = configured && zeepOk ? 'ok' : 'warn';
+  setBadge('rrStatusBadge', badgeText, badgeKind);
+  const safe = { ...(payload || {}) };
+  if (safe.password) safe.password = '<hidden>';
+  setText('rrStatusText', JSON.stringify(safe, null, 2));
+}
+
+async function refreshRadioReferenceStatus() {
+  try {
+    const status = await fetchJson('/api/radioreference/status');
+    renderRadioReferenceStatus(status);
+  } catch (error) {
+    setBadge('rrStatusBadge', 'RR Offline', 'bad');
+    setText('rrStatusText', `RadioReference status error: ${error.message}`);
+  }
+}
+
+async function saveRadioReferenceCredentials() {
+  const payload = {
+    app_key: String(field('rrAppKey')?.value || '').trim(),
+    username: String(field('rrUsername')?.value || '').trim(),
+    password: String(field('rrPassword')?.value || ''),
+  };
+  try {
+    const status = await fetchJson('/api/radioreference/save-credentials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    field('rrPassword').value = '';
+    field('rrAppKey').value = '';
+    renderRadioReferenceStatus(status);
+    setText('lastEvent', 'Saved RadioReference credentials locally on the Pi.');
+  } catch (error) {
+    setText('rrStatusText', `Save RadioReference login failed: ${error.message}`);
+  }
+}
+
+async function testRadioReferenceLogin() {
+  try {
+    const result = await fetchJson('/api/radioreference/test-login', { method: 'POST' });
+    setBadge('rrStatusBadge', 'Login OK', 'ok');
+    setText('rrStatusText', JSON.stringify(result, null, 2));
+    setText('lastEvent', 'RadioReference login test passed.');
+  } catch (error) {
+    setBadge('rrStatusBadge', 'Login failed', 'bad');
+    setText('rrStatusText', `RadioReference login failed: ${error.message}`);
+  }
+}
+
+async function importRadioReferenceSystem() {
+  try {
+    const result = await fetchJson('/api/radioreference/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(selectedLocationPayload()),
+    });
+    setText('rrStatusText', JSON.stringify(result, null, 2));
+    if (result.ok && result.config) {
+      await refreshConfig();
+      await refreshStatus();
+      showScreen('dashboardScreen');
+      setText('lastEvent', `Imported RadioReference system ${result.system_id}; generated OP25 config.`);
+    } else if (result.needs_selection) {
+      setText('lastEvent', 'RadioReference needs a System ID selection. Enter one from the matches and import again.');
+    }
+  } catch (error) {
+    setBadge('rrStatusBadge', 'Import failed', 'bad');
+    setText('rrStatusText', `RadioReference import failed: ${error.message}`);
+  }
+}
+
 function attachEventHandlers() {
   field('menuBtn')?.addEventListener('click', openDrawer);
   field('closeDrawerBtn')?.addEventListener('click', closeDrawer);
@@ -503,6 +593,9 @@ function attachEventHandlers() {
   field('generateConfigBtn')?.addEventListener('click', generateOp25Config);
   field('findSystemsBtn')?.addEventListener('click', findSystems);
   field('applyWizardBtn')?.addEventListener('click', applyWizardConfig);
+  field('saveRrCredentialsBtn')?.addEventListener('click', saveRadioReferenceCredentials);
+  field('testRrLoginBtn')?.addEventListener('click', testRadioReferenceLogin);
+  field('importRrBtn')?.addEventListener('click', importRadioReferenceSystem);
   field('wizardSystemSelect')?.addEventListener('change', renderWizardPreview);
   field('categoryChoices')?.addEventListener('change', renderWizardPreview);
   field('browserAudioPlayer')?.addEventListener('play', () => updateAudioPanel('Browser audio playing'));
@@ -512,6 +605,7 @@ function attachEventHandlers() {
 attachEventHandlers();
 updateAudioPanel();
 loadCatalog().catch((error) => setText('wizardPreview', `Catalog load failed: ${error.message}`));
+refreshRadioReferenceStatus();
 refreshStatus();
 refreshConfig();
 setInterval(refreshStatus, 3000);
