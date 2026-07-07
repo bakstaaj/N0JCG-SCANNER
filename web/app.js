@@ -116,9 +116,29 @@ function formatActivityEvent(event) {
   return pieces.length ? pieces.join(' | ') : (event.line || '-');
 }
 
+function bestTalkgroup(status) {
+  const recent = Array.isArray(status?.activity_summary?.recent_events) ? status.activity_summary.recent_events : [];
+  const fallback = [...recent].reverse().find((event) => event && (event.tgid || event.talkgroup_label));
+  const tgid = status?.active_tgid || status?.last_active_tgid || fallback?.tgid || null;
+  const configuredLabel = tgid ? status?.talkgroup_catalog?.labels?.[String(tgid)] : '';
+  const rawLabel = status?.active_talkgroup_label || status?.last_active_talkgroup_label || fallback?.talkgroup_label || configuredLabel || '';
+  const process = status?.decoder_process || {};
+  const running = Boolean(process.running);
+  const labelOnly = rawLabel || (tgid ? 'Talkgroup activity' : (running ? 'Scanning for voice activity' : 'Waiting for activity'));
+  const activeNow = Boolean(status?.active_tgid || status?.active_talkgroup_label);
+  const prefix = activeNow ? 'Active' : (tgid ? 'Last heard' : '');
+  return {
+    has_talkgroup: Boolean(tgid || rawLabel),
+    tgid,
+    tgid_text: tgid ? `TGID ${tgid}` : '-',
+    label: prefix ? `${prefix}: ${labelOnly}` : labelOnly,
+    short_label: tgid ? `${labelOnly} · TGID ${tgid}` : labelOnly,
+    voice_frequency_hz: status?.active_voice_frequency_hz || status?.last_active_voice_frequency_hz || fallback?.voice_frequency_hz || null,
+  };
+}
+
 function renderActivitySummary(activity) {
-  setText('activityUniqueTgids', activity?.unique_tgid_count ?? 0);
-  setText('activityClearEvents', activity?.clear_voice_events ?? 0);
+  setText('activityUniqueTgids', activity?.unique_tgid_count ?? 0);  setText('activityClearEvents', activity?.clear_voice_events ?? 0);
   setText('activityEncryptedEvents', activity?.encrypted_events ?? 0);
   setText('activityMutedEvents', activity?.muted_events ?? 0);
   const recent = Array.isArray(activity?.recent_events) ? activity.recent_events : [];
@@ -132,14 +152,14 @@ function renderDashboard(status) {
   const ready = markerIsReady(marker) || Boolean(process.start_enabled);
   const state = status.scanner_state || '-';
   const listener = extractOp25HttpListener(status);
-  const label = status.active_talkgroup_label || (status.active_tgid ? `TGID ${status.active_tgid}` : 'Waiting for activity');
-  setText('dashboardSummary', running ? `Running on ${formatHz(status.active_control_frequency_hz)}` : (ready ? 'Ready to start' : 'Not launch-ready'));
+  const talkgroup = bestTalkgroup(status);
+  setText('dashboardSummary', running ? (talkgroup.has_talkgroup ? talkgroup.short_label : `Running on ${formatHz(status.active_control_frequency_hz)}`) : (ready ? 'Ready to start' : 'Not launch-ready'));
   setText('scannerState', state);
   setText('decoderPid', process.pid || '-');
   setText('controlFrequency', formatHz(status.active_control_frequency_hz));
-  setText('voiceFrequency', formatHz(status.active_voice_frequency_hz));
-  setText('activeTgid', status.active_tgid || '-');
-  setText('activeTalkgroupLabel', label);
+  setText('voiceFrequency', formatHz(talkgroup.voice_frequency_hz));
+  setText('activeTgid', talkgroup.tgid_text);
+  setText('activeTalkgroupLabel', talkgroup.label);
   setText('p25Phase', status.p25_phase || '-');
   setText('op25HttpListener', listener ? listener.piLocalUrl : '-');
   setText('launchReady', ready ? 'yes' : 'no');

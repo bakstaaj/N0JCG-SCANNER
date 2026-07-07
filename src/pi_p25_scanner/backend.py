@@ -139,6 +139,11 @@ class ScannerStatus:
     active_voice_frequency_hz: int | None = None
     active_tgid: int | None = None
     active_talkgroup_label: str = ""
+    last_active_tgid: int | None = None
+    last_active_talkgroup_label: str = ""
+    last_active_voice_frequency_hz: int | None = None
+    last_active_updated_utc: float | None = None
+    talkgroup_catalog: dict[str, Any] = field(default_factory=dict)
     p25_phase: str = "unknown"
     encrypted: bool = False
     muted: bool = False
@@ -158,6 +163,7 @@ class ScannerManager:
         self.log_lines: deque[str] = deque(maxlen=LOG_TAIL_LIMIT)
         self.runtime_parser = RuntimeStatusParser()
         self.activity_tracker = RuntimeActivityTracker()
+        self.talkgroup_labels: dict[int, str] = {}
         self.lock = threading.RLock()
         self.refresh_capability()
         self.refresh_config_summary()
@@ -170,6 +176,14 @@ class ScannerManager:
         if message not in self.status.warnings:
             self.status.warnings.append(message)
 
+    def _talkgroup_label_for_tgid(self, tgid: int | None) -> str:
+        if tgid is None:
+            return ""
+        try:
+            return self.talkgroup_labels.get(int(tgid), "")
+        except (TypeError, ValueError):
+            return ""
+
     def _apply_runtime_status_update(self, update: RuntimeStatusUpdate) -> None:
         if not update.has_update:
             return
@@ -177,10 +191,22 @@ class ScannerManager:
             self.status.active_control_frequency_hz = update.control_frequency_hz
         if update.voice_frequency_hz is not None:
             self.status.active_voice_frequency_hz = update.voice_frequency_hz
+            self.status.last_active_voice_frequency_hz = update.voice_frequency_hz
         if update.tgid is not None:
             self.status.active_tgid = update.tgid
-        if update.talkgroup_label:
+            label = update.talkgroup_label or self._talkgroup_label_for_tgid(update.tgid)
+            if label:
+                update.talkgroup_label = label
+                self.status.active_talkgroup_label = label
+            self.status.last_active_tgid = update.tgid
+            self.status.last_active_talkgroup_label = label or self.status.active_talkgroup_label
+            if update.voice_frequency_hz is not None:
+                self.status.last_active_voice_frequency_hz = update.voice_frequency_hz
+            self.status.last_active_updated_utc = time.time()
+        elif update.talkgroup_label:
             self.status.active_talkgroup_label = update.talkgroup_label
+            self.status.last_active_talkgroup_label = update.talkgroup_label
+            self.status.last_active_updated_utc = time.time()
         if update.p25_phase:
             self.status.p25_phase = update.p25_phase
         if update.encrypted is not None:
@@ -214,6 +240,11 @@ class ScannerManager:
             try:
                 config, path = load_active_project_config()
                 system = config.first_enabled_system()
+                self.talkgroup_labels = {int(tg.tgid): str(tg.label or tg.tgid) for tg in system.enabled_talkgroups}
+                self.status.talkgroup_catalog = {
+                    "count": len(self.talkgroup_labels),
+                    "labels": {str(tgid): label for tgid, label in sorted(self.talkgroup_labels.items())},
+                }
                 self.status.config["path"] = str(path)
                 self.status.receiver_roles = {
                     name: {
@@ -227,6 +258,8 @@ class ScannerManager:
                 self.status.active_control_frequency_hz = system.control_channels_hz[0]
                 self.status.ok = True
             except ConfigError as exc:
+                self.talkgroup_labels = {}
+                self.status.talkgroup_catalog = {"count": 0, "labels": {}}
                 self.status.ok = False
                 self.status.scanner_state = "config_error"
                 self._append_warning(str(exc))
