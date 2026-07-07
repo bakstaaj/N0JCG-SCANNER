@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import time
 from pathlib import Path
@@ -13,6 +14,7 @@ from .config_model import DEFAULT_CONFIG_PATH, ConfigError, ProjectConfig, load_
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_CONFIG_PATH = PROJECT_ROOT / "runtime" / "settings" / "p25_systems.json"
 LOCAL_TEMPLATE_PATH = PROJECT_ROOT / "config" / "p25_systems.local.example.json"
+NAMED_CONFIG_DIR = PROJECT_ROOT / "runtime" / "settings" / "configs"
 
 
 def resolve_config_path() -> Path:
@@ -36,7 +38,26 @@ def config_source_for_path(path: Path) -> str:
         return "source_example"
     if resolved == LOCAL_TEMPLATE_PATH.resolve():
         return "source_local_template"
+    if NAMED_CONFIG_DIR.resolve() in resolved.parents:
+        return "runtime_named"
     return "environment"
+
+
+def _safe_named_config_count() -> int:
+    try:
+        payload = list_named_configs()
+    except Exception:
+        return 0
+    if isinstance(payload, dict):
+        for key in ("configs", "items", "named_configs"):
+            value = payload.get(key)
+            if isinstance(value, (list, tuple, dict)):
+                return len(value)
+        return 0
+    try:
+        return len(payload)
+    except TypeError:
+        return 0
 
 
 def active_config_metadata() -> dict[str, Any]:
@@ -47,6 +68,8 @@ def active_config_metadata() -> dict[str, Any]:
         "exists": path.exists(),
         "writable_runtime_path": str(RUNTIME_CONFIG_PATH),
         "runtime_config_exists": RUNTIME_CONFIG_PATH.exists(),
+        "named_config_dir": str(NAMED_CONFIG_DIR),
+        "named_config_count": _safe_named_config_count(),
     }
 
 
@@ -124,3 +147,207 @@ def write_runtime_config(payload: dict[str, Any], backup: bool = True) -> dict[s
 def load_active_project_config() -> tuple[ProjectConfig, Path]:
     path = resolve_config_path()
     return load_project_config(path), path
+
+
+def safe_config_id(name: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name).strip())
+    cleaned = cleaned.strip("._-")
+    if not cleaned:
+        raise ConfigError("named config requires a non-empty name")
+    return cleaned[:80]
+
+
+def _named_config_path(id_or_name: str) -> Path:
+    config_id = safe_config_id(id_or_name)
+    return NAMED_CONFIG_DIR / f"{config_id}.json"
+
+
+def _named_config_summary(path: Path, include_invalid: bool = False) -> dict[str, Any] | None:
+    try:
+        payload = read_json_file(path)
+        validation = validate_config_payload(payload)
+        first = validation["first_enabled_system"]
+        return {
+            "id": path.stem,
+            "name": first.get("name") or path.stem,
+            "site": first.get("site") or "",
+            "path": str(path),
+            "valid": True,
+            "system_count": validation.get("system_count", 0),
+            "enabled_system_count": validation.get("enabled_system_count", 0),
+            "control_channel_count": len(first.get("control_channels_hz") or []),
+            "talkgroup_count": len(first.get("talkgroups") or []),
+            "updated_utc": path.stat().st_mtime,
+        }
+    except Exception as exc:
+        if not include_invalid:
+            return None
+        return {
+            "id": path.stem,
+            "name": path.stem,
+            "site": "",
+            "path": str(path),
+            "valid": False,
+            "error": str(exc),
+            "updated_utc": path.stat().st_mtime if path.exists() else 0,
+        }
+
+
+def list_named_configs(include_invalid: bool = False) -> list[dict[str, Any]]:
+    NAMED_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    configs: list[dict[str, Any]] = []
+    for path in sorted(NAMED_CONFIG_DIR.glob("*.json"), key=lambda item: item.name.lower()):
+        summary = _named_config_summary(path, include_invalid=include_invalid)
+        if summary is not None:
+            configs.append(summary)
+    return configs
+
+
+def save_named_config(name: str, payload: dict[str, Any], apply_to_runtime: bool = False) -> dict[str, Any]:
+    config_id = safe_config_id(name)
+    validation = validate_config_payload(payload)
+    NAMED_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    path = NAMED_CONFIG_DIR / f"{config_id}.json"
+    backup_path = None
+    if path.exists():
+        backup_dir = PROJECT_ROOT / "runtime" / "settings" / "backups" / "named_configs"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        backup_path = backup_dir / f"{config_id}_{stamp}.json"
+        shutil.copy2(path, backup_path)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    runtime_result = None
+    if apply_to_runtime:
+        runtime_result = write_runtime_config(payload, backup=True)
+    return {
+        "ok": True,
+        "id": config_id,
+        "name": name,
+        "path": str(path),
+        "backup_path": str(backup_path) if backup_path else None,
+        "runtime_result": runtime_result,
+        "validation": validation,
+    }
+
+
+def load_named_config(id_or_name: str, apply_to_runtime: bool = True) -> dict[str, Any]:
+    path = _named_config_path(id_or_name)
+    payload = read_json_file(path)
+    validation = validate_config_payload(payload)
+    runtime_result = None
+    if apply_to_runtime:
+        runtime_result = write_runtime_config(payload, backup=True)
+    return {
+        "ok": True,
+        "id": path.stem,
+        "path": str(path),
+        "config": payload,
+        "runtime_result": runtime_result,
+        "validation": validation,
+    }
+
+
+def delete_named_config(id_or_name: str) -> dict[str, Any]:
+    path = _named_config_path(id_or_name)
+    if not path.exists():
+        raise ConfigError(f"named config not found: {id_or_name}")
+    backup_dir = PROJECT_ROOT / "runtime" / "settings" / "backups" / "deleted_named_configs"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    backup_path = backup_dir / f"{path.stem}_{stamp}.json"
+    shutil.copy2(path, backup_path)
+    path.unlink()
+    return {"ok": True, "id": path.stem, "deleted_path": str(path), "backup_path": str(backup_path)}
+
+# NAMED_CONFIG_STORE_V0_4G3
+NAMED_CONFIG_DIR = PROJECT_ROOT / "runtime" / "settings" / "configs"
+
+
+def _named_config_slug(name: str) -> str:
+    """Return a safe filename stem for a user-facing config name."""
+
+    import re
+
+    cleaned = re.sub(r"[^A-Za-z0-9_. -]+", "", str(name or "").strip())
+    cleaned = re.sub(r"\s+", "_", cleaned).strip("._-")
+    if not cleaned:
+        raise ConfigError("named config name is required")
+    return cleaned[:80]
+
+
+def _named_config_path(name: str) -> Path:
+    slug = _named_config_slug(name)
+    path = (NAMED_CONFIG_DIR / f"{slug}.json").resolve()
+    root = NAMED_CONFIG_DIR.resolve()
+    if root not in path.parents and path != root:
+        raise ConfigError("named config path escaped config directory")
+    return path
+
+
+def list_named_configs() -> dict[str, Any]:
+    """List Pi-local named scanner configs."""
+
+    NAMED_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    configs: list[dict[str, Any]] = []
+    for path in sorted(NAMED_CONFIG_DIR.glob("*.json")):
+        entry: dict[str, Any] = {
+            "name": path.stem.replace("_", " "),
+            "filename": path.name,
+            "path": str(path),
+            "valid": False,
+        }
+        try:
+            payload = read_json_file(path)
+            validation = validate_config_payload(payload)
+            first = validation.get("first_enabled_system", {})
+            entry.update(
+                {
+                    "name": str(payload.get("_named_config_name") or entry["name"]),
+                    "valid": True,
+                    "system_name": first.get("name", ""),
+                    "site": first.get("site", ""),
+                    "talkgroup_count": len(first.get("talkgroups", []) or []),
+                    "control_channels_mhz": first.get("control_channels_mhz", []),
+                    "saved_utc": payload.get("_named_config_saved_utc", ""),
+                }
+            )
+        except Exception as exc:  # keep listing even if one saved file is damaged
+            entry["error"] = str(exc)
+        configs.append(entry)
+    return {"ok": True, "config_dir": str(NAMED_CONFIG_DIR), "configs": configs}
+
+
+def save_named_config(name: str, payload: dict[str, Any], overwrite: bool = True) -> dict[str, Any]:
+    """Validate and save a named Pi-local scanner config."""
+
+    if not isinstance(payload, dict):
+        raise ConfigError("named config payload must be an object")
+    validation = validate_config_payload(payload)
+    NAMED_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    path = _named_config_path(name)
+    if path.exists() and not overwrite:
+        raise ConfigError(f"named config already exists: {name}")
+    data = dict(payload)
+    data["_named_config_name"] = str(name).strip()
+    data["_named_config_saved_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return {"ok": True, "name": data["_named_config_name"], "path": str(path), "validation": validation}
+
+
+def load_named_config(name: str) -> dict[str, Any]:
+    """Apply a named config to the active runtime-local config path."""
+
+    path = _named_config_path(name)
+    payload = read_json_file(path)
+    result = write_runtime_config(payload)
+    return {"ok": True, "name": str(payload.get("_named_config_name") or name), "source_path": str(path), **result}
+
+
+def delete_named_config(name: str) -> dict[str, Any]:
+    """Delete a Pi-local named scanner config."""
+
+    path = _named_config_path(name)
+    if not path.exists():
+        raise ConfigError(f"named config not found: {name}")
+    path.unlink()
+    return {"ok": True, "name": name, "deleted_path": str(path)}
