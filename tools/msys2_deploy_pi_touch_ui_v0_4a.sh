@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Deploy V0.4A touch UI files to the Pi from MSYS2.
+# V0.4A1: wait for backend restart and capture service diagnostics before failing.
 set -Eeuo pipefail
 
 PASS_COUNT=0
@@ -50,6 +51,7 @@ done
 
 printf '=== PI-P25-SCANNER V0.4A touch UI deploy ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
+printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "web" && -d "tools" ]]; then pass "running from repository root"; else fail "run from repository root"; finish; fi
 case "$(uname -s 2>/dev/null || true)" in MINGW*|MSYS*) pass "MSYS2 shell detected" ;; *) warn "shell does not look like MSYS2" ;; esac
@@ -64,7 +66,7 @@ if [[ -z "${PI_PASSWORD:-}" ]]; then fail "empty Pi password"; finish; fi
 export PI_PASSWORD
 pass "Pi connection settings loaded for ${PI_USER}@${PI_HOST}:${PI_REPO}"
 
-for cmd in sshpass ssh scp tar python3; do
+for cmd in sshpass ssh scp tar python3 base64; do
   if command -v "$cmd" >/dev/null 2>&1; then pass "command available: $cmd"; else fail "missing required command: $cmd"; fi
 done
 if [[ "$FAIL_COUNT" -ne 0 ]]; then finish; fi
@@ -111,10 +113,13 @@ if command -v node >/dev/null 2>&1; then node --check web/app.js; else python3 -
 from pathlib import Path
 text = Path('web/app.js').read_text(encoding='utf-8')
 assert 'startScannerAndAudio' in text
+assert 'wizardSystemSelect' in text
 print('WARN: node unavailable on Pi; basic app.js marker check passed')
 PY
 fi
 python3 -m json.tool web/system_catalog.example.json >/dev/null
+python3 -m py_compile src/pi_p25_scanner/backend.py src/pi_p25_scanner/backend_launch.py
+printf 'PASS: backend python compile passed\n'
 if systemctl list-unit-files pi-p25-scanner.service >/dev/null 2>&1; then
   printf '%s\n' "\$SUDO_PASSWORD" | sudo -S systemctl restart pi-p25-scanner.service
   printf 'PASS: restarted pi-p25-scanner.service\n'
@@ -122,16 +127,63 @@ else
   printf 'WARN: pi-p25-scanner.service not found; backend not restarted\n'
 fi
 python3 - <<'PY'
+import json
+import subprocess
+import sys
+import time
 import urllib.request
-for url in ('http://127.0.0.1:8070/', 'http://127.0.0.1:8070/api/status'):
-    try:
-        with urllib.request.urlopen(url, timeout=4) as resp:
-            body = resp.read(500).decode('utf-8', errors='replace')
-        print('PROBE_OK', url, body[:180].replace('\n', ' '))
-    except Exception as exc:
-        print('PROBE_FAIL', url, type(exc).__name__, exc)
-        raise
+
+urls = ('http://127.0.0.1:8070/', 'http://127.0.0.1:8070/api/status')
+last_error = None
+for attempt in range(1, 46):
+    all_ok = True
+    details = []
+    for url in urls:
+        try:
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                body = resp.read(600).decode('utf-8', errors='replace')
+            details.append(('PROBE_OK', url, body[:220].replace('\n', ' ')))
+        except Exception as exc:
+            all_ok = False
+            last_error = f'{url}: {type(exc).__name__}: {exc}'
+            break
+    if all_ok:
+        print(f'PASS: backend responded after {attempt} second(s)')
+        for item in details:
+            print(item[0], item[1], item[2])
+        break
+    time.sleep(1)
+else:
+    print('FAIL: backend did not respond on port 8070 after 45 seconds')
+    if last_error:
+        print('LAST_PROBE_ERROR', last_error)
+    for cmd in (
+        ['systemctl', '--no-pager', '-l', 'status', 'pi-p25-scanner.service'],
+        ['journalctl', '-u', 'pi-p25-scanner.service', '-n', '160', '--no-pager'],
+        ['python3', '-m', 'py_compile', 'src/pi_p25_scanner/backend.py', 'src/pi_p25_scanner/backend_launch.py'],
+    ):
+        print('DIAG_CMD', ' '.join(cmd))
+        try:
+            completed = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=12)
+            print(completed.stdout[-12000:])
+            print('DIAG_RC', completed.returncode)
+        except Exception as exc:
+            print('DIAG_ERROR', type(exc).__name__, exc)
+    sys.exit(20)
+
+# Audio service is useful but should not fail this UI deploy.
+try:
+    with urllib.request.urlopen('http://127.0.0.1:8072/api/audio/status', timeout=2) as resp:
+        data = json.loads(resp.read().decode('utf-8', errors='replace'))
+    print('AUDIO_PROBE_OK', json.dumps({k: data.get(k) for k in ('ok', 'mode', 'audio_packets', 'stream_clients')}, sort_keys=True))
+except Exception as exc:
+    print('AUDIO_PROBE_WARN', type(exc).__name__, exc)
 PY
+LAN_IP="\$(hostname -I 2>/dev/null | awk '{print \$1}' || true)"
+if [[ -n "\$LAN_IP" ]]; then
+  printf 'LAN_UI_URL=http://%s:8070\n' "\$LAN_IP"
+  printf 'LAN_AUDIO_URL=http://%s:8072/audio.wav\n' "\$LAN_IP"
+fi
 REMOTE
 chmod +x "$REMOTE_SCRIPT_LOCAL"
 pass "created remote install script: $REMOTE_SCRIPT_LOCAL"
