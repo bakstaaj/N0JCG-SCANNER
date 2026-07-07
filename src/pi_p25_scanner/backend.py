@@ -33,6 +33,13 @@ if __package__ in (None, ""):
         read_active_config_payload,
         validate_config_payload,
         write_runtime_config,
+        list_named_configs,
+        save_named_config as store_named_config,
+        load_named_config as store_load_named_config,
+        delete_named_config as store_delete_named_config,        save_named_config,
+        load_named_config,
+        delete_named_config,
+
     )
     from pi_p25_scanner.backend_launch import (
         LaunchConfigError,
@@ -59,6 +66,13 @@ else:
         read_active_config_payload,
         validate_config_payload,
         write_runtime_config,
+        list_named_configs,
+        save_named_config as store_named_config,
+        load_named_config as store_load_named_config,
+        delete_named_config as store_delete_named_config,        save_named_config,
+        load_named_config,
+        delete_named_config,
+
     )
     from .backend_launch import (
         LaunchConfigError,
@@ -76,6 +90,11 @@ else:
         save_credentials as save_radioreference_credentials,
         test_login as test_radioreference_login,
     )
+
+if __package__ in (None, ""):
+    from pi_p25_scanner import config_store as named_config_store
+else:
+    from . import config_store as named_config_store
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "web"
@@ -303,6 +322,104 @@ class ScannerManager:
         with self.lock:
             self._set_event(f"Saved local runtime config at {result['config_path']}")
         return {"ok": True, **result, "status": self.status_payload()}
+
+def named_configs_payload(self) -> dict[str, Any]:
+    return {"ok": True, "configs": list_named_configs(include_invalid=True), "active_config": active_config_metadata()}
+
+def save_named_config(self, request: dict[str, Any]) -> dict[str, Any]:
+    name = str(request.get("name") or "").strip()
+    payload = request.get("config")
+    if payload is None:
+        payload, _path = read_active_config_payload()
+    if not isinstance(payload, dict):
+        raise ConfigError("named config payload must be an object")
+    apply_to_runtime = bool(request.get("apply", True))
+    result = store_named_config(name, payload, apply_to_runtime=apply_to_runtime)
+    self.refresh_config_summary()
+    with self.lock:
+        self._set_event(f"Saved named config: {result['name']}")
+    return {"ok": True, **result, "configs": list_named_configs(include_invalid=True), "status": self.status_payload()}
+
+def load_named_config(self, request: dict[str, Any]) -> dict[str, Any]:
+    config_id = str(request.get("id") or request.get("config_id") or "").strip()
+    if not config_id:
+        raise ConfigError("named config id is required")
+    apply_to_runtime = bool(request.get("apply", True))
+    result = store_load_named_config(config_id, apply_to_runtime=apply_to_runtime)
+    self.refresh_config_summary()
+    manifest = None
+    if apply_to_runtime:
+        manifest = self.generate_config()
+    with self.lock:
+        self._set_event(f"Loaded named config: {result['name']}")
+    return {
+        "ok": True,
+        **result,
+        "generated_op25_config": manifest,
+        "configs": list_named_configs(include_invalid=True),
+        "status": self.status_payload(),
+    }
+
+def delete_named_config(self, request: dict[str, Any]) -> dict[str, Any]:
+    config_id = str(request.get("id") or request.get("config_id") or "").strip()
+    if not config_id:
+        raise ConfigError("named config id is required")
+    result = store_delete_named_config(config_id)
+    self.refresh_config_summary()
+    with self.lock:
+        self._set_event(f"Deleted named config: {result['id']}")
+    return {"ok": True, **result, "configs": list_named_configs(include_invalid=True), "status": self.status_payload()}
+
+    # NAMED_CONFIG_MANAGER_COMPAT_V0_4G7
+    def named_configs_payload(self) -> dict[str, Any]:
+        """Return Pi-local named config list using the current config_store API shape."""
+
+        result = list_named_configs()
+        if isinstance(result, dict):
+            result.setdefault("ok", True)
+            result.setdefault("active_config", active_config_metadata())
+            return result
+        return {"ok": True, "configs": result, "active_config": active_config_metadata()}
+
+    def save_named_config(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Compatibility wrapper for older /api/config/save-named endpoint shape."""
+
+        name = str(request.get("name") or request.get("id") or request.get("config_id") or "").strip()
+        payload = request.get("config")
+        if payload is None:
+            payload, _path = read_active_config_payload()
+        result = save_named_config(name, payload)
+        self.refresh_config_summary()
+        with self.lock:
+            self._set_event(f"Saved named config: {name}")
+        return {"ok": True, **result, "named_configs": self.named_configs_payload(), "status": self.status_payload()}
+
+    def load_named_config(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Compatibility wrapper for older /api/config/load-named endpoint shape."""
+
+        name = str(request.get("name") or request.get("id") or request.get("config_id") or "").strip()
+        result = load_named_config(name)
+        self.refresh_config_summary()
+        manifest = self.generate_config()
+        with self.lock:
+            self._set_event(f"Loaded named config: {name}")
+        return {
+            "ok": True,
+            **result,
+            "generated_op25_config": manifest,
+            "named_configs": self.named_configs_payload(),
+            "status": self.status_payload(),
+        }
+
+    def delete_named_config(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Compatibility wrapper for older /api/config/delete-named endpoint shape."""
+
+        name = str(request.get("name") or request.get("id") or request.get("config_id") or "").strip()
+        result = delete_named_config(name)
+        self.refresh_config_summary()
+        with self.lock:
+            self._set_event(f"Deleted named config: {name}")
+        return {"ok": True, **result, "named_configs": self.named_configs_payload(), "status": self.status_payload()}
 
     def _reader_thread(self, process: subprocess.Popen[str]) -> None:
         assert process.stdout is not None
@@ -623,6 +740,9 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path == "/api/config":
             self._send_json(load_config_payload())
             return
+        if self.path == "/api/config/named":
+            self._send_json(MANAGER.named_configs_payload())
+            return
         if self.path == "/api/decoder/capability":
             self._send_json(MANAGER.refresh_capability())
             return
@@ -677,6 +797,37 @@ class Handler(SimpleHTTPRequestHandler):
             except ConfigError as exc:
                 self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
+        # NAMED_CONFIG_BACKEND_V0_4G3
+        if self.path == "/api/config/named/save":
+            try:
+                request = self._read_json()
+                name = str(request.get("name") or "").strip()
+                payload = request.get("config")
+                if payload is None:
+                    payload, _path = read_active_config_payload()
+                self._send_json(save_named_config(name, payload), HTTPStatus.ACCEPTED)
+            except ConfigError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if self.path == "/api/config/named/load":
+            try:
+                request = self._read_json()
+                name = str(request.get("name") or "").strip()
+                result = load_named_config(name)
+                MANAGER.refresh_config_summary()
+                manifest = MANAGER.generate_config()
+                self._send_json({"ok": True, **result, "generated_op25_config": manifest}, HTTPStatus.ACCEPTED)
+            except ConfigError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if self.path == "/api/config/named/delete":
+            try:
+                request = self._read_json()
+                name = str(request.get("name") or "").strip()
+                self._send_json(delete_named_config(name), HTTPStatus.ACCEPTED)
+            except ConfigError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
         if self.path == "/api/config/init-local":
             try:
                 self._send_json(MANAGER.init_local_config(), HTTPStatus.ACCEPTED)
@@ -688,6 +839,27 @@ class Handler(SimpleHTTPRequestHandler):
                 request = self._read_json()
                 payload = request.get("config", request)
                 self._send_json(MANAGER.save_config(payload), HTTPStatus.ACCEPTED)
+            except ConfigError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if self.path == "/api/config/save-named":
+            try:
+                request = self._read_json()
+                self._send_json(MANAGER.save_named_config(request), HTTPStatus.ACCEPTED)
+            except ConfigError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if self.path == "/api/config/load-named":
+            try:
+                request = self._read_json()
+                self._send_json(MANAGER.load_named_config(request), HTTPStatus.ACCEPTED)
+            except ConfigError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if self.path == "/api/config/delete-named":
+            try:
+                request = self._read_json()
+                self._send_json(MANAGER.delete_named_config(request), HTTPStatus.ACCEPTED)
             except ConfigError as exc:
                 self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
