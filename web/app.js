@@ -18,7 +18,53 @@ function formatHz(value) { if (!value) return '-'; return `${(Number(value) / 10
 function formatBool(value) { return value ? 'yes' : 'no'; }
 function formatList(values) { return Array.isArray(values) && values.length ? values.join('\n') : '-'; }
 function commandText(command) { if (Array.isArray(command)) return command.join(' '); return typeof command === 'string' ? command : ''; }
-function normalizeText(value) { return String(value || '').trim().toLowerCase(); }
+function normalizeText(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const STATE_ALIASES = {
+  al: ['al', 'alabama'], ak: ['ak', 'alaska'], az: ['az', 'arizona'], ar: ['ar', 'arkansas'],
+  ca: ['ca', 'california'], co: ['co', 'colorado'], ct: ['ct', 'connecticut'], de: ['de', 'delaware'],
+  fl: ['fl', 'florida'], ga: ['ga', 'georgia'], hi: ['hi', 'hawaii'], id: ['id', 'idaho'],
+  il: ['il', 'illinois'], in: ['in', 'indiana'], ia: ['ia', 'iowa'], ks: ['ks', 'kansas'],
+  ky: ['ky', 'kentucky'], la: ['la', 'louisiana'], me: ['me', 'maine'], md: ['md', 'maryland'],
+  ma: ['ma', 'massachusetts'], mi: ['mi', 'michigan'], mn: ['mn', 'minnesota'], ms: ['ms', 'mississippi'],
+  mo: ['mo', 'missouri'], mt: ['mt', 'montana'], ne: ['ne', 'nebraska'], nv: ['nv', 'nevada'],
+  nh: ['nh', 'new hampshire'], nj: ['nj', 'new jersey'], nm: ['nm', 'new mexico'], ny: ['ny', 'new york'],
+  nc: ['nc', 'north carolina'], nd: ['nd', 'north dakota'], oh: ['oh', 'ohio'], ok: ['ok', 'oklahoma'],
+  or: ['or', 'oregon'], pa: ['pa', 'pennsylvania'], ri: ['ri', 'rhode island'], sc: ['sc', 'south carolina'],
+  sd: ['sd', 'south dakota'], tn: ['tn', 'tennessee'], tx: ['tx', 'texas'], ut: ['ut', 'utah'],
+  vt: ['vt', 'vermont'], va: ['va', 'virginia'], wa: ['wa', 'washington'], wv: ['wv', 'west virginia'],
+  wi: ['wi', 'wisconsin'], wy: ['wy', 'wyoming'], dc: ['dc', 'district of columbia']
+};
+
+function stateAliasSet(value) {
+  const text = normalizeText(value);
+  for (const aliases of Object.values(STATE_ALIASES)) {
+    if (aliases.includes(text)) return aliases;
+  }
+  return text ? [text] : [];
+}
+
+function catalogSearchValues(system) {
+  const values = [system.state, system.county, system.city, system.site, system.name, system.notes];
+  ['aliases', 'coverage', 'counties', 'cities', 'sites'].forEach((key) => {
+    if (Array.isArray(system[key])) values.push(...system[key]);
+  });
+  return values.map(normalizeText).filter(Boolean);
+}
+
+function containsQuery(values, query) {
+  const normalized = normalizeText(query);
+  if (!normalized) return true;
+  return values.some((value) => value === normalized || value.includes(normalized) || normalized.includes(value));
+}
+
 function audioStreamUrl() { return `http://${window.location.hostname}:8072/audio.wav`; }
 function testToneUrl() { return `http://${window.location.hostname}:8072/test-tone.wav`; }
 
@@ -345,9 +391,12 @@ function renderCategoryChoices(categories) {
 }
 
 function systemMatches(system, state, county, city) {
-  const stateMatch = !state || normalizeText(system.state) === state;
-  const countyMatch = !county || normalizeText(system.county).includes(county);
-  const cityMatch = !city || normalizeText(system.city).includes(city) || normalizeText(system.site).includes(city) || normalizeText(system.name).includes(city);
+  const values = catalogSearchValues(system);
+  const stateQueryAliases = stateAliasSet(state);
+  const systemStateAliases = stateAliasSet(system.state);
+  const stateMatch = !stateQueryAliases.length || stateQueryAliases.some((query) => systemStateAliases.includes(query));
+  const countyMatch = containsQuery(values, county);
+  const cityMatch = containsQuery(values, city);
   return stateMatch && countyMatch && cityMatch;
 }
 
@@ -372,7 +421,9 @@ async function findSystems() {
   const city = normalizeText(field('wizardCity').value);
   matchedSystems = (data.systems || []).filter((system) => systemMatches(system, state, county, city));
   renderWizardMatches();
-  if (!matchedSystems.length) setText('wizardPreview', 'No local catalog match. Add/verify a system in web/system_catalog.example.json, then redeploy.');
+  if (!matchedSystems.length) {
+    setText('wizardPreview', `No local catalog match for State=${field('wizardState').value || '-'}, County=${field('wizardCounty').value || '-'}, City=${field('wizardCity').value || '-'}. Try leaving County or City blank, or add aliases/coverage to web/system_catalog.example.json.`);
+  }
 }
 
 function selectedWizardSystem() {

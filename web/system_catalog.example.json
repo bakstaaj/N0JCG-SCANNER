@@ -1,6 +1,6 @@
 {
-  "catalog_version": 1,
-  "source_note": "Local starter catalog for the PI-P25-SCANNER setup wizard. Replace or extend this file with verified local system data before field deployment.",
+  "catalog_version": 2,
+  "source_note": "Local starter catalog for the PI-P25-SCANNER setup wizard. Entries are seed/scaffold data for field testing; verify talkgroup labels before operational use.",
   "categories": [
     "Fire",
     "EMS",
@@ -18,26 +18,200 @@
   "systems": [
     {
       "state": "AZ",
+      "state_aliases": [
+        "Arizona",
+        "AZ"
+      ],
       "county": "Maricopa",
+      "counties": [
+        "Maricopa",
+        "Pinal"
+      ],
       "city": "Mesa",
+      "cities": [
+        "Mesa",
+        "Gilbert",
+        "Apache Junction",
+        "Queen Creek",
+        "Chandler",
+        "Tempe",
+        "Phoenix",
+        "Scottsdale",
+        "Tortilla Flat"
+      ],
+      "coverage": [
+        "East Valley",
+        "Maricopa County",
+        "Pinal County",
+        "TOPAZ",
+        "TRWC",
+        "Regional Wireless Cooperative",
+        "Mesa Simulcast"
+      ],
+      "aliases": [
+        "TOPAZ",
+        "TRWC",
+        "Mesa",
+        "Mesa Simulcast",
+        "East Valley",
+        "Regional Wireless Cooperative"
+      ],
       "name": "TOPAZ / TRWC Mesa Simulcast Starter",
       "site": "Mesa Simulcast",
-      "notes": "Starter entry based on the current project test profile. Talkgroup labels are placeholders for discovery and should be replaced with verified local labels.",
-      "control_channels_hz": [852750000, 852825000, 853275000, 853350000],
+      "notes": "Starter entry based on the current project test profile. Control channels are the Mesa simulcast channels used during live testing. Talkgroup labels are discovery placeholders until verified.",
+      "control_channels_hz": [
+        852750000,
+        852825000,
+        853275000,
+        853350000
+      ],
       "voice_channels_hz": [],
       "talkgroups": [
-        {"tgid": 2500, "label": "Discovery Fire", "category": "Fire", "enabled": true},
-        {"tgid": 2501, "label": "Discovery EMS", "category": "EMS", "enabled": true},
-        {"tgid": 2502, "label": "Discovery Law Enforcement", "category": "Law Enforcement", "enabled": true},
-        {"tgid": 2503, "label": "Discovery Public Works", "category": "Public Works", "enabled": true},
-        {"tgid": 2504, "label": "Discovery Utilities", "category": "Utilities", "enabled": true},
-        {"tgid": 2505, "label": "Discovery Transportation", "category": "Transportation", "enabled": true},
-        {"tgid": 2506, "label": "Discovery Interop", "category": "Interop", "enabled": true},
-        {"tgid": 2507, "label": "Discovery Emergency Management", "category": "Emergency Management", "enabled": true},
-        {"tgid": 2508, "label": "Discovery Corrections", "category": "Corrections", "enabled": true},
-        {"tgid": 2509, "label": "Discovery Schools", "category": "Schools", "enabled": true},
-        {"tgid": 2510, "label": "Discovery Federal", "category": "Federal", "enabled": true},
-        {"tgid": 2511, "label": "Discovery Other", "category": "Other", "enabled": true}
+        {
+          "tgid": 2500,
+          "label": "Discovery Fire",
+          "category": "Fire",
+          "enabled": true
+        },
+        {
+          "tgid": 2501,
+          "label": "Discovery EMS",
+          "category": "EMS",
+          "enabled": true
+        },
+        {
+          "tgid": 2502,
+          "label": "Discovery Law Enforcement",
+          "category": "Law Enforcement",
+          "enabled": true
+        },
+        {
+          "tgid": 2503,
+          "label": "Discovery Public Works",
+          "category": "Public Works",
+          "enabled": true
+        },
+        {
+          "tgid": 2504,
+          "label": "Discovery Utilities",
+          "category": "Utilities",
+          "enabled": true
+        },
+        {
+          "tgid": 2505,
+          "label": "Discovery Transportation",
+          "category": "Transportation",
+          "enabled": true
+        },
+        {
+          "tgid": 2506,
+          "label": "Discovery Interop",
+          "category": "Interop",
+          "enabled": true
+        },
+        {
+          "tgid": 2507,
+          "label": "Discovery Emergency Management",
+          "category": "Emergency Management",
+          "enabled": true
+        },
+        {
+          "tgid": 2508,
+          "label": "Discovery Corrections",
+          "category": "Corrections",
+          "enabled": true
+        },
+        {
+          "tgid": 2509,
+          "label": "Discovery Schools",
+          "category": "Schools",
+          "enabled": true
+        },
+        {
+          "tgid": 2510,
+          "label": "Discovery Federal",
+          "category": "Federal",
+          "enabled": true
+        },
+        {
+          "tgid": 2511,
+          "label": "Discovery Other",
+          "category": "Other",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "state": "AZ",
+      "state_aliases": [
+        "Arizona",
+        "AZ"
+      ],
+      "county": "Maricopa",
+      "counties": [
+        "Maricopa"
+      ],
+      "city": "Phoenix",
+      "cities": [
+        "Phoenix",
+        "Glendale",
+        "Peoria",
+        "Scottsdale",
+        "Tempe",
+        "Avondale",
+        "Surprise",
+        "Maricopa County"
+      ],
+      "coverage": [
+        "Phoenix Metro",
+        "RWC",
+        "Regional Wireless Cooperative",
+        "Maricopa County"
+      ],
+      "aliases": [
+        "RWC",
+        "Phoenix RWC",
+        "Regional Wireless Cooperative",
+        "Phoenix Metro"
+      ],
+      "name": "Phoenix Metro RWC Starter Placeholder",
+      "site": "Phoenix Metro Placeholder",
+      "notes": "Placeholder for future verified Phoenix/RWC site data. Replace control channels before use if this is selected.",
+      "control_channels_hz": [
+        852750000
+      ],
+      "voice_channels_hz": [],
+      "talkgroups": [
+        {
+          "tgid": 2600,
+          "label": "Discovery Fire",
+          "category": "Fire",
+          "enabled": true
+        },
+        {
+          "tgid": 2601,
+          "label": "Discovery EMS",
+          "category": "EMS",
+          "enabled": true
+        },
+        {
+          "tgid": 2602,
+          "label": "Discovery Law Enforcement",
+          "category": "Law Enforcement",
+          "enabled": true
+        },
+        {
+          "tgid": 2603,
+          "label": "Discovery Public Works",
+          "category": "Public Works",
+          "enabled": true
+        },
+        {
+          "tgid": 2604,
+          "label": "Discovery Interop",
+          "category": "Interop",
+          "enabled": true
+        }
       ]
     }
   ]
