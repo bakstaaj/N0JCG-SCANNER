@@ -421,6 +421,73 @@ def delete_named_config(self, request: dict[str, Any]) -> dict[str, Any]:
             self._set_event(f"Deleted named config: {name}")
         return {"ok": True, **result, "named_configs": self.named_configs_payload(), "status": self.status_payload()}
 
+
+    # BEGIN V0.4G9 named config manager compatibility
+    def named_configs_payload(self) -> dict[str, Any]:
+        from .config_store import list_named_configs
+
+        return list_named_configs(include_invalid=True)
+
+    def save_named_config(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from .config_store import save_named_config
+
+        if not isinstance(payload, dict):
+            raise ConfigError("named config save payload must be an object")
+        name = str(payload.get("name") or payload.get("profile_name") or "").strip()
+        if not name:
+            raise ConfigError("named config name is required")
+        result = save_named_config(name, payload.get("config"))
+        self.refresh_config_summary()
+        with self.lock:
+            self._set_event(f"Saved named local config: {name}")
+        result["status"] = self.status_payload()
+        return result
+
+    def load_named_config(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from .config_store import load_named_config
+
+        if not isinstance(payload, dict):
+            raise ConfigError("named config load payload must be an object")
+        name = str(payload.get("name") or payload.get("slug") or "").strip()
+        if not name:
+            raise ConfigError("named config name is required")
+        result = load_named_config(name, backup=True)
+        self.refresh_config_summary()
+        try:
+            result["generated_op25_config"] = self.generate_config()
+        except ConfigError as exc:
+            result["generate_error"] = str(exc)
+        with self.lock:
+            self._set_event(f"Loaded named local config: {name}")
+        result["status"] = self.status_payload()
+        return result
+
+    def delete_named_config(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from .config_store import delete_named_config
+
+        if not isinstance(payload, dict):
+            raise ConfigError("named config delete payload must be an object")
+        name = str(payload.get("name") or payload.get("slug") or "").strip()
+        if not name:
+            raise ConfigError("named config name is required")
+        result = delete_named_config(name)
+        self.refresh_config_summary()
+        with self.lock:
+            self._set_event(f"Deleted named local config: {name}")
+        result["status"] = self.status_payload()
+        return result
+
+    # Compatibility aliases used by earlier UI/route experiments.
+    def save_named_config_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.save_named_config(payload)
+
+    def load_named_config_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.load_named_config(payload)
+
+    def delete_named_config_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.delete_named_config(payload)
+    # END V0.4G9 named config manager compatibility
+
     def _reader_thread(self, process: subprocess.Popen[str]) -> None:
         assert process.stdout is not None
         for line in process.stdout:
@@ -662,6 +729,52 @@ def delete_named_config(self, request: dict[str, Any]) -> dict[str, Any]:
             self.status.updated_utc = time.time()
             return asdict(self.status)
 
+
+# BEGIN V0.4G10 named local config manager method bindings
+def _p25_named_config_install_manager_methods() -> None:
+    if __package__ in (None, ""):
+        from pi_p25_scanner import named_config_runtime as _named_config_runtime
+    else:
+        from . import named_config_runtime as _named_config_runtime
+
+    def named_configs_payload(self):
+        return _named_config_runtime.list_named_configs(include_invalid=True)
+
+    def save_named_config(self, payload):
+        result = _named_config_runtime.save_named_config(payload)
+        self.refresh_config_summary()
+        with self.lock:
+            self._set_event(f"Saved named local config {result.get('name') or result.get('slug')}")
+        result["status"] = self.status_payload()
+        return result
+
+    def load_named_config(self, payload):
+        result = _named_config_runtime.load_named_config(payload)
+        self.refresh_config_summary()
+        try:
+            result["generated_op25_config"] = self.generate_config()
+        except ConfigError as exc:
+            result["generated_op25_config_error"] = str(exc)
+        with self.lock:
+            self._set_event(f"Loaded named local config {result.get('name') or result.get('slug')}")
+        result["status"] = self.status_payload()
+        return result
+
+    def delete_named_config(self, payload):
+        result = _named_config_runtime.delete_named_config(payload)
+        with self.lock:
+            self._set_event(f"Deleted named local config {result.get('deleted_path')}")
+        result["status"] = self.status_payload()
+        return result
+
+    ScannerManager.named_configs_payload = named_configs_payload
+    ScannerManager.save_named_config = save_named_config
+    ScannerManager.load_named_config = load_named_config
+    ScannerManager.delete_named_config = delete_named_config
+
+
+_p25_named_config_install_manager_methods()
+# END V0.4G10 named local config manager method bindings
 
 MANAGER = ScannerManager()
 
