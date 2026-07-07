@@ -2,71 +2,44 @@
 
 let currentConfig = null;
 let latestStatus = null;
-let browserAudioEnabled = false;
-let browserAudioLastEvent = 'Click Start Scanner + Browser Audio.';
+let catalog = null;
+let matchedSystems = [];
+let browserAudioLastEvent = 'Ready';
 
-const RAW_AUDIO_PORT = 8072;
+const CATEGORY_DEFAULTS = [
+  'Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Utilities', 'Transportation',
+  'Interop', 'Emergency Management', 'Corrections', 'Schools', 'Federal', 'Other',
+];
 
-function formatHz(value) {
-  if (!value) return '-';
-  return `${(Number(value) / 1000000).toFixed(6)} MHz`;
+function field(id) { return document.getElementById(id); }
+function setText(id, value) { const el = field(id); if (el) el.textContent = value ?? '-'; }
+function setBadge(id, text, kind) { const el = field(id); if (!el) return; el.textContent = text; el.className = `pill ${kind || ''}`.trim(); }
+function formatHz(value) { if (!value) return '-'; return `${(Number(value) / 1000000).toFixed(6)} MHz`; }
+function formatBool(value) { return value ? 'yes' : 'no'; }
+function formatList(values) { return Array.isArray(values) && values.length ? values.join('\n') : '-'; }
+function commandText(command) { if (Array.isArray(command)) return command.join(' '); return typeof command === 'string' ? command : ''; }
+function normalizeText(value) { return String(value || '').trim().toLowerCase(); }
+function audioStreamUrl() { return `http://${window.location.hostname}:8072/audio.wav`; }
+function testToneUrl() { return `http://${window.location.hostname}:8072/test-tone.wav`; }
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, { cache: 'no-store', ...options });
+  const text = await response.text();
+  let payload = {};
+  try { payload = text ? JSON.parse(text) : {}; } catch (error) { payload = { ok: false, error: `Invalid JSON: ${error.message}`, raw: text }; }
+  if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  return payload;
 }
 
-function formatBool(value) {
-  return value ? 'yes' : 'no';
+function openDrawer() { field('drawer')?.classList.add('open'); field('drawerBackdrop')?.classList.add('open'); }
+function closeDrawer() { field('drawer')?.classList.remove('open'); field('drawerBackdrop')?.classList.remove('open'); }
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach((el) => el.classList.toggle('active', el.id === id));
+  document.querySelectorAll('.nav-item').forEach((el) => el.classList.toggle('active', el.dataset.screen === id));
+  closeDrawer();
 }
 
-function formatList(values) {
-  if (!Array.isArray(values) || values.length === 0) return '-';
-  return values.join('\n');
-}
-
-function setText(id, value) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = value ?? '-';
-}
-
-function field(id) {
-  return document.getElementById(id);
-}
-
-function setBadge(id, text, kind) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = text;
-  el.className = `badge ${kind || ''}`.trim();
-}
-
-function commandText(command) {
-  if (Array.isArray(command)) return command.join(' ');
-  if (typeof command === 'string') return command;
-  return '';
-}
-
-function rawAudioBaseUrl() {
-  const host = window.location.hostname || 'PI-SDR';
-  const protocol = window.location.protocol === 'https:' ? 'http:' : (window.location.protocol || 'http:');
-  return `${protocol}//${host}:${RAW_AUDIO_PORT}`;
-}
-
-function rawAudioStreamUrl() {
-  return `${rawAudioBaseUrl()}/audio.wav`;
-}
-
-function rawAudioToneUrl() {
-  return `${rawAudioBaseUrl()}/test-tone.wav`;
-}
-
-function setBrowserAudioSource(url) {
-  const audio = field('browserAudioPlayer');
-  if (!audio) return null;
-  if (audio.src !== url) {
-    audio.src = url;
-    audio.load();
-  }
-  return audio;
-}
-
+function markerIsReady(marker) { return Boolean(marker?.start_ready || (marker?.exists && marker?.validated)); }
 function extractOp25HttpListener(status) {
   const process = status?.decoder_process || {};
   const marker = process.validated_marker || {};
@@ -78,93 +51,56 @@ function extractOp25HttpListener(status) {
   return { port, piLocalUrl: `http://127.0.0.1:${port}/` };
 }
 
-function markerIsReady(marker) {
-  return Boolean(marker?.exists && (marker?.validated || marker?.start_ready));
-}
-
 function setButtonsForState(status) {
-  const startBtn = field('startBtn');
-  const stopBtn = field('stopBtn');
   const process = status?.decoder_process || {};
   const marker = process.validated_marker || {};
   const running = Boolean(process.running);
   const canStart = markerIsReady(marker) || Boolean(process.start_enabled);
+  const startBtn = field('startBtn');
+  const stopBtn = field('stopBtn');
   if (startBtn) startBtn.disabled = running || !canStart;
   if (stopBtn) stopBtn.disabled = !running;
 }
 
-async function fetchJson(url, options = {}) {
-  const response = await fetch(url, {
-    cache: 'no-store',
-    ...options,
-  });
-  const text = await response.text();
-  let payload = {};
-  try {
-    payload = text ? JSON.parse(text) : {};
-  } catch (error) {
-    payload = { ok: false, error: `Invalid JSON: ${error.message}`, raw: text };
-  }
-  if (!response.ok) {
-    throw new Error(payload.error || `HTTP ${response.status}`);
-  }
-  return payload;
-}
-
-function renderBrowserAudioState() {
+function updateAudioPanel(message) {
   const audio = field('browserAudioPlayer');
-  const attached = Boolean(audio?.src);
-  const paused = audio ? audio.paused : true;
-  const badgeText = browserAudioEnabled && !paused ? 'Playing' : (attached ? 'Attached' : 'Ready');
-  const badgeKind = browserAudioEnabled && !paused ? 'badge-ok' : (attached ? 'badge-warn' : 'badge-warn');
-  const playerState = audio ? (attached ? (paused ? 'attached / paused' : 'playing') : 'not attached') : 'missing audio element';
-  setBadge('browserAudioBadge', badgeText, badgeKind);
-  setText('browserAudioContextState', playerState);
-  setText('browserAudioDevice', 'Browser default');
-  setText('browserAudioStreamSource', rawAudioStreamUrl());
+  if (audio && !audio.src) audio.src = audioStreamUrl();
+  if (message) browserAudioLastEvent = message;
   setText('browserAudioLastEvent', browserAudioLastEvent);
 }
 
-async function playAudioUrl(url, label) {
-  const audio = setBrowserAudioSource(url);
-  if (!audio) {
-    browserAudioEnabled = false;
-    browserAudioLastEvent = 'Browser audio element is missing.';
-    renderBrowserAudioState();
-    return false;
-  }
+async function playBrowserAudio() {
+  const audio = field('browserAudioPlayer');
+  if (!audio) return false;
+  if (audio.src !== audioStreamUrl()) audio.src = audioStreamUrl();
   try {
     await audio.play();
-    browserAudioEnabled = true;
-    browserAudioLastEvent = `${label} playing.`;
-    renderBrowserAudioState();
+    updateAudioPanel('Browser audio playing');
     return true;
   } catch (error) {
-    browserAudioEnabled = false;
-    browserAudioLastEvent = `${label} attached. Press Play in the audio control if autoplay was blocked: ${error.message}`;
-    renderBrowserAudioState();
+    updateAudioPanel(`Press audio play if blocked: ${error.message}`);
     return false;
   }
-}
-
-async function enableBrowserAudio() {
-  return playAudioUrl(rawAudioStreamUrl(), 'Raw scanner audio stream');
 }
 
 async function playBrowserTestTone() {
-  return playAudioUrl(rawAudioToneUrl(), 'Bridge test tone');
+  const audio = field('browserAudioPlayer');
+  if (!audio) return;
+  audio.src = testToneUrl();
+  try {
+    await audio.play();
+    updateAudioPanel('Playing bridge test tone');
+  } catch (error) {
+    updateAudioPanel(`Test tone failed: ${error.message}`);
+  }
 }
 
-function stopBrowserAudioPlayback() {
+function stopBrowserAudio() {
   const audio = field('browserAudioPlayer');
-  if (audio) {
-    audio.pause();
-    audio.removeAttribute('src');
-    audio.load();
-  }
-  browserAudioEnabled = false;
-  browserAudioLastEvent = 'Browser audio stopped.';
-  renderBrowserAudioState();
+  if (!audio) return;
+  audio.pause();
+  audio.src = audioStreamUrl();
+  updateAudioPanel('Browser audio stopped');
 }
 
 function formatActivityEvent(event) {
@@ -181,18 +117,12 @@ function formatActivityEvent(event) {
 }
 
 function renderActivitySummary(activity) {
-  const parsed = Number(activity?.parsed_status_lines || 0);
-  setText('activityParsedLines', parsed);
-  setText('activityControlUpdates', activity?.control_frequency_updates ?? 0);
-  setText('activityVoiceUpdates', activity?.voice_frequency_updates ?? 0);
-  setText('activityTalkgroupUpdates', activity?.talkgroup_updates ?? 0);
   setText('activityUniqueTgids', activity?.unique_tgid_count ?? 0);
   setText('activityClearEvents', activity?.clear_voice_events ?? 0);
   setText('activityEncryptedEvents', activity?.encrypted_events ?? 0);
   setText('activityMutedEvents', activity?.muted_events ?? 0);
   const recent = Array.isArray(activity?.recent_events) ? activity.recent_events : [];
   setText('activityRecentEvents', recent.length ? recent.slice(-10).map(formatActivityEvent).join('\n') : 'No parsed activity yet.');
-  setBadge('activityBadge', parsed > 0 ? `${parsed} parsed` : 'No activity', parsed > 0 ? 'badge-ok' : 'badge-warn');
 }
 
 function renderDashboard(status) {
@@ -202,114 +132,59 @@ function renderDashboard(status) {
   const ready = markerIsReady(marker) || Boolean(process.start_enabled);
   const state = status.scanner_state || '-';
   const listener = extractOp25HttpListener(status);
-  const warnings = Array.isArray(status.warnings) ? status.warnings : [];
-
-  setText('scannerStateCard', state);
-  setText('scannerStateDetail', running ? `PID ${process.pid || '-'}` : 'decoder process stopped');
-  setText('controlFrequencyCard', formatHz(status.active_control_frequency_hz));
-  setText('controlFrequencyDetail', status.config?.source ? `config: ${status.config.source}` : 'configured active control');
-  setText('launchStateCard', ready ? 'Ready' : 'Not ready');
-  setText('launchStateDetail', marker.path || 'validated marker missing');
-  setText('op25UiCard', listener ? `Pi-local ${listener.port}` : 'Not detected');
-  setText('op25UiDetail', listener ? listener.piLocalUrl : 'starts with OP25 runtime');
-  setText('op25HttpListener', listener ? listener.piLocalUrl : '-');
-
-  if (running) {
-    setText('dashboardSummary', `Scanner is running on ${formatHz(status.active_control_frequency_hz)}. ${warnings.length ? warnings[0] : status.last_event || ''}`);
-  } else if (ready) {
-    setText('dashboardSummary', `Scanner is ready to start. ${status.last_event || ''}`);
-  } else {
-    setText('dashboardSummary', `Scanner is not launch-ready. ${warnings[0] || status.last_event || 'Check validated OP25 marker.'}`);
-  }
-  setBadge('dashboardStateBadge', state, running ? 'badge-ok' : (ready ? 'badge-warn' : 'badge-bad'));
-}
-
-function renderStatus(status) {
-  latestStatus = status;
-  const process = status.decoder_process || {};
-  const marker = process.validated_marker || {};
-  const running = Boolean(process.running);
-  const markerReady = markerIsReady(marker);
-  const state = status.scanner_state || '-';
-
-  renderDashboard(status);
-  renderBrowserAudioState();
+  const label = status.active_talkgroup_label || (status.active_tgid ? `TGID ${status.active_tgid}` : 'Waiting for activity');
+  setText('dashboardSummary', running ? `Running on ${formatHz(status.active_control_frequency_hz)}` : (ready ? 'Ready to start' : 'Not launch-ready'));
   setText('scannerState', state);
-  setText('decoderEngine', status.decoder_engine || '-');
-  setText('configSource', status.config?.source || '-');
+  setText('decoderPid', process.pid || '-');
   setText('controlFrequency', formatHz(status.active_control_frequency_hz));
   setText('voiceFrequency', formatHz(status.active_voice_frequency_hz));
   setText('activeTgid', status.active_tgid || '-');
-  setText('activeTalkgroupLabel', status.active_talkgroup_label || '-');
+  setText('activeTalkgroupLabel', label);
   setText('p25Phase', status.p25_phase || '-');
-  setText('encrypted', formatBool(status.encrypted));
-  setText('muted', formatBool(status.muted));
-  renderActivitySummary(status.activity_summary || {});
-  setText('processState', running ? 'running' : 'stopped');
-  setText('decoderPid', process.pid || '-');
-  setText('launchReady', markerReady || process.start_enabled ? 'yes' : 'no');
+  setText('op25HttpListener', listener ? listener.piLocalUrl : '-');
+  setText('launchReady', ready ? 'yes' : 'no');
   setText('commandSource', process.command_source || '-');
-  setText('validatedMarkerState', markerReady ? 'validated' : (marker.exists ? 'present' : 'missing'));
-  setText('validatedMarkerPath', marker.path || '-');
-  setText('op25Cwd', process.cwd || marker.cwd || '-');
-  setText('op25DeviceArgs', marker.device_args || '-');
-  setText('op25TrunkTsv', marker.trunk_tsv || '-');
+  setText('validatedMarkerState', markerIsReady(marker) ? 'validated' : (marker.exists ? 'present' : 'missing'));
   setText('validatedCommand', formatList(process.command));
   setText('lastEvent', status.last_event || '-');
   setText('logTail', formatList(status.log_tail));
   setText('lastUpdated', `Last update: ${new Date().toLocaleTimeString()}`);
-
-  setBadge('connectionStatus', 'Connected', 'badge-ok');
-  setBadge('stateBadge', state, running ? 'badge-ok' : (status.ok ? 'badge-warn' : 'badge-bad'));
-  setBadge('markerBadge', markerReady ? 'Validated' : (marker.exists ? 'Present' : 'Missing'), markerReady ? 'badge-ok' : 'badge-warn');
+  setBadge('stateBadge', running ? 'ON AIR' : state, running ? 'ok' : (status.ok ? 'warn' : 'bad'));
+  setBadge('connectionStatus', 'Connected', 'ok');
+  renderActivitySummary(status.activity_summary || {});
+  updateAudioPanel();
   setButtonsForState(status);
 }
 
 async function refreshStatus() {
   try {
     const status = await fetchJson('/api/status');
-    renderStatus(status);
+    latestStatus = status;
+    renderDashboard(status);
   } catch (error) {
-    setBadge('connectionStatus', 'Offline', 'badge-bad');
-    setBadge('dashboardStateBadge', 'Offline', 'badge-bad');
+    setBadge('connectionStatus', 'Offline', 'bad');
     setText('dashboardSummary', `Status error: ${error.message}`);
     setText('lastEvent', `Status error: ${error.message}`);
   }
 }
 
-function toMhzLines(values) {
-  return (values || []).map((value) => (Number(value) / 1000000).toFixed(6)).join('\n');
-}
-
+function toMhzLines(values) { return (values || []).map((value) => (Number(value) / 1000000).toFixed(6)).join('\n'); }
 function parseFrequencyLines(value) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const cleaned = line.toLowerCase().replace('mhz', '').replace('hz', '').replace(/[, _]/g, '');
-      const numeric = Number(cleaned);
-      if (!Number.isFinite(numeric) || numeric <= 0) {
-        throw new Error(`Invalid frequency: ${line}`);
-      }
-      return numeric < 10000 ? Math.round(numeric * 1000000) : Math.round(numeric);
-    });
+  return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const cleaned = line.toLowerCase().replace('mhz', '').replace('hz', '').replace(/[, _]/g, '');
+    const numeric = Number(cleaned);
+    if (!Number.isFinite(numeric) || numeric <= 0) throw new Error(`Invalid frequency: ${line}`);
+    return numeric < 10000 ? Math.round(numeric * 1000000) : Math.round(numeric);
+  });
 }
-
 function parseTalkgroupLines(value) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const parts = line.split(',');
-      const tgid = Number(parts.shift().trim());
-      if (!Number.isInteger(tgid) || tgid <= 0) {
-        throw new Error(`Invalid TGID: ${line}`);
-      }
-      const label = parts.join(',').trim() || String(tgid);
-      return { tgid, label, enabled: true };
-    });
+  return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const parts = line.split(',');
+    const tgid = Number(parts.shift().trim());
+    if (!Number.isInteger(tgid) || tgid <= 0) throw new Error(`Invalid TGID: ${line}`);
+    const label = parts.join(',').trim() || String(tgid);
+    return { tgid, label, enabled: true };
+  });
 }
 
 function populateForm(config) {
@@ -317,11 +192,7 @@ function populateForm(config) {
   field('systemName').value = system.name || '';
   field('siteName').value = system.site || '';
   field('controlChannels').value = toMhzLines(system.control_channels_hz);
-  field('voiceChannels').value = toMhzLines(system.voice_channels_hz);
-  field('talkgroups').value = (system.talkgroups || [])
-    .filter((tg) => tg.enabled !== false)
-    .map((tg) => `${tg.tgid}, ${tg.label || tg.tgid}`)
-    .join('\n');
+  field('talkgroups').value = (system.talkgroups || []).filter((tg) => tg.enabled !== false).map((tg) => `${tg.tgid}, ${tg.label || tg.tgid}`).join('\n');
   field('controlSerial').value = system.receiver_roles?.p25_control?.rtl_serial || '';
   field('voiceSerial').value = system.receiver_roles?.p25_voice?.rtl_serial || '';
   field('gainDb').value = system.receiver_roles?.p25_control?.gain_db ?? 40.2;
@@ -337,36 +208,21 @@ function buildConfigFromForm() {
   const system = base.systems?.[0] || {};
   return {
     schema_version: Number(base.schema_version || 1),
-    systems: [
-      {
-        ...system,
-        name: field('systemName').value.trim() || 'Local P25 System',
-        enabled: true,
-        mode: 'p25_trunked',
-        site: field('siteName').value.trim(),
-        control_channels_hz: parseFrequencyLines(field('controlChannels').value),
-        voice_channels_hz: parseFrequencyLines(field('voiceChannels').value),
-        talkgroups: parseTalkgroupLines(field('talkgroups').value),
-        receiver_roles: {
-          p25_control: {
-            rtl_serial: field('controlSerial').value.trim(),
-            gain_db: gain,
-            ppm,
-          },
-          p25_voice: {
-            rtl_serial: field('voiceSerial').value.trim(),
-            gain_db: gain,
-            ppm,
-          },
-        },
-        decoder: {
-          ...(system.decoder || {}),
-          engine: 'op25',
-          phase_ii_enabled: field('phaseII').checked,
-          mute_encrypted: field('muteEncrypted').checked,
-        },
+    systems: [{
+      ...system,
+      name: field('systemName').value.trim() || 'Local P25 System',
+      enabled: true,
+      mode: 'p25_trunked',
+      site: field('siteName').value.trim(),
+      control_channels_hz: parseFrequencyLines(field('controlChannels').value),
+      voice_channels_hz: system.voice_channels_hz || [],
+      talkgroups: parseTalkgroupLines(field('talkgroups').value),
+      receiver_roles: {
+        p25_control: { rtl_serial: field('controlSerial').value.trim(), gain_db: gain, ppm },
+        p25_voice: { rtl_serial: field('voiceSerial').value.trim(), gain_db: gain, ppm },
       },
-    ],
+      decoder: { ...(system.decoder || {}), engine: 'op25', phase_ii_enabled: field('phaseII').checked, mute_encrypted: field('muteEncrypted').checked },
+    }],
   };
 }
 
@@ -381,19 +237,18 @@ async function refreshConfig() {
   }
 }
 
-async function saveConfig() {
+async function saveConfig(config = null) {
   try {
-    const config = buildConfigFromForm();
-    const response = await fetchJson('/api/config/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ config }),
-    });
+    const payload = config || buildConfigFromForm();
+    const response = await fetchJson('/api/config/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: payload }) });
+    currentConfig = payload;
     setText('lastEvent', `Saved config: ${response.config_path}`);
     await refreshConfig();
     await refreshStatus();
+    return response;
   } catch (error) {
     setText('lastEvent', `Save error: ${error.message}`);
+    throw error;
   }
 }
 
@@ -403,73 +258,189 @@ async function initLocalConfig() {
     setText('lastEvent', `Initialized local config: ${response.config_path}`);
     await refreshConfig();
     await refreshStatus();
-  } catch (error) {
-    setText('lastEvent', `Init config error: ${error.message}`);
-  }
+  } catch (error) { setText('lastEvent', `Init config error: ${error.message}`); }
 }
 
-async function postScanner(path) {
+async function generateOp25Config() {
   try {
-    const status = await fetchJson(path, { method: 'POST' });
-    renderStatus(status);
-  } catch (error) {
-    setText('lastEvent', `Control error: ${error.message}`);
-  }
-  await refreshStatus();
+    const status = await fetchJson('/api/decoder/generate-config', { method: 'POST' });
+    setText('lastEvent', 'Generated OP25 runtime config.');
+    if (status.status) renderDashboard(status.status);
+    await refreshStatus();
+  } catch (error) { setText('lastEvent', `Generate config error: ${error.message}`); }
 }
 
-async function startScannerWithBrowserAudio() {
-  browserAudioLastEvent = 'Attaching browser audio stream...';
-  renderBrowserAudioState();
-  const audioStarted = await enableBrowserAudio();
+async function startScannerAndAudio() {
+  const startBtn = field('startBtn');
+  if (startBtn) startBtn.disabled = true;
+  const audio = field('browserAudioPlayer');
+  if (audio) audio.src = audioStreamUrl();
+  const playPromise = audio ? audio.play().catch((error) => { updateAudioPanel(`Press audio play if blocked: ${error.message}`); return false; }) : Promise.resolve(false);
   try {
     const status = await fetchJson('/api/scanner/start', { method: 'POST' });
-    renderStatus(status);
-    if (audioStarted) {
-      browserAudioLastEvent = 'Scanner started and browser audio is playing.';
-    } else {
-      browserAudioLastEvent = 'Scanner started. Press Play in the audio control if browser autoplay was blocked.';
-    }
-    renderBrowserAudioState();
+    renderDashboard(status);
+    await playPromise;
+    updateAudioPanel('Scanner started; browser audio attached');
   } catch (error) {
-    browserAudioLastEvent = `Scanner start failed: ${error.message}`;
-    setText('lastEvent', `Control error: ${error.message}`);
-    renderBrowserAudioState();
+    setText('lastEvent', `Start error: ${error.message}`);
+    updateAudioPanel(`Start/audio error: ${error.message}`);
   }
   await refreshStatus();
 }
 
-async function stopScannerAndBrowserAudio() {
-  stopBrowserAudioPlayback();
-  await postScanner('/api/scanner/stop');
+async function stopScanner() {
+  stopBrowserAudio();
+  try {
+    const status = await fetchJson('/api/scanner/stop', { method: 'POST' });
+    renderDashboard(status);
+  } catch (error) { setText('lastEvent', `Stop error: ${error.message}`); }
+  await refreshStatus();
 }
 
-document.getElementById('startBtn')?.addEventListener('click', startScannerWithBrowserAudio);
-document.getElementById('stopBtn')?.addEventListener('click', stopScannerAndBrowserAudio);
-document.getElementById('refreshBtn')?.addEventListener('click', refreshStatus);
-document.getElementById('generateConfigBtn')?.addEventListener('click', () => postScanner('/api/decoder/generate-config'));
-document.getElementById('loadConfigBtn')?.addEventListener('click', refreshConfig);
-document.getElementById('initLocalConfigBtn')?.addEventListener('click', initLocalConfig);
-document.getElementById('saveConfigBtn')?.addEventListener('click', saveConfig);
-document.getElementById('enableBrowserAudioBtn')?.addEventListener('click', enableBrowserAudio);
-document.getElementById('playBrowserToneBtn')?.addEventListener('click', playBrowserTestTone);
-field('browserAudioPlayer')?.addEventListener('play', () => {
-  browserAudioEnabled = true;
-  browserAudioLastEvent = 'Browser audio control is playing.';
-  renderBrowserAudioState();
-});
-field('browserAudioPlayer')?.addEventListener('pause', () => {
-  browserAudioEnabled = false;
-  browserAudioLastEvent = 'Browser audio control is paused.';
-  renderBrowserAudioState();
-});
-field('browserAudioPlayer')?.addEventListener('error', () => {
-  browserAudioEnabled = false;
-  browserAudioLastEvent = 'Browser audio element reported a stream error. Verify raw audio service on port 8072.';
-  renderBrowserAudioState();
-});
+async function loadCatalog() {
+  if (catalog) return catalog;
+  const response = await fetch('/system_catalog.example.json', { cache: 'no-store' });
+  catalog = await response.json();
+  renderCategoryChoices(catalog.categories || CATEGORY_DEFAULTS);
+  return catalog;
+}
 
-renderBrowserAudioState();
+function selectedCategories() {
+  return Array.from(document.querySelectorAll('#categoryChoices input[type="checkbox"]:checked')).map((el) => el.value);
+}
+
+function renderCategoryChoices(categories) {
+  const target = field('categoryChoices');
+  if (!target) return;
+  target.innerHTML = '';
+  categories.forEach((category) => {
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = category;
+    input.checked = ['Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Interop'].includes(category);
+    label.append(input, document.createTextNode(category));
+    target.append(label);
+  });
+}
+
+function systemMatches(system, state, county, city) {
+  const stateMatch = !state || normalizeText(system.state) === state;
+  const countyMatch = !county || normalizeText(system.county).includes(county);
+  const cityMatch = !city || normalizeText(system.city).includes(city) || normalizeText(system.site).includes(city) || normalizeText(system.name).includes(city);
+  return stateMatch && countyMatch && cityMatch;
+}
+
+function renderWizardMatches() {
+  const select = field('wizardSystemSelect');
+  if (!select) return;
+  select.innerHTML = '';
+  matchedSystems.forEach((system, index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = `${system.name} — ${system.city || system.site || ''}`;
+    select.append(option);
+  });
+  if (matchedSystems.length) select.value = '0';
+  renderWizardPreview();
+}
+
+async function findSystems() {
+  const data = await loadCatalog();
+  const state = normalizeText(field('wizardState').value);
+  const county = normalizeText(field('wizardCounty').value);
+  const city = normalizeText(field('wizardCity').value);
+  matchedSystems = (data.systems || []).filter((system) => systemMatches(system, state, county, city));
+  renderWizardMatches();
+  if (!matchedSystems.length) setText('wizardPreview', 'No local catalog match. Add/verify a system in web/system_catalog.example.json, then redeploy.');
+}
+
+function selectedWizardSystem() {
+  const select = field('wizardSystemSelect');
+  const index = Number(select?.value || 0);
+  return matchedSystems[index] || null;
+}
+
+function filteredTalkgroups(system) {
+  const categories = selectedCategories();
+  const talkgroups = Array.isArray(system?.talkgroups) ? system.talkgroups : [];
+  if (!categories.length) return talkgroups;
+  return talkgroups.filter((tg) => categories.includes(tg.category || 'Other'));
+}
+
+function renderWizardPreview() {
+  const system = selectedWizardSystem();
+  if (!system) { setText('wizardPreview', 'No system selected.'); return; }
+  const talkgroups = filteredTalkgroups(system);
+  const preview = {
+    name: system.name,
+    site: system.site,
+    control_channels_mhz: (system.control_channels_hz || []).map((hz) => (hz / 1000000).toFixed(6)),
+    selected_talkgroups: talkgroups.map((tg) => ({ tgid: tg.tgid, label: tg.label, category: tg.category })),
+    notes: system.notes || '',
+  };
+  setText('wizardPreview', JSON.stringify(preview, null, 2));
+}
+
+function buildConfigFromWizard(system) {
+  const baseSystem = currentConfig?.systems?.[0] || {};
+  const controlRole = baseSystem.receiver_roles?.p25_control || {};
+  const voiceRole = baseSystem.receiver_roles?.p25_voice || controlRole;
+  const talkgroups = filteredTalkgroups(system).map((tg) => ({ tgid: Number(tg.tgid), label: tg.label || String(tg.tgid), category: tg.category || 'Other', enabled: tg.enabled !== false }));
+  return {
+    schema_version: Number(currentConfig?.schema_version || 1),
+    systems: [{
+      ...baseSystem,
+      name: system.name || 'Local P25 System',
+      enabled: true,
+      mode: 'p25_trunked',
+      site: system.site || system.city || '',
+      control_channels_hz: system.control_channels_hz || [],
+      voice_channels_hz: system.voice_channels_hz || [],
+      talkgroups,
+      receiver_roles: {
+        p25_control: { rtl_serial: controlRole.rtl_serial || '', gain_db: controlRole.gain_db ?? 40.2, ppm: controlRole.ppm ?? 0 },
+        p25_voice: { rtl_serial: voiceRole.rtl_serial || '', gain_db: voiceRole.gain_db ?? controlRole.gain_db ?? 40.2, ppm: voiceRole.ppm ?? controlRole.ppm ?? 0 },
+      },
+      decoder: { ...(baseSystem.decoder || {}), engine: 'op25', phase_ii_enabled: true, mute_encrypted: true },
+    }],
+  };
+}
+
+async function applyWizardConfig() {
+  const system = selectedWizardSystem();
+  if (!system) { setText('wizardPreview', 'Select a matched system first.'); return; }
+  try {
+    const config = buildConfigFromWizard(system);
+    await saveConfig(config);
+    await generateOp25Config();
+    showScreen('dashboardScreen');
+    setText('lastEvent', `Applied wizard config: ${system.name}`);
+  } catch (error) { setText('wizardPreview', `Apply failed: ${error.message}`); }
+}
+
+function attachEventHandlers() {
+  field('menuBtn')?.addEventListener('click', openDrawer);
+  field('closeDrawerBtn')?.addEventListener('click', closeDrawer);
+  field('drawerBackdrop')?.addEventListener('click', closeDrawer);
+  document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => showScreen(button.dataset.screen)));
+  field('startBtn')?.addEventListener('click', startScannerAndAudio);
+  field('stopBtn')?.addEventListener('click', stopScanner);
+  field('loadConfigBtn')?.addEventListener('click', refreshConfig);
+  field('initLocalConfigBtn')?.addEventListener('click', initLocalConfig);
+  field('saveConfigBtn')?.addEventListener('click', () => saveConfig());
+  field('generateConfigBtn')?.addEventListener('click', generateOp25Config);
+  field('findSystemsBtn')?.addEventListener('click', findSystems);
+  field('applyWizardBtn')?.addEventListener('click', applyWizardConfig);
+  field('wizardSystemSelect')?.addEventListener('change', renderWizardPreview);
+  field('categoryChoices')?.addEventListener('change', renderWizardPreview);
+  field('browserAudioPlayer')?.addEventListener('play', () => updateAudioPanel('Browser audio playing'));
+  field('browserAudioPlayer')?.addEventListener('pause', () => updateAudioPanel('Browser audio paused'));
+}
+
+attachEventHandlers();
+updateAudioPanel();
+loadCatalog().catch((error) => setText('wizardPreview', `Catalog load failed: ${error.message}`));
 refreshStatus();
 refreshConfig();
 setInterval(refreshStatus, 3000);
