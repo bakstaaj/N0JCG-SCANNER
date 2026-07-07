@@ -1,61 +1,15 @@
 {
-  "catalog_version": 2,
-  "source_note": "Local starter catalog for PI-P25-SCANNER. This V0.4F entry restores the specific Mesa/TOPAZ TGIDs from the known-working project test profile while RadioReference API access is pending.",
-  "categories": [
-    "Fire",
-    "EMS",
-    "Law Enforcement",
-    "Public Works",
-    "Utilities",
-    "Transportation",
-    "Interop",
-    "Emergency Management",
-    "Corrections",
-    "Schools",
-    "Federal",
-    "Other"
-  ],
+  "schema_version": 1,
   "systems": [
     {
-      "state": "AZ",
-      "state_aliases": [
-        "Arizona",
-        "AZ"
-      ],
-      "county": "Maricopa",
-      "county_aliases": [
-        "Maricopa County",
-        "Pinal County",
-        "East Valley"
-      ],
-      "city": "Mesa",
-      "city_aliases": [
-        "Mesa",
-        "Gilbert",
-        "Queen Creek",
-        "Apache Junction",
-        "Chandler",
-        "Tempe",
-        "Phoenix",
-        "Scottsdale",
-        "East Valley",
-        "TOPAZ",
-        "TRWC"
-      ],
-      "coverage": [
-        "Mesa",
-        "Gilbert",
-        "Queen Creek",
-        "Apache Junction",
-        "Chandler",
-        "Tempe",
-        "East Valley",
-        "Maricopa County",
-        "Pinal County"
-      ],
-      "name": "TOPAZ / TRWC Mesa Simulcast Known Working Specific",
+      "name": "TOPAZ TRWC Mesa Simulcast Clear Preferred Specific TGIDs",
+      "enabled": true,
+      "mode": "p25_trunked",
       "site": "Mesa Simulcast",
-      "notes": "Known-working project test profile. Includes specific TGIDs observed/used before the discovery-only profile. Encrypted/problem TGIDs are included but marked encrypted_expected and disabled by default in the wizard catalog.",
+      "state": "AZ",
+      "county": "Maricopa",
+      "city": "Mesa / Gilbert / East Valley",
+      "notes": "Restored from the project known-working TOPAZ/TRWC Mesa test profile used before the broad discovery whitelist. Encrypted/problem TGIDs are marked encrypted_expected.",
       "control_channels_hz": [
         852750000,
         852825000,
@@ -198,7 +152,24 @@
           "encrypted_expected": true,
           "enabled": false
         }
-      ]
+      ],
+      "receiver_roles": {
+        "p25_control": {
+          "rtl_serial": "",
+          "gain_db": 40.2,
+          "ppm": 0
+        },
+        "p25_voice": {
+          "rtl_serial": "",
+          "gain_db": 40.2,
+          "ppm": 0
+        }
+      },
+      "decoder": {
+        "engine": "op25",
+        "phase_ii_enabled": true,
+        "mute_encrypted": true
+      }
     }
   ]
 }
