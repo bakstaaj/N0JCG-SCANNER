@@ -44,6 +44,36 @@ def op25_nac_value(system: P25System) -> str:
     return str(system.nac)
 
 
+# V0.4H5_BLOCKED_TALKGROUP_BLACKLIST
+BLOCKED_TALKGROUP_LABEL_TOKENS = (
+    "encrypted",
+    "encrypt",
+    "ciphertxt",
+    "cipher",
+    "algid",
+    "blocked",
+    "block",
+    "skip",
+    "skipped",
+    "mute",
+    "muted",
+    "no audio",
+    "noaudio",
+)
+
+
+def is_blocked_talkgroup(tg: Any) -> bool:
+    """Return True when a TG should be excluded from active audio/OP25 whitelist."""
+
+    try:
+        if not bool(getattr(tg, "enabled", True)):
+            return True
+        label = str(getattr(tg, "label", "") or "").lower()
+        return any(token in label for token in BLOCKED_TALKGROUP_LABEL_TOKENS)
+    except Exception:
+        return False
+
+
 def write_lines(path: Path, lines: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
@@ -81,15 +111,19 @@ def generate_op25_configs(
         whitelist_file = output / f"{system_slug}_whitelist.tsv"
         blacklist_file = output / f"{system_slug}_blacklist.tsv"
 
-        enabled_tgs = system.enabled_talkgroups
-        if not enabled_tgs:
-            warnings.append(f"system {system.name!r} has no enabled talkgroups; whitelist will be empty")
+        clear_tgs = [tg for tg in system.talkgroups if bool(getattr(tg, "enabled", True)) and not is_blocked_talkgroup(tg)]
+        blocked_tgs = [tg for tg in system.talkgroups if is_blocked_talkgroup(tg)]
+        if not clear_tgs:
+            warnings.append(f"system {system.name!r} has no clear enabled talkgroups; whitelist will be empty")
+        if blocked_tgs:
+            warnings.append(f"system {system.name!r} blacklisted {len(blocked_tgs)} disabled/encrypted/blocked talkgroups")
 
-        tag_lines = [f"{tg.tgid}\t{tg.label or tg.tgid}" for tg in enabled_tgs]
-        whitelist_lines = [str(tg.tgid) for tg in enabled_tgs]
+        tag_lines = [f"{tg.tgid}\t{tg.label or tg.tgid}" for tg in system.talkgroups]
+        whitelist_lines = [str(tg.tgid) for tg in clear_tgs]
+        blacklist_lines = [str(tg.tgid) for tg in blocked_tgs]
         write_lines(tags_file, tag_lines or [])
         write_lines(whitelist_file, whitelist_lines or [])
-        write_lines(blacklist_file, [])
+        write_lines(blacklist_file, blacklist_lines or [])
 
         cc_list = ",".join(hz_to_mhz_string(freq) for freq in system.control_channels_hz)
         row = [
@@ -110,8 +144,10 @@ def generate_op25_configs(
                 "site": system.site,
                 "control_channels_hz": system.control_channels_hz,
                 "control_channels_mhz": [hz_to_mhz_string(freq) for freq in system.control_channels_hz],
-                "enabled_talkgroups": [tg.tgid for tg in enabled_tgs],
-                "talkgroup_count": len(enabled_tgs),
+                "enabled_talkgroups": [tg.tgid for tg in clear_tgs],
+                "blocked_talkgroups": [tg.tgid for tg in blocked_tgs],
+                "talkgroup_count": len(clear_tgs),
+                "blocked_talkgroup_count": len(blocked_tgs),
                 "tags_file": str(tags_file.resolve()),
                 "whitelist_file": str(whitelist_file.resolve()),
                 "blacklist_file": str(blacklist_file.resolve()),

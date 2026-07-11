@@ -1,9 +1,50 @@
 'use strict';
 
-let currentConfig = null;
+// V0.5F_DESKTOP_LAUNCHER_NO_PAGE_AUTOSTART
+// Normal browser page loads must not start the scanner automatically.
+// The Pi desktop launcher starts the scanner intentionally by calling the backend API,
+// then opens this page. Manual browser starts still work from the Start Scanner + Audio button.
+window.__P25_REQUIRE_USER_START__ = true;
+window.__P25_USER_START_REQUESTED__ = false;
+window.__P25_DESKTOP_LAUNCHER_MODE__ = false;
+function p25AllowManualStart(event) {
+  if (event && event.isTrusted === false) {
+    setText('lastEvent', 'Ignored non-user scanner start request.');
+    return false;
+  }
+  window.__P25_USER_START_REQUESTED__ = true;
+  return true;
+}
+(function installP25NoPageAutostartFetchGuard() {
+  if (window.__P25_FETCH_GUARD_INSTALLED__) return;
+  window.__P25_FETCH_GUARD_INSTALLED__ = true;
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = function guardedP25Fetch(input, init) {
+    const url = typeof input === 'string' ? input : String(input && input.url || '');
+    const method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+    const scannerStart = method === 'POST' && url.includes('/api/scanner/start');
+    if (scannerStart && window.__P25_REQUIRE_USER_START__ && !window.__P25_USER_START_REQUESTED__) {
+      const body = JSON.stringify({
+        ok: false,
+        blocked: true,
+        autostart_disabled: true,
+        marker: 'V0.5F_DESKTOP_LAUNCHER_NO_PAGE_AUTOSTART',
+        error: 'Page-load scanner auto-start is disabled. Use the desktop launcher or the Start Scanner + Audio button.'
+      });
+      return Promise.resolve(new Response(body, {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    }
+    return originalFetch(input, init);
+  };
+})();
+// V0.5D_EMERGENCY_UI_RESTORE
+
 let latestStatus = null;
-let catalog = null;
-let matchedSystems = [];
+let currentConfig = null;
+let rrSystems = [];
+let rrSites = [];
 let browserAudioLastEvent = 'Ready';
 
 const CATEGORY_DEFAULTS = [
@@ -14,73 +55,13 @@ const CATEGORY_DEFAULTS = [
 function field(id) { return document.getElementById(id); }
 function setText(id, value) { const el = field(id); if (el) el.textContent = value ?? '-'; }
 function setBadge(id, text, kind) { const el = field(id); if (!el) return; el.textContent = text; el.className = `pill ${kind || ''}`.trim(); }
-function formatHz(value) { if (!value) return '-'; return `${(Number(value) / 1000000).toFixed(6)} MHz`; }
-function formatBool(value) { return value ? 'yes' : 'no'; }
+function formatHz(value) { return value ? `${(Number(value) / 1000000).toFixed(6)} MHz` : '-'; }
 function formatList(values) { return Array.isArray(values) && values.length ? values.join('\n') : '-'; }
-function commandText(command) { if (Array.isArray(command)) return command.join(' '); return typeof command === 'string' ? command : ''; }
-function normalizeText(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-const STATE_ALIASES = {
-  al: ['al', 'alabama'], ak: ['ak', 'alaska'], az: ['az', 'arizona'], ar: ['ar', 'arkansas'],
-  ca: ['ca', 'california'], co: ['co', 'colorado'], ct: ['ct', 'connecticut'], de: ['de', 'delaware'],
-  fl: ['fl', 'florida'], ga: ['ga', 'georgia'], hi: ['hi', 'hawaii'], id: ['id', 'idaho'],
-  il: ['il', 'illinois'], in: ['in', 'indiana'], ia: ['ia', 'iowa'], ks: ['ks', 'kansas'],
-  ky: ['ky', 'kentucky'], la: ['la', 'louisiana'], me: ['me', 'maine'], md: ['md', 'maryland'],
-  ma: ['ma', 'massachusetts'], mi: ['mi', 'michigan'], mn: ['mn', 'minnesota'], ms: ['ms', 'mississippi'],
-  mo: ['mo', 'missouri'], mt: ['mt', 'montana'], ne: ['ne', 'nebraska'], nv: ['nv', 'nevada'],
-  nh: ['nh', 'new hampshire'], nj: ['nj', 'new jersey'], nm: ['nm', 'new mexico'], ny: ['ny', 'new york'],
-  nc: ['nc', 'north carolina'], nd: ['nd', 'north dakota'], oh: ['oh', 'ohio'], ok: ['ok', 'oklahoma'],
-  or: ['or', 'oregon'], pa: ['pa', 'pennsylvania'], ri: ['ri', 'rhode island'], sc: ['sc', 'south carolina'],
-  sd: ['sd', 'south dakota'], tn: ['tn', 'tennessee'], tx: ['tx', 'texas'], ut: ['ut', 'utah'],
-  vt: ['vt', 'vermont'], va: ['va', 'virginia'], wa: ['wa', 'washington'], wv: ['wv', 'west virginia'],
-  wi: ['wi', 'wisconsin'], wy: ['wy', 'wyoming'], dc: ['dc', 'district of columbia']
-};
-
-function stateAliasSet(value) {
-  const text = normalizeText(value);
-  for (const aliases of Object.values(STATE_ALIASES)) {
-    if (aliases.includes(text)) return aliases;
-  }
-  return text ? [text] : [];
-}
-
-function catalogSearchValues(system) {
-  const values = [system.state, system.county, system.city, system.site, system.name, system.notes];
-  ['aliases', 'coverage', 'counties', 'cities', 'sites'].forEach((key) => {
-    if (Array.isArray(system[key])) values.push(...system[key]);
-  });
-  return values.map(normalizeText).filter(Boolean);
-}
-
-function containsQuery(values, query) {
-  const normalized = normalizeText(query);
-  if (!normalized) return true;
-  return values.some((value) => value === normalized || value.includes(normalized) || normalized.includes(value));
-}
-
+function commandText(command) { return Array.isArray(command) ? command.join(' ') : (typeof command === 'string' ? command : ''); }
 function audioStreamUrl() { return `http://${window.location.hostname}:8072/audio.wav`; }
 function testToneUrl() { return `http://${window.location.hostname}:8072/test-tone.wav`; }
-function optionalNumber(id) {
-  const value = String(field(id)?.value || '').trim();
-  return value ? Number(value) : null;
-}
-function selectedLocationPayload() {
-  return {
-    state: String(field('wizardState')?.value || '').trim(),
-    county: String(field('wizardCounty')?.value || '').trim(),
-    city: String(field('wizardCity')?.value || '').trim(),
-    categories: selectedCategories(),
-    system_id: optionalNumber('rrSystemId'),
-    site_id: optionalNumber('rrSiteId'),
-  };
-}
+function safeJson(value) { try { return JSON.stringify(value, null, 2); } catch { return String(value); } }
+function numberOrNull(value) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : null; }
 
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, { cache: 'no-store', ...options });
@@ -89,6 +70,10 @@ async function fetchJson(url, options = {}) {
   try { payload = text ? JSON.parse(text) : {}; } catch (error) { payload = { ok: false, error: `Invalid JSON: ${error.message}`, raw: text }; }
   if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
   return payload;
+}
+
+async function postJson(url, payload = {}) {
+  return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
 }
 
 function openDrawer() { field('drawer')?.classList.add('open'); field('drawerBackdrop')?.classList.add('open'); }
@@ -103,12 +88,11 @@ function markerIsReady(marker) { return Boolean(marker?.start_ready || (marker?.
 function extractOp25HttpListener(status) {
   const process = status?.decoder_process || {};
   const marker = process.validated_marker || {};
-  const combined = `${commandText(process.command)} ${JSON.stringify(marker)}`;
+  const combined = `${commandText(process.command)} ${safeJson(marker)}`;
   const match = combined.match(/http:(?:\[[^\]]+\]|[^:\s]+):(\d{1,5})/);
   if (!match) return null;
   const port = Number(match[1]);
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
-  return { port, piLocalUrl: `http://127.0.0.1:${port}/` };
+  return Number.isInteger(port) && port > 0 && port < 65536 ? { port, piLocalUrl: `http://127.0.0.1:${port}/` } : null;
 }
 
 function setButtonsForState(status) {
@@ -122,45 +106,24 @@ function setButtonsForState(status) {
   if (stopBtn) stopBtn.disabled = !running;
 }
 
-function updateAudioPanel(message) {
-  const audio = field('browserAudioPlayer');
-  if (audio && !audio.src) audio.src = audioStreamUrl();
-  if (message) browserAudioLastEvent = message;
-  setText('browserAudioLastEvent', browserAudioLastEvent);
-}
-
-async function playBrowserAudio() {
-  const audio = field('browserAudioPlayer');
-  if (!audio) return false;
-  if (audio.src !== audioStreamUrl()) audio.src = audioStreamUrl();
-  try {
-    await audio.play();
-    updateAudioPanel('Browser audio playing');
-    return true;
-  } catch (error) {
-    updateAudioPanel(`Press audio play if blocked: ${error.message}`);
-    return false;
-  }
-}
-
-async function playBrowserTestTone() {
-  const audio = field('browserAudioPlayer');
-  if (!audio) return;
-  audio.src = testToneUrl();
-  try {
-    await audio.play();
-    updateAudioPanel('Playing bridge test tone');
-  } catch (error) {
-    updateAudioPanel(`Test tone failed: ${error.message}`);
-  }
-}
-
-function stopBrowserAudio() {
-  const audio = field('browserAudioPlayer');
-  if (!audio) return;
-  audio.pause();
-  audio.src = audioStreamUrl();
-  updateAudioPanel('Browser audio stopped');
+function bestTalkgroup(status) {
+  const recent = Array.isArray(status?.activity_summary?.recent_events) ? status.activity_summary.recent_events : [];
+  const fallback = [...recent].reverse().find((event) => event && (event.tgid || event.talkgroup_label));
+  const tgid = status?.active_tgid || status?.last_active_tgid || fallback?.tgid || null;
+  const configuredLabel = tgid ? status?.talkgroup_catalog?.labels?.[String(tgid)] : '';
+  const rawLabel = status?.active_talkgroup_label || status?.last_active_talkgroup_label || fallback?.talkgroup_label || configuredLabel || '';
+  const running = Boolean(status?.decoder_process?.running);
+  const labelOnly = rawLabel || (tgid ? 'Talkgroup activity' : (running ? 'Scanning for voice activity' : 'Waiting for activity'));
+  const activeNow = Boolean(status?.active_tgid || status?.active_talkgroup_label);
+  const prefix = activeNow ? 'Active' : (tgid ? 'Last heard' : '');
+  return {
+    has_talkgroup: Boolean(tgid || rawLabel),
+    tgid,
+    tgid_text: tgid ? `TGID ${tgid}` : '-',
+    label: prefix ? `${prefix}: ${labelOnly}` : labelOnly,
+    short_label: tgid ? `${labelOnly} · TGID ${tgid}` : labelOnly,
+    voice_frequency_hz: status?.active_voice_frequency_hz || status?.last_active_voice_frequency_hz || fallback?.voice_frequency_hz || null,
+  };
 }
 
 function formatActivityEvent(event) {
@@ -176,71 +139,56 @@ function formatActivityEvent(event) {
   return pieces.length ? pieces.join(' | ') : (event.line || '-');
 }
 
-function bestTalkgroup(status) {
-  const recent = Array.isArray(status?.activity_summary?.recent_events) ? status.activity_summary.recent_events : [];
-  const fallback = [...recent].reverse().find((event) => event && (event.tgid || event.talkgroup_label));
-  const tgid = status?.active_tgid || status?.last_active_tgid || fallback?.tgid || null;
-  const configuredLabel = tgid ? status?.talkgroup_catalog?.labels?.[String(tgid)] : '';
-  const rawLabel = status?.active_talkgroup_label || status?.last_active_talkgroup_label || fallback?.talkgroup_label || configuredLabel || '';
-  const process = status?.decoder_process || {};
-  const running = Boolean(process.running);
-  const labelOnly = rawLabel || (tgid ? 'Talkgroup activity' : (running ? 'Scanning for voice activity' : 'Waiting for activity'));
-  const activeNow = Boolean(status?.active_tgid || status?.active_talkgroup_label);
-  const prefix = activeNow ? 'Active' : (tgid ? 'Last heard' : '');
-  return {
-    has_talkgroup: Boolean(tgid || rawLabel),
-    tgid,
-    tgid_text: tgid ? `TGID ${tgid}` : '-',
-    label: prefix ? `${prefix}: ${labelOnly}` : labelOnly,
-    short_label: tgid ? `${labelOnly} · TGID ${tgid}` : labelOnly,
-    voice_frequency_hz: status?.active_voice_frequency_hz || status?.last_active_voice_frequency_hz || fallback?.voice_frequency_hz || null,
-  };
-}
-
 function renderActivitySummary(activity) {
-  setText('activityUniqueTgids', activity?.unique_tgid_count ?? 0);  setText('activityClearEvents', activity?.clear_voice_events ?? 0);
+  setText('activityUniqueTgids', activity?.unique_tgid_count ?? 0);
+  setText('activityClearEvents', activity?.clear_voice_events ?? 0);
   setText('activityEncryptedEvents', activity?.encrypted_events ?? 0);
   setText('activityMutedEvents', activity?.muted_events ?? 0);
   const recent = Array.isArray(activity?.recent_events) ? activity.recent_events : [];
   setText('activityRecentEvents', recent.length ? recent.slice(-10).map(formatActivityEvent).join('\n') : 'No parsed activity yet.');
 }
 
+function updateAudioPanel(message) {
+  const audio = field('browserAudioPlayer');
+  if (audio && !audio.src) audio.src = audioStreamUrl();
+  if (message) browserAudioLastEvent = message;
+  setText('browserAudioLastEvent', browserAudioLastEvent);
+}
+
 function renderDashboard(status) {
-  const process = status.decoder_process || {};
+  const process = status?.decoder_process || {};
   const marker = process.validated_marker || {};
   const running = Boolean(process.running);
   const ready = markerIsReady(marker) || Boolean(process.start_enabled);
-  const state = status.scanner_state || '-';
-  const listener = extractOp25HttpListener(status);
-  const talkgroup = bestTalkgroup(status);
-  setText('dashboardSummary', running ? (talkgroup.has_talkgroup ? talkgroup.short_label : `Running on ${formatHz(status.active_control_frequency_hz)}`) : (ready ? 'Ready to start' : 'Not launch-ready'));
-  setText('scannerState', state);
+  const talkgroup = bestTalkgroup(status || {});
+  const listener = extractOp25HttpListener(status || {});
+  setText('dashboardSummary', running ? (talkgroup.has_talkgroup ? talkgroup.short_label : `Running on ${formatHz(status?.active_control_frequency_hz)}`) : (ready ? 'Ready to start' : 'Not launch-ready'));
+  setText('scannerState', status?.scanner_state || '-');
   setText('decoderPid', process.pid || '-');
-  setText('controlFrequency', formatHz(status.active_control_frequency_hz));
+  setText('controlFrequency', formatHz(status?.active_control_frequency_hz));
   setText('voiceFrequency', formatHz(talkgroup.voice_frequency_hz));
   setText('activeTgid', talkgroup.tgid_text);
   setText('activeTalkgroupLabel', talkgroup.label);
-  setText('p25Phase', status.p25_phase || '-');
+  setText('p25Phase', status?.p25_phase || '-');
   setText('op25HttpListener', listener ? listener.piLocalUrl : '-');
   setText('launchReady', ready ? 'yes' : 'no');
   setText('commandSource', process.command_source || '-');
   setText('validatedMarkerState', markerIsReady(marker) ? 'validated' : (marker.exists ? 'present' : 'missing'));
   setText('validatedCommand', formatList(process.command));
-  setText('lastEvent', status.last_event || '-');
-  setText('logTail', formatList(status.log_tail));
+  setText('lastEvent', status?.last_event || '-');
+  setText('logTail', formatList(status?.log_tail));
   setText('lastUpdated', `Last update: ${new Date().toLocaleTimeString()}`);
-  setBadge('stateBadge', running ? 'ON AIR' : state, running ? 'ok' : (status.ok ? 'warn' : 'bad'));
+  setBadge('stateBadge', running ? 'ON AIR' : (status?.scanner_state || '-'), running ? 'ok' : (status?.ok ? 'warn' : 'bad'));
   setBadge('connectionStatus', 'Connected', 'ok');
-  renderActivitySummary(status.activity_summary || {});
+  renderActivitySummary(status?.activity_summary || {});
   updateAudioPanel();
-  setButtonsForState(status);
+  setButtonsForState(status || {});
 }
 
 async function refreshStatus() {
   try {
-    const status = await fetchJson('/api/status');
-    latestStatus = status;
-    renderDashboard(status);
+    latestStatus = await fetchJson('/api/status');
+    renderDashboard(latestStatus);
   } catch (error) {
     setBadge('connectionStatus', 'Offline', 'bad');
     setText('dashboardSummary', `Status error: ${error.message}`);
@@ -248,116 +196,27 @@ async function refreshStatus() {
   }
 }
 
-function toMhzLines(values) { return (values || []).map((value) => (Number(value) / 1000000).toFixed(6)).join('\n'); }
-function parseFrequencyLines(value) {
-  return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-    const cleaned = line.toLowerCase().replace('mhz', '').replace('hz', '').replace(/[, _]/g, '');
-    const numeric = Number(cleaned);
-    if (!Number.isFinite(numeric) || numeric <= 0) throw new Error(`Invalid frequency: ${line}`);
-    return numeric < 10000 ? Math.round(numeric * 1000000) : Math.round(numeric);
-  });
-}
-function parseTalkgroupLines(value) {
-  return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-    const parts = line.split(',');
-    const tgid = Number(parts.shift().trim());
-    if (!Number.isInteger(tgid) || tgid <= 0) throw new Error(`Invalid TGID: ${line}`);
-    const label = parts.join(',').trim() || String(tgid);
-    return { tgid, label, enabled: true };
-  });
-}
-
-function populateForm(config) {
-  const system = config?.systems?.[0] || {};
-  field('systemName').value = system.name || '';
-  field('siteName').value = system.site || '';
-  field('controlChannels').value = toMhzLines(system.control_channels_hz);
-  field('talkgroups').value = (system.talkgroups || []).filter((tg) => tg.enabled !== false).map((tg) => `${tg.tgid}, ${tg.label || tg.tgid}`).join('\n');
-  field('controlSerial').value = system.receiver_roles?.p25_control?.rtl_serial || '';
-  field('voiceSerial').value = system.receiver_roles?.p25_voice?.rtl_serial || '';
-  field('gainDb').value = system.receiver_roles?.p25_control?.gain_db ?? 40.2;
-  field('ppm').value = system.receiver_roles?.p25_control?.ppm ?? 0;
-  field('phaseII').checked = system.decoder?.phase_ii_enabled !== false;
-  field('muteEncrypted').checked = system.decoder?.mute_encrypted !== false;
-}
-
-function buildConfigFromForm() {
-  const gain = field('gainDb').value === '' ? null : Number(field('gainDb').value);
-  const ppm = field('ppm').value === '' ? 0 : Number(field('ppm').value);
-  const base = currentConfig || { schema_version: 1, systems: [{}] };
-  const system = base.systems?.[0] || {};
-  return {
-    schema_version: Number(base.schema_version || 1),
-    systems: [{
-      ...system,
-      name: field('systemName').value.trim() || 'Local P25 System',
-      enabled: true,
-      mode: 'p25_trunked',
-      site: field('siteName').value.trim(),
-      control_channels_hz: parseFrequencyLines(field('controlChannels').value),
-      voice_channels_hz: system.voice_channels_hz || [],
-      talkgroups: parseTalkgroupLines(field('talkgroups').value),
-      receiver_roles: {
-        p25_control: { rtl_serial: field('controlSerial').value.trim(), gain_db: gain, ppm },
-        p25_voice: { rtl_serial: field('voiceSerial').value.trim(), gain_db: gain, ppm },
-      },
-      decoder: { ...(system.decoder || {}), engine: 'op25', phase_ii_enabled: field('phaseII').checked, mute_encrypted: field('muteEncrypted').checked },
-    }],
-  };
-}
-
 async function refreshConfig() {
   try {
     const response = await fetchJson('/api/config');
     currentConfig = response.config;
-    setText('configPreview', JSON.stringify(response, null, 2));
-    if (currentConfig) populateForm(currentConfig);
+    setText('configPreview', safeJson(response));
   } catch (error) {
     setText('configPreview', `Config error: ${error.message}`);
   }
 }
 
-async function saveConfig(config = null) {
-  try {
-    const payload = config || buildConfigFromForm();
-    const response = await fetchJson('/api/config/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: payload }) });
-    currentConfig = payload;
-    setText('lastEvent', `Saved config: ${response.config_path}`);
-    await refreshConfig();
-    await refreshStatus();
-    return response;
-  } catch (error) {
-    setText('lastEvent', `Save error: ${error.message}`);
-    throw error;
-  }
-}
-
-async function initLocalConfig() {
-  try {
-    const response = await fetchJson('/api/config/init-local', { method: 'POST' });
-    setText('lastEvent', `Initialized local config: ${response.config_path}`);
-    await refreshConfig();
-    await refreshStatus();
-  } catch (error) { setText('lastEvent', `Init config error: ${error.message}`); }
-}
-
-async function generateOp25Config() {
-  try {
-    const status = await fetchJson('/api/decoder/generate-config', { method: 'POST' });
-    setText('lastEvent', 'Generated OP25 runtime config.');
-    if (status.status) renderDashboard(status.status);
-    await refreshStatus();
-  } catch (error) { setText('lastEvent', `Generate config error: ${error.message}`); }
-}
-
 async function startScannerAndAudio() {
-  const startBtn = field('startBtn');
-  if (startBtn) startBtn.disabled = true;
+  if (window.__P25_REQUIRE_USER_START__ && !window.__P25_USER_START_REQUESTED__) {
+    setText('lastEvent', 'Page-load scanner auto-start is disabled. Use the desktop launcher or Start Scanner + Audio.');
+    return;
+  }
+
   const audio = field('browserAudioPlayer');
   if (audio) audio.src = audioStreamUrl();
   const playPromise = audio ? audio.play().catch((error) => { updateAudioPanel(`Press audio play if blocked: ${error.message}`); return false; }) : Promise.resolve(false);
   try {
-    const status = await fetchJson('/api/scanner/start', { method: 'POST' });
+    const status = await postJson('/api/scanner/start');
     renderDashboard(status);
     await playPromise;
     updateAudioPanel('Scanner started; browser audio attached');
@@ -369,27 +228,17 @@ async function startScannerAndAudio() {
 }
 
 async function stopScanner() {
-  stopBrowserAudio();
+  const audio = field('browserAudioPlayer');
+  if (audio) { audio.pause(); audio.src = audioStreamUrl(); }
+  updateAudioPanel('Browser audio stopped');
   try {
-    const status = await fetchJson('/api/scanner/stop', { method: 'POST' });
+    const status = await postJson('/api/scanner/stop');
     renderDashboard(status);
   } catch (error) { setText('lastEvent', `Stop error: ${error.message}`); }
   await refreshStatus();
 }
 
-async function loadCatalog() {
-  if (catalog) return catalog;
-  const response = await fetch('/system_catalog.example.json', { cache: 'no-store' });
-  catalog = await response.json();
-  renderCategoryChoices(catalog.categories || CATEGORY_DEFAULTS);
-  return catalog;
-}
-
-function selectedCategories() {
-  return Array.from(document.querySelectorAll('#categoryChoices input[type="checkbox"]:checked')).map((el) => el.value);
-}
-
-function renderCategoryChoices(categories) {
+function renderCategoryChoices(categories = CATEGORY_DEFAULTS) {
   const target = field('categoryChoices');
   if (!target) return;
   target.innerHTML = '';
@@ -398,131 +247,94 @@ function renderCategoryChoices(categories) {
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.value = category;
-    input.checked = ['Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Interop'].includes(category);
+    input.checked = ['Fire', 'EMS', 'Law Enforcement', 'Interop'].includes(category);
     label.append(input, document.createTextNode(category));
     target.append(label);
   });
 }
 
-function systemMatches(system, state, county, city) {
-  const values = catalogSearchValues(system);
-  const stateQueryAliases = stateAliasSet(state);
-  const systemStateAliases = stateAliasSet(system.state);
-  const stateMatch = !stateQueryAliases.length || stateQueryAliases.some((query) => systemStateAliases.includes(query));
-  const countyMatch = containsQuery(values, county);
-  const cityMatch = containsQuery(values, city);
-  return stateMatch && countyMatch && cityMatch;
+function selectedCategories() {
+  return Array.from(document.querySelectorAll('#categoryChoices input[type="checkbox"]:checked')).map((el) => el.value);
 }
 
-function renderWizardMatches() {
-  const select = field('wizardSystemSelect');
-  if (!select) return;
-  select.innerHTML = '';
-  matchedSystems.forEach((system, index) => {
-    const option = document.createElement('option');
-    option.value = String(index);
-    option.textContent = `${system.name} — ${system.city || system.site || ''}`;
-    select.append(option);
-  });
-  if (matchedSystems.length) select.value = '0';
-  renderWizardPreview();
+function locationPayload() {
+  return {
+    state: String(field('wizardState')?.value || '').trim(),
+    county: String(field('wizardCounty')?.value || '').trim(),
+    city: String(field('wizardCity')?.value || '').trim(),
+    categories: selectedCategories(),
+    system_id: selectedSystemId(),
+    site_id: selectedSiteId(),
+    name: String(field('profileName')?.value || '').trim(),
+  };
 }
 
-async function findSystems() {
-  const data = await loadCatalog();
-  const state = normalizeText(field('wizardState').value);
-  const county = normalizeText(field('wizardCounty').value);
-  const city = normalizeText(field('wizardCity').value);
-  matchedSystems = (data.systems || []).filter((system) => systemMatches(system, state, county, city));
-  renderWizardMatches();
-  if (!matchedSystems.length) {
-    setText('wizardPreview', `No local catalog match for State=${field('wizardState').value || '-'}, County=${field('wizardCounty').value || '-'}, City=${field('wizardCity').value || '-'}. Try leaving County or City blank, or add aliases/coverage to web/system_catalog.example.json.`);
+function selectedSystemId() { return numberOrNull(field('rrSystemSelect')?.value); }
+function selectedSiteId() { return numberOrNull(field('rrSiteSelect')?.value); }
+
+async function refreshProfiles() {
+  try {
+    const payload = await fetchJson('/api/config/named');
+    const select = field('profileSelect');
+    if (select) {
+      select.innerHTML = '';
+      (payload.configs || []).forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.id || item.name;
+        option.textContent = `${item.name || item.id}${item.active ? ' (active)' : ''}`;
+        select.append(option);
+      });
+    }
+    setBadge('profileStatusBadge', `${payload.count || 0} profiles`, 'ok');
+    setText('profileStatusText', safeJson(payload));
+  } catch (error) {
+    setBadge('profileStatusBadge', 'Profile error', 'bad');
+    setText('profileStatusText', `Profile load failed: ${error.message}`);
   }
 }
 
-function selectedWizardSystem() {
-  const select = field('wizardSystemSelect');
-  const index = Number(select?.value || 0);
-  return matchedSystems[index] || null;
-}
-
-function filteredTalkgroups(system) {
-  const categories = selectedCategories();
-  const talkgroups = Array.isArray(system?.talkgroups) ? system.talkgroups : [];
-  if (!categories.length) return talkgroups;
-  return talkgroups.filter((tg) => categories.includes(tg.category || 'Other'));
-}
-
-function renderWizardPreview() {
-  const system = selectedWizardSystem();
-  if (!system) { setText('wizardPreview', 'No system selected.'); return; }
-  const talkgroups = filteredTalkgroups(system);
-  const preview = {
-    name: system.name,
-    site: system.site,
-    control_channels_mhz: (system.control_channels_hz || []).map((hz) => (hz / 1000000).toFixed(6)),
-    selected_talkgroups: talkgroups.map((tg) => ({ tgid: tg.tgid, label: tg.label, category: tg.category })),
-    notes: system.notes || '',
-  };
-  setText('wizardPreview', JSON.stringify(preview, null, 2));
-}
-
-function buildConfigFromWizard(system) {
-  const baseSystem = currentConfig?.systems?.[0] || {};
-  const controlRole = baseSystem.receiver_roles?.p25_control || {};
-  const voiceRole = baseSystem.receiver_roles?.p25_voice || controlRole;
-  const talkgroups = filteredTalkgroups(system).map((tg) => ({ tgid: Number(tg.tgid), label: tg.label || String(tg.tgid), category: tg.category || 'Other', enabled: tg.enabled !== false }));
-  return {
-    schema_version: Number(currentConfig?.schema_version || 1),
-    systems: [{
-      ...baseSystem,
-      name: system.name || 'Local P25 System',
-      enabled: true,
-      mode: 'p25_trunked',
-      site: system.site || system.city || '',
-      control_channels_hz: system.control_channels_hz || [],
-      voice_channels_hz: system.voice_channels_hz || [],
-      talkgroups,
-      receiver_roles: {
-        p25_control: { rtl_serial: controlRole.rtl_serial || '', gain_db: controlRole.gain_db ?? 40.2, ppm: controlRole.ppm ?? 0 },
-        p25_voice: { rtl_serial: voiceRole.rtl_serial || '', gain_db: voiceRole.gain_db ?? controlRole.gain_db ?? 40.2, ppm: voiceRole.ppm ?? controlRole.ppm ?? 0 },
-      },
-      decoder: { ...(baseSystem.decoder || {}), engine: 'op25', phase_ii_enabled: true, mute_encrypted: true },
-    }],
-  };
-}
-
-async function applyWizardConfig() {
-  const system = selectedWizardSystem();
-  if (!system) { setText('wizardPreview', 'Select a matched system first.'); return; }
+async function loadSelectedProfile() {
+  const id = field('profileSelect')?.value || '';
+  if (!id) { setText('profileStatusText', 'Select a profile first.'); return; }
   try {
-    const config = buildConfigFromWizard(system);
-    await saveConfig(config);
-    await generateOp25Config();
-    showScreen('dashboardScreen');
-    setText('lastEvent', `Applied wizard config: ${system.name}`);
-  } catch (error) { setText('wizardPreview', `Apply failed: ${error.message}`); }
+    const payload = await postJson('/api/config/named/load', { id, apply: true });
+    setBadge('profileStatusBadge', 'Loaded', 'ok');
+    setText('profileStatusText', safeJson(payload));
+    await refreshConfig();
+    await refreshStatus();
+  } catch (error) {
+    setBadge('profileStatusBadge', 'Load failed', 'bad');
+    setText('profileStatusText', `Load failed: ${error.message}`);
+  }
+}
+
+async function saveCurrentProfile() {
+  const name = String(field('profileName')?.value || '').trim();
+  if (!name) { setText('profileStatusText', 'Enter a profile name first.'); return; }
+  try {
+    const payload = await postJson('/api/config/named/save', { name, apply: false });
+    setBadge('profileStatusBadge', 'Saved', 'ok');
+    setText('profileStatusText', safeJson(payload));
+    await refreshProfiles();
+  } catch (error) {
+    setBadge('profileStatusBadge', 'Save failed', 'bad');
+    setText('profileStatusText', `Save failed: ${error.message}`);
+  }
 }
 
 function renderRadioReferenceStatus(payload) {
   const configured = Boolean(payload?.configured);
   const zeepOk = Boolean(payload?.zeep?.available);
-  const badgeText = configured ? (zeepOk ? 'RR Ready' : 'Need zeep') : 'Not configured';
-  const badgeKind = configured && zeepOk ? 'ok' : 'warn';
-  setBadge('rrStatusBadge', badgeText, badgeKind);
+  setBadge('rrStatusBadge', configured ? (zeepOk ? 'RR Ready' : 'Need zeep') : 'Not configured', configured && zeepOk ? 'ok' : 'warn');
   const safe = { ...(payload || {}) };
   if (safe.password) safe.password = '<hidden>';
-  setText('rrStatusText', JSON.stringify(safe, null, 2));
+  setText('rrStatusText', safeJson(safe));
+  if (payload?.username && field('rrUsername') && !field('rrUsername').value) field('rrUsername').value = payload.username;
 }
 
 async function refreshRadioReferenceStatus() {
-  try {
-    const status = await fetchJson('/api/radioreference/status');
-    renderRadioReferenceStatus(status);
-  } catch (error) {
-    setBadge('rrStatusBadge', 'RR Offline', 'bad');
-    setText('rrStatusText', `RadioReference status error: ${error.message}`);
-  }
+  try { renderRadioReferenceStatus(await fetchJson('/api/radioreference/status')); }
+  catch (error) { setBadge('rrStatusBadge', 'RR Offline', 'bad'); setText('rrStatusText', `RadioReference status error: ${error.message}`); }
 }
 
 async function saveRadioReferenceCredentials() {
@@ -532,51 +344,131 @@ async function saveRadioReferenceCredentials() {
     password: String(field('rrPassword')?.value || ''),
   };
   try {
-    const status = await fetchJson('/api/radioreference/save-credentials', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    field('rrPassword').value = '';
-    field('rrAppKey').value = '';
+    const status = await postJson('/api/radioreference/save-credentials', payload);
+    if (field('rrPassword')) field('rrPassword').value = '';
+    if (field('rrAppKey')) field('rrAppKey').value = '';
     renderRadioReferenceStatus(status);
     setText('lastEvent', 'Saved RadioReference credentials locally on the Pi.');
-  } catch (error) {
-    setText('rrStatusText', `Save RadioReference login failed: ${error.message}`);
-  }
+  } catch (error) { setBadge('rrStatusBadge', 'Save failed', 'bad'); setText('rrStatusText', `Save RadioReference login failed: ${error.message}`); }
 }
 
 async function testRadioReferenceLogin() {
   try {
-    const result = await fetchJson('/api/radioreference/test-login', { method: 'POST' });
+    const result = await postJson('/api/radioreference/test-login');
     setBadge('rrStatusBadge', 'Login OK', 'ok');
-    setText('rrStatusText', JSON.stringify(result, null, 2));
-    setText('lastEvent', 'RadioReference login test passed.');
+    setText('rrStatusText', safeJson(result));
+  } catch (error) { setBadge('rrStatusBadge', 'Login failed', 'bad'); setText('rrStatusText', `RadioReference login failed: ${error.message}`); }
+}
+
+async function callSystemsEndpoint(payload) {
+  const params = new URLSearchParams();
+  ['state', 'county', 'city'].forEach((key) => { if (payload[key]) params.set(key, payload[key]); });
+  try { return await fetchJson(`/api/radioreference/systems?${params.toString()}`); }
+  catch (_first) { return postJson('/api/radioreference/systems', payload); }
+}
+
+async function callSitesEndpoint(systemId) {
+  const params = new URLSearchParams({ system_id: String(systemId), sid: String(systemId) });
+  try { return await fetchJson(`/api/radioreference/sites?${params.toString()}`); }
+  catch (_first) { return postJson('/api/radioreference/sites', { system_id: systemId, sid: systemId }); }
+}
+
+function optionLabel(item, fallback) {
+  return item.label || item.name || item.sName || item.site || item.siteName || item.siteDescr || item.description || fallback;
+}
+
+async function findRrSystems() {
+  const payload = locationPayload();
+  setBadge('importStatusBadge', 'Searching', 'warn');
+  setText('wizardPreview', 'Searching RadioReference systems...');
+  try {
+    const result = await callSystemsEndpoint(payload);
+    rrSystems = Array.isArray(result.systems) ? result.systems : [];
+    const select = field('rrSystemSelect');
+    if (select) {
+      select.innerHTML = '';
+      rrSystems.forEach((system, index) => {
+        const id = system.system_id || system.sid || system.id || system.rr_system_id;
+        const option = document.createElement('option');
+        option.value = String(id || '');
+        option.textContent = optionLabel(system, `System ${index + 1}`);
+        option.dataset.index = String(index);
+        select.append(option);
+      });
+    }
+    setBadge('importStatusBadge', `${rrSystems.length} systems`, rrSystems.length ? 'ok' : 'warn');
+    setText('wizardPreview', safeJson(result));
   } catch (error) {
-    setBadge('rrStatusBadge', 'Login failed', 'bad');
-    setText('rrStatusText', `RadioReference login failed: ${error.message}`);
+    setBadge('importStatusBadge', 'Search failed', 'bad');
+    setText('wizardPreview', `Find systems failed: ${error.message}`);
   }
 }
 
-async function importRadioReferenceSystem() {
+async function loadRrSites() {
+  const sid = selectedSystemId();
+  if (!sid) { setText('wizardPreview', 'Select an RR system first.'); return; }
+  setBadge('importStatusBadge', 'Loading sites', 'warn');
   try {
-    const result = await fetchJson('/api/radioreference/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(selectedLocationPayload()),
-    });
-    setText('rrStatusText', JSON.stringify(result, null, 2));
+    const result = await callSitesEndpoint(sid);
+    rrSites = Array.isArray(result.sites) ? result.sites : (Array.isArray(result.site_candidates) ? result.site_candidates : []);
+    const select = field('rrSiteSelect');
+    if (select) {
+      select.innerHTML = '';
+      rrSites.forEach((site, index) => {
+        const id = site.site_id || site.siteId || site.siteNumber || site.sid || site.id || site.rfss_site_id;
+        const option = document.createElement('option');
+        option.value = String(id || '');
+        option.textContent = optionLabel(site, `Site ${index + 1}`);
+        option.dataset.index = String(index);
+        select.append(option);
+      });
+    }
+    setBadge('importStatusBadge', `${rrSites.length} sites`, rrSites.length ? 'ok' : 'warn');
+    setText('wizardPreview', safeJson(result));
+  } catch (error) {
+    setBadge('importStatusBadge', 'Sites failed', 'bad');
+    setText('wizardPreview', `Load sites failed: ${error.message}`);
+  }
+}
+
+async function importAndSaveRr() {
+  const payload = locationPayload();
+  if (!payload.system_id) { setText('wizardPreview', 'Select an RR system first.'); return; }
+  if (!payload.name) payload.name = field('rrSystemSelect')?.selectedOptions?.[0]?.textContent || `RR System ${payload.system_id}`;
+  setBadge('importStatusBadge', 'Importing', 'warn');
+  try {
+    const result = await postJson('/api/radioreference/import', payload);
     if (result.ok && result.config) {
+      try {
+        const saved = await postJson('/api/config/named/save', { name: payload.name, config: result.config, apply: true });
+        result.named_config = saved;
+      } catch (saveError) {
+        result.named_config_error = saveError.message;
+      }
+      await refreshProfiles();
       await refreshConfig();
       await refreshStatus();
-      showScreen('dashboardScreen');
-      setText('lastEvent', `Imported RadioReference system ${result.system_id}; generated OP25 config.`);
-    } else if (result.needs_selection) {
-      setText('lastEvent', 'RadioReference needs a System ID selection. Enter one from the matches and import again.');
     }
+    setBadge('importStatusBadge', result.ok ? 'Imported' : 'Import issue', result.ok ? 'ok' : 'warn');
+    setText('wizardPreview', safeJson(result));
   } catch (error) {
-    setBadge('rrStatusBadge', 'Import failed', 'bad');
-    setText('rrStatusText', `RadioReference import failed: ${error.message}`);
+    setBadge('importStatusBadge', 'Import failed', 'bad');
+    setText('wizardPreview', `Import and save failed: ${error.message}`);
+  }
+}
+
+async function autoCalibratePpm() {
+  setBadge('importStatusBadge', 'Calibrating', 'warn');
+  setText('wizardPreview', 'Running PPM calibration. Scanner should be stopped. This can take a little while.');
+  try {
+    const result = await postJson('/api/calibration/ppm/run', { span_ppm: 3, step_ppm: 1, dwell_seconds: 8, apply_voice: false });
+    setBadge('importStatusBadge', result.ok ? 'PPM updated' : 'PPM issue', result.ok ? 'ok' : 'warn');
+    setText('wizardPreview', safeJson(result));
+    await refreshConfig();
+    await refreshStatus();
+  } catch (error) {
+    setBadge('importStatusBadge', 'PPM failed', 'bad');
+    setText('wizardPreview', `Auto Calibrate PPM failed: ${error.message}`);
   }
 }
 
@@ -585,27 +477,123 @@ function attachEventHandlers() {
   field('closeDrawerBtn')?.addEventListener('click', closeDrawer);
   field('drawerBackdrop')?.addEventListener('click', closeDrawer);
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => showScreen(button.dataset.screen)));
-  field('startBtn')?.addEventListener('click', startScannerAndAudio);
+  field('startBtn')?.addEventListener('click', (event) => { if (p25AllowManualStart(event)) startScannerAndAudio(); });
   field('stopBtn')?.addEventListener('click', stopScanner);
-  field('loadConfigBtn')?.addEventListener('click', refreshConfig);
-  field('initLocalConfigBtn')?.addEventListener('click', initLocalConfig);
-  field('saveConfigBtn')?.addEventListener('click', () => saveConfig());
-  field('generateConfigBtn')?.addEventListener('click', generateOp25Config);
-  field('findSystemsBtn')?.addEventListener('click', findSystems);
-  field('applyWizardBtn')?.addEventListener('click', applyWizardConfig);
+  field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
+  field('loadProfileBtn')?.addEventListener('click', loadSelectedProfile);
+  field('saveProfileBtn')?.addEventListener('click', saveCurrentProfile);
   field('saveRrCredentialsBtn')?.addEventListener('click', saveRadioReferenceCredentials);
   field('testRrLoginBtn')?.addEventListener('click', testRadioReferenceLogin);
-  field('importRrBtn')?.addEventListener('click', importRadioReferenceSystem);
-  field('wizardSystemSelect')?.addEventListener('change', renderWizardPreview);
-  field('categoryChoices')?.addEventListener('change', renderWizardPreview);
+  field('findRrSystemsBtn')?.addEventListener('click', findRrSystems);
+  field('loadRrSitesBtn')?.addEventListener('click', loadRrSites);
+  field('importAndSaveRrBtn')?.addEventListener('click', importAndSaveRr);
+  field('autoCalibratePpmBtn')?.addEventListener('click', autoCalibratePpm);
   field('browserAudioPlayer')?.addEventListener('play', () => updateAudioPanel('Browser audio playing'));
   field('browserAudioPlayer')?.addEventListener('pause', () => updateAudioPanel('Browser audio paused'));
 }
 
-attachEventHandlers();
-updateAudioPanel();
-loadCatalog().catch((error) => setText('wizardPreview', `Catalog load failed: ${error.message}`));
-refreshRadioReferenceStatus();
-refreshStatus();
-refreshConfig();
-setInterval(refreshStatus, 3000);
+function boot() {
+  attachEventHandlers();
+p25RemoveDashboardAutostartTuningRemnants();
+  renderCategoryChoices();
+  updateAudioPanel();
+  refreshProfiles();
+  refreshRadioReferenceStatus();
+  refreshStatus();
+  refreshConfig();
+  setInterval(refreshStatus, 3000);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
+
+/* V0_5E_AUTO_START_RTL_POOL_BEGIN */
+(function installV05EAutoStartScannerAudio() {
+  const MARKER = 'V0_5E_AUTO_START_RTL_POOL';
+  window.PI_P25_V05E_MARKER = MARKER;
+  window.PI_P25_ALLOWED_RTL_SERIAL_POOL = '0000025X';
+
+  function el(id) { return document.getElementById(id); }
+  function setUiText(id, text) {
+    const target = el(id);
+    if (target) target.textContent = text;
+  }
+  function audioUrl() { return `http://${window.location.hostname}:8072/audio.wav`; }
+
+  async function jsonFetch(url, options) {
+    const response = await fetch(url, { cache: 'no-store', ...(options || {}) });
+    const bodyText = await response.text();
+    let payload = {};
+    try { payload = bodyText ? JSON.parse(bodyText) : {}; }
+    catch (error) { payload = { ok: false, error: `Invalid JSON: ${error.message}`, raw: bodyText }; }
+    if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    return payload;
+  }
+
+  async function startScannerIfNeeded() {
+    const status = await jsonFetch('/api/status');
+    const running = Boolean(status?.decoder_process?.running);
+    if (running) return status;
+    return jsonFetch('/api/scanner/start', { method: 'POST' });
+  }
+
+  async function tryStartAudio(reason) {
+    const audio = el('browserAudioPlayer');
+    if (!audio) return false;
+    if (audio.src !== audioUrl()) audio.src = audioUrl();
+    try {
+      await audio.play();
+      setUiText('browserAudioLastEvent', reason || 'Auto-started browser audio');
+      return true;
+    } catch (error) {
+      setUiText('browserAudioLastEvent', 'Scanner auto-started; tap/click once to enable audio');
+      window.__p25AutoAudioBlocked = true;
+      return false;
+    }
+  }
+
+// V0.5F removed page-load scanner auto-start call.
+    if (window.__p25V05EAutoStartAttempted) return;
+    window.__p25V05EAutoStartAttempted = true;
+    try {
+      setUiText('lastEvent', 'Auto-starting scanner and browser audio...');
+      await startScannerIfNeeded();
+      await tryStartAudio('Scanner and browser audio auto-started');
+      if (typeof window.refreshStatus === 'function') window.refreshStatus();
+      setUiText('lastEvent', 'Auto-start requested for scanner and browser audio.');
+    } catch (error) {
+      setUiText('lastEvent', `Auto-start failed: ${error.message}`);
+      setUiText('browserAudioLastEvent', `Auto-start failed: ${error.message}`);
+    }
+  }
+
+  function retryAudioAfterUserGesture() {
+    if (!window.__p25AutoAudioBlocked) return;
+    window.__p25AutoAudioBlocked = false;
+    tryStartAudio('Browser audio enabled after tap/click');
+  }
+
+  function install() {
+// V0.5F removed page-load scanner auto-start call.
+    document.addEventListener('pointerdown', retryAudioAfterUserGesture, { passive: true });
+    document.addEventListener('keydown', retryAudioAfterUserGesture, { passive: true });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
+  else install();
+})();
+/* V0_5E_AUTO_START_RTL_POOL_END */
+
+
+function p25RemoveDashboardAutostartTuningRemnants() {
+  document.querySelectorAll('button').forEach((button) => {
+    const txt = (button.textContent || '').trim().toLowerCase();
+    if (txt === 'auto calibrate ppm' && !button.closest('#wizardScreen') && !button.closest('#radioSetupScreen')) {
+      const card = button.closest('section, article, div');
+      if (card) card.remove(); else button.remove();
+    }
+  });
+}

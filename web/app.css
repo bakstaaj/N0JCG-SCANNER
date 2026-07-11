@@ -123,3 +123,134 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     max-height: 110px;
   }
 }
+
+/* V0.4G named local config manager */
+.named-config-panel {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0.75rem 0 1rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.named-config-panel select,
+.named-config-panel input {
+  min-height: 48px;
+  font-size: 1rem;
+}
+
+.named-config-actions {
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+}
+
+.danger-lite {
+  border-color: rgba(255, 120, 120, 0.45);
+  color: #ffd7d7;
+}
+
+/* NAMED_CONFIG_DYNAMIC_PANEL_V0_4G3 */
+.named-config-panel {
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  background: rgba(30, 64, 175, 0.22);
+  border-radius: 18px;
+  padding: 14px;
+  margin: 0 0 14px 0;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+}
+.named-config-head h2 {
+  margin: 0 0 4px 0;
+  font-size: 1.2rem;
+}
+.named-config-head p,
+.named-config-panel .hint {
+  margin: 0;
+  opacity: 0.85;
+}
+.named-config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+.named-config-grid label {
+  display: grid;
+  gap: 5px;
+  font-weight: 700;
+}
+.named-config-grid select,
+.named-config-grid input {
+  min-height: 48px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 8px 10px;
+  font-size: 1rem;
+}
+.named-config-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.named-config-actions button {
+  min-height: 50px;
+  border-radius: 14px;
+  font-weight: 800;
+}
+.danger-lite {
+  border-color: rgba(248, 113, 113, 0.65);
+}
+@media (max-width: 700px) {
+  .named-config-grid,
+  .named-config-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* RR_CLEAN_WORKFLOW_V0_4D4B */
+.rr-clean-workflow-screen {
+  display: block;
+}
+.rr-clean-title p,
+.rr-clean-panel p {
+  margin: 0.25rem 0 0.5rem;
+}
+.rr-clean-panel {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.rr-clean-panel strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+.rr-clean-grid label,
+.rr-clean-wide-grid label {
+  min-width: 0;
+}
+.rr-clean-wide-grid {
+  grid-template-columns: minmax(240px, 1.3fr) minmax(220px, 1fr);
+}
+.rr-clean-wide-grid select,
+.rr-clean-grid input {
+  width: 100%;
+}
+.rr-clean-actions {
+  margin-top: 0.5rem;
+}
+.rr-clean-categories {
+  margin-top: 0.5rem;
+}
+#rrCleanStatusText {
+  max-height: 16rem;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+@media (max-width: 820px) {
+  .rr-clean-wide-grid {
+    grid-template-columns: 1fr;
+  }
+}

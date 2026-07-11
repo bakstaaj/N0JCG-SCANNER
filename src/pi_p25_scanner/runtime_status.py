@@ -112,6 +112,7 @@ class RuntimeStatusParser:
             update.p25_phase = "Phase I"
 
         voice_frame_seen = "imbe" in lower or "ambe" in lower
+        encrypted_or_blocked_seen = self._looks_like_encrypted_or_blocked(lower)
         if voice_frame_seen:
             if "imbe" in lower and not update.p25_phase:
                 update.p25_phase = "Phase I"
@@ -121,12 +122,12 @@ class RuntimeStatusParser:
                 update.encrypted = False
                 update.muted = False
                 update.parser_notes.append("clear_voice_frame")
-            elif "encrypted" in lower or re.search(r"\benc(?:rypted)?\b", lower):
+            elif encrypted_or_blocked_seen:
                 update.encrypted = True
                 update.muted = True
-                update.parser_notes.append("encrypted_voice_frame")
+                update.parser_notes.append("encrypted_or_blocked_voice_frame")
 
-        if "encrypted" in lower or "encryption" in lower or re.search(r"\benc(?:rypted)?\b", lower):
+        if encrypted_or_blocked_seen:
             if "clear" in lower and "not encrypted" in lower:
                 update.encrypted = False
             else:
@@ -142,6 +143,37 @@ class RuntimeStatusParser:
             update.muted = True
 
         return update
+
+    # ACTIVE_AUDIO_ONLY_ENCRYPTED_DETECT_V0_4H4
+    @staticmethod
+    def _looks_like_encrypted_or_blocked(lower: str) -> bool:
+        """Return True for OP25 lines that indicate blocked/encrypted audio.
+
+        OP25 sometimes logs encrypted calls as CIPHERTXT, algid, crypt,
+        nocrypt, skipped, or muted without including the literal word
+        encrypted on the same line. Treat those as display-suppression
+        signals so blocked encrypted calls do not become active-audio UI
+        entries.
+        """
+
+        if "not encrypted" in lower or "plaintext" in lower or "plain text" in lower:
+            return False
+        tokens = (
+            "encrypted",
+            "encryption",
+            "ciphertxt",
+            "ciphertext",
+            "p25_crypt",
+            "crypt_algs",
+            "nocrypt",
+            "algid",
+            "muted encrypted",
+            "encrypted skip",
+            "skipped encrypted",
+        )
+        if any(token in lower for token in tokens):
+            return True
+        return re.search(r"\benc(?:rypted)?\b", lower) is not None
 
     @staticmethod
     def _parse_tgid(text: str) -> int | None:

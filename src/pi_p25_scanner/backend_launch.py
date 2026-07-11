@@ -20,6 +20,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .rtl_serial_guard import validate_op25_device_args  # V0.5E rtl-serial-pool-0000025X
+
+from .rtl_serial_guard import validate_op25_device_args  # V0.5E rtl-serial-pool-0000025X
+
 
 MARKER_RELATIVE_PATH = Path("runtime") / "settings" / "op25_validated_rx_command.env"
 REQUIRED_MARKER_FIELDS = [
@@ -112,6 +116,18 @@ def _metadata_from_values(marker: Path, values: dict[str, str]) -> dict[str, Any
         metadata["error"] = f"validated OP25 marker is missing required fields: {', '.join(missing)}"
         return metadata
 
+    try:
+        values["P25_VALIDATED_RX_ARGS"] = validate_op25_device_args(values.get("P25_VALIDATED_RX_ARGS", ""))
+    except ValueError as exc:
+        metadata["error"] = str(exc)
+        return metadata
+
+    try:
+        values["P25_VALIDATED_RX_ARGS"] = validate_op25_device_args(values.get("P25_VALIDATED_RX_ARGS", ""))
+    except ValueError as exc:
+        metadata["error"] = str(exc)
+        return metadata
+
     app = Path(values["P25_VALIDATED_RX_APP"])
     cwd = Path(values["P25_VALIDATED_RX_APP_DIR"])
     trunk_tsv = Path(values["P25_VALIDATED_RX_TRUNK_TSV"])
@@ -131,6 +147,27 @@ def _metadata_from_values(marker: Path, values: dict[str, str]) -> dict[str, Any
     metadata["validated"] = True
     metadata["start_ready"] = True
     return metadata
+
+
+def ensure_op25_udp_audio_args(command: list[str]) -> list[str]:
+    """Ensure OP25 sends raw PCM UDP audio to the independent browser bridge.
+
+    The browser audio bridge runs separately on TCP 8072 and listens for OP25 UDP
+    PCM on localhost:23456. This helper keeps the normal backend stable: it does
+    not manage the audio service or poll audio status; it only makes the OP25
+    process emit the PCM frames the already-running bridge needs.
+    """
+
+    updated = list(command)
+    udp_host = os.environ.get("P25_SCANNER_AUDIO_UDP_HOST", "127.0.0.1")
+    udp_port = os.environ.get("P25_SCANNER_AUDIO_UDP_PORT", "23456")
+    if "-w" not in updated:
+        updated.append("-w")
+    if "-W" not in updated:
+        updated.extend(["-W", udp_host])
+    if "-u" not in updated:
+        updated.extend(["-u", udp_port])
+    return updated
 
 
 def validated_command_marker_metadata(project_root: Path) -> dict[str, Any]:
@@ -184,6 +221,16 @@ def build_validated_op25_command(project_root: Path) -> ValidatedOp25Command | N
     if missing:
         raise LaunchConfigError(f"validated OP25 marker is missing required fields: {', '.join(missing)}")
 
+    try:
+        values["P25_VALIDATED_RX_ARGS"] = validate_op25_device_args(values.get("P25_VALIDATED_RX_ARGS", ""))
+    except ValueError as exc:
+        raise LaunchConfigError(str(exc)) from exc
+
+    try:
+        values["P25_VALIDATED_RX_ARGS"] = validate_op25_device_args(values.get("P25_VALIDATED_RX_ARGS", ""))
+    except ValueError as exc:
+        raise LaunchConfigError(str(exc)) from exc
+
     app = Path(values["P25_VALIDATED_RX_APP"])
     cwd = Path(values["P25_VALIDATED_RX_APP_DIR"])
     trunk_tsv = Path(values["P25_VALIDATED_RX_TRUNK_TSV"])
@@ -220,6 +267,8 @@ def build_validated_op25_command(project_root: Path) -> ValidatedOp25Command | N
         command.extend(["--crypt-behavior", crypt_behavior])
 
     command = _add_raw_audio_udp_args(command, values)
+
+    command = ensure_op25_udp_audio_args(command)
 
     env = os.environ.copy()
     env["PYTHONPATH"] = values["P25_VALIDATED_RX_PYTHONPATH"]

@@ -23,12 +23,9 @@
         <button id="closeDrawerBtn" class="icon-button" type="button" aria-label="Close menu">×</button>
       </div>
       <button class="nav-item active" data-screen="dashboardScreen" type="button">Dashboard</button>
-      <button class="nav-item" data-screen="wizardScreen" type="button">Radio Setup Wizard</button>
-      <button class="nav-item" data-screen="configScreen" type="button">Local Config</button>
+      <button class="nav-item" data-screen="radioSetupScreen" type="button">Radio Setup</button>
       <button class="nav-item" data-screen="logsScreen" type="button">Logs / Details</button>
-      <div class="drawer-foot">
-        <span id="lastUpdated">Last update: -</span>
-      </div>
+      <div class="drawer-foot"><span id="lastUpdated">Last update: -</span></div>
     </aside>
     <div id="drawerBackdrop" class="drawer-backdrop"></div>
 
@@ -38,9 +35,7 @@
           <button id="startBtn" type="button" class="big-action start">Start Scanner + Audio</button>
           <button id="stopBtn" type="button" class="big-action stop">Stop</button>
         </div>
-
         <audio id="browserAudioPlayer" class="audio-player" controls preload="none"></audio>
-
         <section class="activity-card">
           <div class="activity-topline">
             <div>
@@ -57,7 +52,6 @@
             <div><span>Audio</span><strong id="browserAudioLastEvent">Ready</strong></div>
           </div>
         </section>
-
         <section class="stats-grid" aria-label="statistics">
           <article><span>State</span><strong id="scannerState">-</strong></article>
           <article><span>PID</span><strong id="decoderPid">-</strong></article>
@@ -68,108 +62,85 @@
         </section>
       </section>
 
-      <section id="wizardScreen" class="screen" aria-label="radio setup wizard">
+      <section id="radioSetupScreen" class="screen" aria-label="radio setup">
         <div class="screen-title">
-          <h1>Radio Setup Wizard</h1>
-          <p>Build a local P25 config from the on-device catalog. Add more systems to <code>web/system_catalog.example.json</code> or a future imported catalog.</p>
+          <h1>Radio Setup</h1>
+          <p>One workflow: choose a saved profile or import a RadioReference system/site, filter talkgroups, calibrate if needed, then save as a named profile.</p>
         </div>
-        <div class="wizard-grid">
-          <label>State<input id="wizardState" type="text" value="AZ" autocomplete="off" inputmode="text"></label>
-          <label>County<input id="wizardCounty" type="text" value="Maricopa" autocomplete="off"></label>
-          <label>City<input id="wizardCity" type="text" value="Mesa" autocomplete="off"></label>
-        </div>
-        <div class="rr-panel">
-          <div class="section-row">
-            <div>
-              <strong>RadioReference Import</strong>
-              <p>Uses the official RadioReference SOAP API. Credentials stay local on this Pi.</p>
-            </div>
-            <span id="rrStatusBadge" class="pill warn">Not configured</span>
+
+        <section class="rr-panel" data-v05d-section="profiles">
+          <div class="section-row"><div><strong>1. Saved Profiles</strong><p>Reload a known-good profile or save the current active setup for future use.</p></div><span id="profileStatusBadge" class="pill warn">Profiles</span></div>
+          <div class="wizard-grid">
+            <label>Saved Profile<select id="profileSelect"></select></label>
+            <label>Profile Name<input id="profileName" type="text" placeholder="TOPAZ Mesa Fire"></label>
           </div>
+          <div class="wizard-actions compact-actions">
+            <button id="refreshProfilesBtn" type="button">Refresh Profiles</button>
+            <button id="loadProfileBtn" type="button">Load Selected Profile</button>
+            <button id="saveProfileBtn" type="button" class="primary">Save Current</button>
+          </div>
+          <pre id="profileStatusText">Profiles not loaded yet.</pre>
+        </section>
+
+        <section class="rr-panel" data-v05d-section="rr-login">
+          <div class="section-row"><div><strong>2. RadioReference Login</strong><p>Credentials stay local on this Pi. Blank API key/password fields preserve saved secrets.</p></div><span id="rrStatusBadge" class="pill warn">Checking</span></div>
           <div class="wizard-grid">
             <label>RR API Key<input id="rrAppKey" type="password" autocomplete="off"></label>
             <label>RR Username<input id="rrUsername" type="text" autocomplete="username"></label>
             <label>RR Password<input id="rrPassword" type="password" autocomplete="current-password"></label>
-            <label>RR System ID, optional<input id="rrSystemId" type="number" inputmode="numeric" placeholder="Use when location search returns multiple systems"></label>
-            <label>RR Site ID, optional<input id="rrSiteId" type="number" inputmode="numeric" placeholder="Optional exact trunked site"></label>
           </div>
           <div class="wizard-actions compact-actions">
-            <button id="saveRrCredentialsBtn" type="button">Save RR Login</button>
+            <button id="saveRrCredentialsBtn" type="button">Save Login</button>
             <button id="testRrLoginBtn" type="button">Test Login</button>
-            <button id="importRrBtn" type="button" class="primary">Import from RadioReference</button>
           </div>
-          <pre id="rrStatusText">RadioReference credentials are not configured.</pre>
-        </div>
-        <div class="category-panel">
-          <span class="label">Talkgroup Categories</span>
-          <div id="categoryChoices" class="checkbox-grid"></div>
-        </div>
-        <div class="wizard-actions">
-          <button id="findSystemsBtn" class="primary" type="button">Find Systems</button>
-          <button id="applyWizardBtn" type="button">Apply Selected System</button>
-        </div>
-        <div class="wizard-results">
-          <label>Matched Systems<select id="wizardSystemSelect" size="4"></select></label>
-          <pre id="wizardPreview">No system selected.</pre>
-        </div>
-      </section>
+          <pre id="rrStatusText">RadioReference status not loaded.</pre>
+        </section>
 
-      <section id="configScreen" class="screen" aria-label="configuration">
-        <div class="screen-title">
-          <h1>Local Config</h1>
-          <p>Touch-friendly essentials. Advanced JSON remains available in the preview.</p>
-        </div>
-        <div class="config-actions">
-          <button id="loadConfigBtn" type="button">Load</button>
-          <button id="initLocalConfigBtn" type="button">Init Local</button>
-          <button id="saveConfigBtn" type="button" class="primary">Save</button>
-          <button id="generateConfigBtn" type="button">Generate OP25</button>
-        </div>
-        <form id="configForm" class="config-form">
-          <label>System Name<input id="systemName" type="text" autocomplete="off"></label>
-          <label>Site<input id="siteName" type="text" autocomplete="off"></label>
-          <label>Control Channels MHz<textarea id="controlChannels" rows="4"></textarea></label>
-          <label>Talkgroups: TGID, Label<textarea id="talkgroups" rows="5"></textarea></label>
-          <label>Control SDR Serial<input id="controlSerial" type="text" autocomplete="off"></label>
-          <label>Voice SDR Serial<input id="voiceSerial" type="text" autocomplete="off"></label>
-          <label>RF Gain dB<input id="gainDb" type="number" step="0.1"></label>
-          <label>PPM<input id="ppm" type="number" step="1"></label>
-          <label class="check"><input id="phaseII" type="checkbox"> Phase II enabled</label>
-          <label class="check"><input id="muteEncrypted" type="checkbox"> Mute encrypted calls</label>
-        </form>
+        <section class="rr-panel" data-v05d-section="rr-import">
+          <div class="section-row"><div><strong>3. Location, System, Site, Talkgroups</strong><p>Enter location, select system/site, choose talkgroup categories, then import and save.</p></div><span id="importStatusBadge" class="pill warn">Ready</span></div>
+          <div class="wizard-grid">
+            <label>State<input id="wizardState" type="text" value="AZ" autocomplete="off"></label>
+            <label>County<input id="wizardCounty" type="text" value="Maricopa" autocomplete="off"></label>
+            <label>City<input id="wizardCity" type="text" value="Mesa" autocomplete="off"></label>
+          </div>
+          <div class="wizard-actions compact-actions">
+            <button id="findRrSystemsBtn" type="button" class="primary">Find RR Systems</button>
+          </div>
+          <div class="wizard-grid">
+            <label>RR System<select id="rrSystemSelect"></select></label>
+            <label>RR Site<select id="rrSiteSelect"></select></label>
+          </div>
+          <div class="wizard-actions compact-actions">
+            <button id="loadRrSitesBtn" type="button">Load RR Sites</button>
+          </div>
+          <div class="category-panel">
+            <span class="label">Talkgroup Category Filters</span>
+            <div id="categoryChoices" class="checkbox-grid"></div>
+          </div>
+          <div class="wizard-actions compact-actions">
+            <button id="autoCalibratePpmBtn" type="button">Auto Calibrate PPM</button>
+            <button id="importAndSaveRrBtn" type="button" class="primary">Import and Save Named Config</button>
+          </div>
+          <pre id="wizardPreview">Find systems to begin.</pre>
+        </section>
       </section>
 
       <section id="logsScreen" class="screen" aria-label="logs">
-        <div class="screen-title">
-          <h1>Logs / Details</h1>
-          <p>Runtime detail for troubleshooting without crowding the touch dashboard.</p>
-        </div>
+        <div class="screen-title"><h1>Logs / Details</h1><p>Runtime detail for troubleshooting without crowding the touch dashboard.</p></div>
         <div class="details-grid">
           <article><span>Launch Ready</span><strong id="launchReady">-</strong></article>
           <article><span>Command Source</span><strong id="commandSource">-</strong></article>
           <article><span>Marker</span><strong id="validatedMarkerState">-</strong></article>
           <article><span>OP25 HTTP</span><strong id="op25HttpListener">-</strong></article>
         </div>
-        <details open>
-          <summary>Recent Activity</summary>
-          <pre id="activityRecentEvents">No parsed activity yet.</pre>
-        </details>
-        <details>
-          <summary>Backend / OP25 Log Tail</summary>
-          <pre id="logTail">No log lines yet.</pre>
-        </details>
-        <details>
-          <summary>Active Config Preview</summary>
-          <pre id="configPreview">Loading...</pre>
-        </details>
-        <details>
-          <summary>Validated Command</summary>
-          <pre id="validatedCommand">-</pre>
-        </details>
+        <details open><summary>Recent Activity</summary><pre id="activityRecentEvents">No parsed activity yet.</pre></details>
+        <details><summary>Backend / OP25 Log Tail</summary><pre id="logTail">No log lines yet.</pre></details>
+        <details><summary>Active Config Preview</summary><pre id="configPreview">Loading...</pre></details>
+        <details><summary>Validated Command</summary><pre id="validatedCommand">-</pre></details>
         <pre id="lastEvent" class="last-event">Loading...</pre>
       </section>
     </main>
   </div>
-  <script src="/app.js"></script>
+  <script src="/app.js?v=0.5f-desktop-launcher"></script>
 </body>
 </html>
