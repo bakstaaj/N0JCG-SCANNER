@@ -177,6 +177,8 @@ class ScannerStatus:
         }
     )
     active_control_frequency_hz: int | None = None
+    control_channel_state: str = "idle"
+    control_channel_locked: bool = False
     active_voice_frequency_hz: int | None = None
     active_tgid: int | None = None
     active_talkgroup_label: str = ""
@@ -341,6 +343,10 @@ class ScannerManager:
         if parsed_tgid is not None and update.encrypted is False and update.muted is not True and not label_blocked:
             self._display_suppressed_tgid_until.pop(parsed_tgid, None)
 
+        if update.control_channel_state:
+            self.status.control_channel_state = update.control_channel_state
+            self.status.control_channel_locked = update.control_channel_state == "locked"
+
         # Do not promote encrypted/blocked/muted calls into the active-audio panel.
         if encrypted_or_muted or label_blocked or temporarily_suppressed:
             if parsed_tgid is not None:
@@ -371,11 +377,10 @@ class ScannerManager:
         if parsed_tgid is not None:
             self.status.active_tgid = parsed_tgid
             label = update.talkgroup_label or configured_label
-            if label:
-                update.talkgroup_label = label
-                self.status.active_talkgroup_label = label
+            update.talkgroup_label = label
+            self.status.active_talkgroup_label = label
             self.status.last_active_tgid = parsed_tgid
-            self.status.last_active_talkgroup_label = label or self.status.active_talkgroup_label
+            self.status.last_active_talkgroup_label = label
             if update.voice_frequency_hz is not None:
                 self.status.last_active_voice_frequency_hz = update.voice_frequency_hz
             self.status.last_active_updated_utc = now
@@ -580,6 +585,19 @@ class ScannerManager:
             updated.extend(["-W", OP25_AUDIO_UDP_HOST])
         if "-u" not in updated:
             updated.extend(["-u", str(OP25_AUDIO_UDP_PORT)])
+        # boatbod OP25 only logs control-channel hunt changes at verbosity 5+
+        # (trunking.py hunt_cc). Normalize the existing validated command so
+        # the backend can report the tuner frequency currently being tested.
+        if "-v" in updated:
+            verbosity_index = updated.index("-v") + 1
+            if verbosity_index < len(updated):
+                try:
+                    current_verbosity = int(updated[verbosity_index])
+                except (TypeError, ValueError):
+                    current_verbosity = 0
+                updated[verbosity_index] = str(max(5, current_verbosity))
+        elif "--verbosity" not in updated:
+            updated.extend(["-v", "5"])
         return updated
 
     def start(self) -> tuple[dict[str, Any], HTTPStatus]:
@@ -673,6 +691,8 @@ class ScannerManager:
             self.process = process
             self.status.ok = True
             self.status.scanner_state = "running"
+            self.status.control_channel_state = "searching"
+            self.status.control_channel_locked = False
             self.status.decoder_process["running"] = True
             self.status.decoder_process["pid"] = process.pid
             self._set_event(f"Scanner started pid={process.pid}")
@@ -692,6 +712,8 @@ class ScannerManager:
         with self.lock:
             self.process = None
             self.status.scanner_state = "stopped"
+            self.status.control_channel_state = "idle"
+            self.status.control_channel_locked = False
             self.status.decoder_process["running"] = False
             self.status.decoder_process["pid"] = None
             self._set_event("Scanner stopped")
@@ -791,7 +813,9 @@ def _v04h_apply_activity(manager: Any, activity: dict[str, Any] | None) -> bool:
             if tgid is not None:
                 setattr(status, "active_tgid", tgid)
                 setattr(status, "last_active_tgid", tgid)
-            if label:
+                setattr(status, "active_talkgroup_label", label)
+                setattr(status, "last_active_talkgroup_label", label)
+            elif label:
                 setattr(status, "active_talkgroup_label", label)
                 setattr(status, "last_active_talkgroup_label", label)
             voice_frequency_hz = activity.get("voice_frequency_hz")
@@ -1699,5 +1723,244 @@ def _handler_do_post_v0_4d3m(self) -> None:
 Handler.do_POST = _handler_do_post_v0_4d3m
 # END V0.4D3M final RadioReference US country picker route override
 
+# BEGIN V0.5AC PRE-MAIN RR SITE ENRICHMENT
+_RR_V05AC_BASE_ENDPOINT_PAYLOAD = _rr_d3d_endpoint_payload
+
+
+def _rr_d3d_endpoint_payload(kind, payload):
+    result = _RR_V05AC_BASE_ENDPOINT_PAYLOAD(kind, payload)
+    if kind != "sites" or not isinstance(result, dict):
+        return result
+
+    sites = list(result.get("sites") or [])
+    for site in sites:
+        if not isinstance(site, dict):
+            continue
+
+        site_id = site.get("site_id") or site.get("siteId")
+        try:
+            site_id_int = int(site_id) if site_id is not None else None
+        except (TypeError, ValueError):
+            site_id_int = None
+
+        freqs = set()
+        for value in site.get("control_channels_hz") or []:
+            try:
+                freqs.add(int(value))
+            except (TypeError, ValueError):
+                pass
+
+        is_tenderfoot = site_id_int == 12917
+
+        if is_tenderfoot:
+            site["site_id"] = 12917
+            site["name"] = "Tenderfoot II"
+            site["site_description"] = "Tenderfoot II"
+            site["location"] = "Teller, CO"
+            site["county_id"] = 300
+            site["rfss"] = 6
+            site["site_number"] = 17
+            site["label"] = "Tenderfoot II (RFSS 6, Site 017, RR ID 12917)"
+
+    sites.sort(
+        key=lambda site: (
+            0 if isinstance(site, dict) and int(site.get("site_id") or 0) == 12917 else 1,
+            str(site.get("label") or site.get("name") or "").lower()
+            if isinstance(site, dict)
+            else "",
+        )
+    )
+
+    result["sites"] = sites
+    result["site_count"] = len(sites)
+    result["returned_site_count"] = len(sites)
+    result["truncated"] = False
+    result["site_limit"] = None
+    result["dispatcher_version"] = "v0.5ac-pre-main"
+    return result
+# END V0.5AC PRE-MAIN RR SITE ENRICHMENT
+
+# BEGIN V0.5AD FINAL PRE-MAIN RR DISPATCHER
+_RR_V05AD_BASE_ENDPOINT_PAYLOAD = _rr_d3d_endpoint_payload
+
+
+def _rr_d3d_endpoint_payload(kind, payload):
+    result = _RR_V05AD_BASE_ENDPOINT_PAYLOAD(kind, payload)
+    if kind != "sites" or not isinstance(result, dict):
+        return result
+
+    sites = list(result.get("sites") or [])
+    for site in sites:
+        if not isinstance(site, dict):
+            continue
+        try:
+            site_id = int(site.get("site_id") or site.get("siteId") or 0)
+        except (TypeError, ValueError):
+            site_id = 0
+
+        freqs=set()
+        for value in site.get("control_channels_hz") or []:
+            try:
+                freqs.add(int(value))
+            except (TypeError, ValueError):
+                pass
+
+        if site_id == 12917:
+            site.update({
+                "site_id": 12917,
+                "name": "Tenderfoot II",
+                "site_description": "Tenderfoot II",
+                "location": "Teller, CO",
+                "county_id": 300,
+                "rfss": 6,
+                "site_number": 17,
+                "label": "Tenderfoot II (RFSS 6, Site 017, RR ID 12917)",
+            })
+
+    def sort_key(site):
+        if not isinstance(site, dict):
+            return (2, "")
+        try:
+            sid=int(site.get("site_id") or 0)
+        except (TypeError, ValueError):
+            sid=0
+        return (
+            0 if sid == 12917 else 1,
+            str(site.get("label") or site.get("name") or "").lower(),
+        )
+
+    sites.sort(key=sort_key)
+    result["sites"] = sites
+    result["site_count"] = len(sites)
+    result["returned_site_count"] = len(sites)
+    result["truncated"] = False
+    result["site_limit"] = None
+    result["dispatcher_version"] = "v0.5ad-final-pre-main"
+    return result
+# END V0.5AD FINAL PRE-MAIN RR DISPATCHER
+
+# BEGIN V0.5AG EXACT TENDERFOOT SITE ROUTE ENRICHMENT
+_HANDLER_V05AG_BASE_DO_POST = Handler.do_POST
+
+
+def _v05ag_enrich_rr_sites(result):
+    if not isinstance(result, dict):
+        return result
+
+    sites = list(result.get("sites") or [])
+    for site in sites:
+        if not isinstance(site, dict):
+            continue
+
+        try:
+            site_id = int(site.get("site_id") or site.get("siteId") or 0)
+        except (TypeError, ValueError):
+            site_id = 0
+
+        freqs = set()
+        for value in site.get("control_channels_hz") or []:
+            try:
+                freqs.add(int(value))
+            except (TypeError, ValueError):
+                pass
+
+        if site_id == 12917:
+            site.update({
+                "site_id": 12917,
+                "name": "Tenderfoot II",
+                "site_description": "Tenderfoot II",
+                "location": "Teller, CO",
+                "county_id": 300,
+                "rfss": 6,
+                "site_number": 17,
+                "label": "Tenderfoot II (RFSS 6, Site 017, RR ID 12917)",
+            })
+
+    def sort_key(site):
+        if not isinstance(site, dict):
+            return (2, "")
+        try:
+            sid = int(site.get("site_id") or 0)
+        except (TypeError, ValueError):
+            sid = 0
+        return (
+            0 if sid == 12917 else 1,
+            str(site.get("label") or site.get("name") or "").lower(),
+        )
+
+    sites.sort(key=sort_key)
+    result["sites"] = sites
+    result["site_count"] = len(sites)
+    result["returned_site_count"] = len(sites)
+    result["truncated"] = False
+    result["site_limit"] = None
+    result["route_version"] = "control-markers-only-v0.5"
+    return result
+
+
+def _handler_do_post_v0_5ag(self):
+    path = self.path.split("?", 1)[0]
+    if path == "/api/radioreference/sites":
+        try:
+            from pi_p25_scanner.radioreference_picker_forced_v0_4d3m import find_sites
+            result = _v05ag_enrich_rr_sites(find_sites(self._read_json()))
+            self._send_json(result, HTTPStatus.ACCEPTED)
+            return
+        except (ConfigError, RadioReferenceError) as exc:
+            self._send_json(
+                {
+                    "ok": False,
+                    "route_version": "control-markers-only-v0.5",
+                    "error": str(exc),
+                    "endpoint": path,
+                },
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+        except Exception as exc:
+            self._send_json(
+                {
+                    "ok": False,
+                    "route_version": "control-markers-only-v0.5",
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "endpoint": path,
+                },
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+            return
+
+    return _HANDLER_V05AG_BASE_DO_POST(self)
+
+
+Handler.do_POST = _handler_do_post_v0_5ag
+# END V0.5AG EXACT TENDERFOOT SITE ROUTE ENRICHMENT
+
 if __name__ == "__main__":
     raise SystemExit(main())
+
+# BEGIN V0.5Y RR SITES DISPATCHER OVERRIDE
+_RR_V05Y_BASE_ENDPOINT_PAYLOAD = _rr_d3d_endpoint_payload
+
+
+def _rr_d3d_endpoint_payload(kind, payload):
+    if kind == "sites":
+        from pi_p25_scanner import radioreference_import as _rr_runtime
+        return _rr_runtime.discover_radioreference_sites(payload)
+    return _RR_V05Y_BASE_ENDPOINT_PAYLOAD(kind, payload)
+# END V0.5Y RR SITES DISPATCHER OVERRIDE
+
+# BEGIN V0.5AA LIVE PACKAGE RR SITES DISPATCHER
+_RR_V05AA_BASE_ENDPOINT_PAYLOAD = _rr_d3d_endpoint_payload
+
+
+def _rr_d3d_endpoint_payload(kind, payload):
+    if kind == "sites":
+        import importlib
+        rr_runtime = importlib.import_module("pi_p25_scanner.radioreference_import")
+        result = rr_runtime.discover_radioreference_sites(payload)
+        result["dispatcher_version"] = "v0.5aa-live-package"
+        result["runtime_module"] = rr_runtime.__name__
+        result["runtime_module_file"] = str(getattr(rr_runtime, "__file__", ""))
+        return result
+    return _RR_V05AA_BASE_ENDPOINT_PAYLOAD(kind, payload)
+# END V0.5AA LIVE PACKAGE RR SITES DISPATCHER

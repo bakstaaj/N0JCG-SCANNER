@@ -32,6 +32,17 @@ These guardrails capture project-specific lessons learned while building and val
 - Live OP25 launch must stay gated by `runtime/settings/op25_validated_rx_command.env`.
 - Backend service startup must not automatically start RF decoding.
 - Encrypted calls are metadata only: detect, show, mute/skip, and count. Do not attempt decryption, key recovery, bypass, key loading, or protected audio reconstruction.
+- Radio Setup must display compact profile summaries. Never place complete named-profile JSON or large talkgroup arrays into hidden `<pre>` elements because revealing the screen forces an expensive browser layout.
+
+## RadioReference geographic imports
+
+- Parse county and city UI values as comma-separated OR-lists.
+- Import only talkgroup categories matching at least one selected county or city, then apply the selected Fire/EMS/Law Enforcement/Interop service filters.
+- Never fall back to a statewide talkgroup import when explicit geographic filters match nothing.
+- Preserve RadioReference site identity from `siteId` and `siteDescr`; shared channel frequencies are not valid site identity evidence.
+- The verified Tenderfoot II record is site ID `12917`. Site ID `13351` is Wolcott.
+- Filter sites by RadioReference county ID or exact normalized county location. Do not use loose substring matching against site labels or names.
+- Resolve every selected county to its RadioReference `ctid` from current state data, return that mapping with the site response, and filter the UI using those IDs.
 
 ## Whitespace and generated-script validation
 

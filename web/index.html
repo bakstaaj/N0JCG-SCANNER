@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI P25 Scanner</title>
-  <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/app.css?v=0.5ar-compact-spacing">
 </head>
 <body>
   <div class="app-shell">
@@ -100,8 +100,8 @@
           <div class="section-row"><div><strong>3. Location, System, Site, Talkgroups</strong><p>Enter location, select system/site, choose talkgroup categories, then import and save.</p></div><span id="importStatusBadge" class="pill warn">Ready</span></div>
           <div class="wizard-grid">
             <label>State<input id="wizardState" type="text" value="AZ" autocomplete="off"></label>
-            <label>County<input id="wizardCounty" type="text" value="Maricopa" autocomplete="off"></label>
-            <label>City<input id="wizardCity" type="text" value="Mesa" autocomplete="off"></label>
+            <label>Counties<input id="wizardCounty" type="text" value="Maricopa" placeholder="Teller, El Paso" autocomplete="off"></label>
+            <label>Cities<input id="wizardCity" type="text" value="Mesa" placeholder="Cripple Creek, Woodland Park" autocomplete="off"></label>
           </div>
           <div class="wizard-actions compact-actions">
             <button id="findRrSystemsBtn" type="button" class="primary">Find RR Systems</button>
@@ -141,6 +141,6 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=0.5f-desktop-launcher"></script>
+  <script src="/app.js?v=0.5ar-tgid-label-fix"></script>
 </body>
 </html>

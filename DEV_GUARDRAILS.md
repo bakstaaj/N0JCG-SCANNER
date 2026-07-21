@@ -77,6 +77,16 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - Do not attempt encryption bypass, key recovery, key loading, or decryption of protected traffic.
 - Keep the first UI minimal: config, start/stop, control-channel status, active voice frequency, TGID, phase, encrypted/clear, signal/decoder health, and log tail.
 
+## RadioReference Geographic Import Guardrails
+
+- County and city selections constrain imported talkgroup categories; they are not only system/site search hints.
+- County and city fields may contain comma-separated values. Treat each field as an OR-list, then intersect the resulting geographic categories with the selected service types.
+- If a requested geographic filter matches no RadioReference talkgroup categories, fail the import instead of silently importing a statewide talkgroup list.
+- Preserve the exact RadioReference `siteId` and `siteDescr` selected by the operator. Do not infer site identity from shared frequency signatures.
+- Tenderfoot II is RadioReference site ID `12917`; site ID `13351` is Wolcott and must never be relabeled as Tenderfoot II.
+- Multi-county site filtering must use RadioReference county IDs or exact normalized `siteLocation` county values. Never match a county by substring against a site name or label (for example, county `Park` must not match an unrelated site merely because its name contains `Park`).
+- Resolve comma-separated county names to RadioReference `ctid` values from the selected state at request time; do not maintain a one-county hard-coded UI map.
+
 ## SDRTrunk Reference Guardrail
 
 - SDRTrunk may be studied as a protocol and scanner-behavior reference.
@@ -115,6 +125,7 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - `/api/status` must expose generated OP25 config state and decoder process state separately.
 - Automatic UI refresh may poll status but must not issue scanner stop/start POSTs unless tied to a recent operator action.
 - Service/API validators must wait for a stable, parseable `/api/status` before counting endpoint failures after startup.
+- Do not render full named-profile/config payloads into hidden or visible UI elements. Large talkgroup arrays must be represented by compact counts and summaries so opening Radio Setup cannot trigger a browser layout stall.
 
 ## ChatGPT/Sandbox Reliability Guardrail
 

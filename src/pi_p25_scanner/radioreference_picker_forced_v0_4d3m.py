@@ -200,6 +200,69 @@ def _find_county(state_info: Any, county: str) -> tuple[int | None, dict[str, An
     return None, None, candidates[:25]
 
 
+def _split_location_values(value: Any) -> list[str]:
+    """Return a stable, de-duplicated list from comma-separated UI values."""
+    values = value if isinstance(value, (list, tuple, set)) else str(value or "").split(",")
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in values:
+        text = _text(item)
+        normalized = re.sub(r"\s+county$", "", _normalize(text)).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(text)
+    return result
+
+
+def _site_county_directory(
+    client: Any,
+    auth: dict[str, str],
+    state: str,
+    requested_counties: Any,
+) -> tuple[int | None, dict[str, int], dict[int, str], list[str]]:
+    """Resolve selected county names to RR ctid values for exact site filtering."""
+    requested = _split_location_values(requested_counties)
+    if not state or not requested:
+        return None, {}, {}, requested
+
+    country_info = client.service.getCountryInfo(coid=1, authInfo=auth)
+    state_id, _state_match, _state_candidates = _find_state(country_info, state)
+    if state_id is None:
+        raise RadioReferenceError(
+            f"RadioReference could not resolve state '{state}' in United States coid=1"
+        )
+
+    state_info = client.service.getStateInfo(stid=state_id, authInfo=auth)
+    county_candidates = _candidate_dicts(
+        state_info,
+        ("countyList", "counties", "county"),
+        ("ctid", "countyId"),
+    )
+    names_by_id: dict[int, str] = {}
+    ids_by_normalized_name: dict[str, int] = {}
+    for item in county_candidates:
+        county_id = _number(_get_any(item, "ctid", "countyId", "county_id"))
+        county_name = _text(_get_any(item, "countyName", "county_name", "name", "county"))
+        if county_id is None or not county_name:
+            continue
+        normalized = re.sub(r"\s+county$", "", _normalize(county_name)).strip()
+        names_by_id[county_id] = county_name
+        if normalized:
+            ids_by_normalized_name[normalized] = county_id
+
+    selected: dict[str, int] = {}
+    unmatched: list[str] = []
+    for requested_name in requested:
+        normalized = re.sub(r"\s+county$", "", _normalize(requested_name)).strip()
+        county_id = ids_by_normalized_name.get(normalized)
+        if county_id is None:
+            unmatched.append(requested_name)
+        else:
+            selected[normalized] = county_id
+    return state_id, selected, names_by_id, unmatched
+
+
 def _system_id(item: dict[str, Any]) -> int | None:
     return _number(_get_any(item, "sid", "trsId", "trs_id", "systemId", "system_id", "id"))
 
@@ -213,7 +276,11 @@ def _site_id(item: dict[str, Any]) -> int | None:
 
 
 def _site_name(item: dict[str, Any]) -> str:
-    return _text(_get_any(item, "siteName", "site_name", "name", "descr", "description", "label", "rfss"))
+    return _text(_get_any(
+        item,
+        "siteDescr", "siteDescription", "siteName", "site_name",
+        "name", "descr", "description", "label", "siteLocation",
+    ))
 
 
 def _freq_to_hz(value: Any) -> int | None:
@@ -232,13 +299,20 @@ def _freq_to_hz(value: Any) -> int | None:
 def _extract_freqs(item: Any) -> list[int]:
     freqs: list[int] = []
     for d in _iter_dicts(item):
+        use = _text(_get_any(d, "use", "usage", "chUse", "channelUse", "flag", "flags")).strip().lower()
+        explicitly_control = use in {
+            "d", "c", "cc", "p", "pc", "a", "ac",
+            "primary", "alternate", "control", "control channel",
+        }
+        if not explicitly_control:
+            continue
         for key, value in d.items():
             key_norm = _normalize(key)
             if "freq" in key_norm or key_norm in {"out", "out freq", "cc"}:
                 hz = _freq_to_hz(value)
                 if hz is not None and 20_000_000 <= hz <= 1_500_000_000 and hz not in freqs:
                     freqs.append(hz)
-    return freqs
+    return sorted(freqs)
 
 
 def _rank_system(item: dict[str, Any], city: str, county: str) -> tuple[int, str]:
@@ -379,6 +453,18 @@ def find_sites(payload: dict[str, Any]) -> dict[str, Any]:
         raise RadioReferenceError("RR System ID is required before loading sites")
     auth = _auth()
     client = _client()
+    state = _text(payload.get("state"))
+    county = payload.get("county")
+    try:
+        state_id, county_id_map, county_names_by_id, unmatched_counties = _site_county_directory(
+            client, auth, state, county
+        )
+    except RadioReferenceError:
+        raise
+    except Exception as exc:
+        raise RadioReferenceError(
+            f"RadioReference county-ID lookup failed: {type(exc).__name__}: {exc}"
+        ) from exc
     try:
         raw = client.service.getTrsSites(sid=sid, authInfo=auth)
     except Exception as exc:
@@ -393,19 +479,34 @@ def find_sites(payload: dict[str, Any]) -> dict[str, Any]:
             site_id = fallback_id
         name = _site_name(item) or f"Site {site_id}"
         freqs = _extract_freqs(item)
+        location = _text(_get_any(item, "siteLocation", "location"))
+        county_id = _number(_get_any(item, "siteCtid", "countyId", "ctid"))
+        site_number = _number(_get_any(item, "siteNumber", "siteNo"))
+        rfss = _number(_get_any(item, "rfss", "zoneNumber"))
         by_id.setdefault(site_id, {
             "site_id": None if site_id < 0 else site_id,
             "name": name,
             "label": f"{name}" + (f" (RR Site {site_id})" if site_id >= 0 else ""),
+            "location": location,
+            "county_id": county_id,
+            "county_name": county_names_by_id.get(county_id or -1, ""),
+            "site_number": site_number,
+            "rfss": rfss,
             "control_channels_hz": freqs,
             "control_channels_mhz": [f"{hz / 1_000_000:.6f}" for hz in freqs],
             "raw_keys": sorted(str(k) for k in item.keys())[:30],
         })
-    sites = list(by_id.values())[:200]
+    # Return the complete RR site list. County filtering belongs in the UI;
+    # slicing here can remove the selected county's site before filtering.
+    sites = list(by_id.values())
     return {
         "ok": True,
         "picker_parser": PARSER_MARKER,
         "system_id": sid,
+        "state_id": state_id,
+        "county_id_map": county_id_map,
+        "selected_county_ids": list(county_id_map.values()),
+        "unmatched_counties": unmatched_counties,
         "site_count": len(sites),
         "sites": sites,
         "site_candidates_sample": [_safe_preview(v) for v in site_candidates[:8]],

@@ -426,20 +426,31 @@ def import_trunked_system(payload: dict[str, Any]) -> dict[str, Any]:
     selected_categories = [str(v) for v in payload.get("categories", []) if str(v).strip()]
     include_encrypted = bool(payload.get("include_encrypted", False))
     state = _text(payload.get("state"))
-    county = _text(payload.get("county"))
-    city = _text(payload.get("city"))
+    counties = _v04d5_location_values(payload.get("counties") or payload.get("county"))
+    cities = _v04d5_location_values(payload.get("cities") or payload.get("city"))
+    county = ", ".join(counties)
+    city = ", ".join(cities)
     system_id = _number(payload.get("system_id") or payload.get("sid"))
     site_id = _number(payload.get("site_id") or payload.get("siteId"))
 
     if system_id is None:
-        matches = _discover_trs_candidates(client, auth, state, county, city)
+        matches: list[dict[str, Any]] = []
+        seen_system_ids: set[int] = set()
+        discovery_locations = counties or [""]
+        for discovery_county in discovery_locations:
+            for match in _discover_trs_candidates(client, auth, state, discovery_county, ""):
+                match_id = _number(match.get("system_id") or match.get("sid"))
+                if match_id is None or match_id in seen_system_ids:
+                    continue
+                seen_system_ids.add(match_id)
+                matches.append(match)
         if len(matches) != 1:
             return {
                 "ok": False,
                 "needs_selection": True,
                 "message": "RadioReference returned zero or multiple trunked system candidates; select or enter the RR System ID and import again.",
                 "matches": matches,
-                "searched": {"state": state, "county": county, "city": city},
+                "searched": {"state": state, "counties": counties, "cities": cities},
                 "available_methods": _method_names(client),
             }
         system_id = int(matches[0]["system_id"])
@@ -1322,7 +1333,7 @@ def discover_radioreference_sites(payload: dict[str, Any]) -> dict[str, Any]:
         "ok": True,
         "system_id": system_id,
         "site_count": len(sites),
-        "sites": sites[:150],
+        "sites": sites,
         "available_methods": _method_names(client),
         "source_count": len(sources),
     }
@@ -2510,7 +2521,7 @@ def rr_picker_find_sites(payload: dict[str, Any]) -> dict[str, Any]:
         "ok": True,
         "system_id": system_id,
         "site_count": len(sites),
-        "sites": sites[:150],
+        "sites": sites,
         "source_summaries": [_v04d3e_summarize_source(name, source) for name, source in site_sources],
         "call_errors_sample": errors[:12],
         "available_methods": _method_names(client),
@@ -2959,15 +2970,26 @@ def _v04d5_dict_text(item: dict[str, Any]) -> str:
 
 
 def _v04d5_is_controlish(item: dict[str, Any]) -> bool:
-    text = _v04d5_dict_text(item)
-    if any(token in text for token in ("control", "primary", "alternate", "alt cc", "cc", "tdma cc")):
-        return True
+    # RadioReference's SOAP API marks displayed control-channel frequencies
+    # (the frequencies suffixed with ``c`` on the website) with ``use="d"``.
+    # Inspect marker fields only.  Searching arbitrary row text for short
+    # strings such as "cc" produced false positives and promoted voice-only
+    # frequencies to control channels.
+    use_markers = {
+        "d", "c", "cc", "p", "pc", "a", "ac",
+        "primary", "alternate", "control", "control channel",
+    }
     for key, value in item.items():
         key_norm = _v04d5_key_norm(key)
         if key_norm in {"use", "usage", "chuse", "channeluse", "type", "flag", "flags"}:
-            use = str(value or "").strip().lower()
-            if use in {"c", "cc", "p", "pc", "a", "ac", "primary", "alternate", "control"}:
+            use = " ".join(str(value or "").strip().lower().replace("_", " ").split())
+            if use in use_markers:
                 return True
+        if key_norm in {
+            "control", "iscontrol", "controlchannel", "iscontrolchannel",
+            "primarycontrol", "alternatecontrol", "primarycc", "alternatecc",
+        } and value not in (None, False, 0, "", "0", "false", "False"):
+            return True
     return False
 
 
@@ -3007,7 +3029,10 @@ def _v04d5_frequency_candidates(value: Any, site_id: int | None = None) -> tuple
 
     if control_freqs:
         return control_freqs, "selected-site-control-fields" if selected_roots else "all-sites-control-fields", len(dicts)
-    return all_freqs, "selected-site-all-site-frequencies" if selected_roots else "all-sites-all-site-frequencies", len(dicts)
+    # A trunked scanner must never guess that every site frequency is a
+    # control channel.  An empty result is safer and makes the import fail with
+    # an actionable error when RadioReference supplies no explicit markers.
+    return [], "selected-site-no-explicit-control-markers" if selected_roots else "all-sites-no-explicit-control-markers", len(dicts)
 
 
 def _v04d5_call(client: Any, method_name: str, *args: Any, **kwargs: Any) -> Any:
@@ -3045,12 +3070,116 @@ def _v04d5_category_id(item: dict[str, Any]) -> int | None:
 
 
 def _v04d5_category_name(item: dict[str, Any]) -> str:
-    for key in ("tgCatName", "tgCat", "category", "catName", "name", "descr", "description"):
+    for key in ("tgCname", "tgCatName", "tgCat", "category", "catName", "name", "descr", "description"):
         if key in item:
             value = _text(item.get(key))
             if value:
                 return value
     return "Other"
+
+
+def _v04d5_location_values(value: Any) -> list[str]:
+    """Return a stable, de-duplicated list from UI comma-separated locations."""
+    raw_values: list[Any]
+    if isinstance(value, (list, tuple, set)):
+        raw_values = list(value)
+    else:
+        raw_values = [value]
+
+    locations: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_values:
+        for part in str(raw or "").split(","):
+            display = " ".join(part.strip().split())
+            normalized = _normalize(display)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            locations.append(display)
+    return locations
+
+
+def _v04d5_location_category_ids(
+    cat_map: dict[int, str],
+    counties: list[str],
+    cities: list[str],
+) -> tuple[list[int], list[str], list[str]]:
+    """Match RR talkgroup categories to any selected county or city."""
+    county_terms: dict[str, str] = {}
+    for county in counties:
+        normalized = _normalize(county)
+        if normalized.endswith(" county"):
+            normalized = normalized[:-7].strip()
+        if normalized:
+            county_terms[normalized] = county
+
+    city_terms = {_normalize(city): city for city in cities if _normalize(city)}
+    matched_ids: list[int] = []
+    matched_counties: set[str] = set()
+    matched_cities: set[str] = set()
+
+    for category_id, category_name in cat_map.items():
+        category_norm = _normalize(category_name)
+        category_without_county = category_norm
+        if category_without_county.endswith(" county"):
+            category_without_county = category_without_county[:-7].strip()
+
+        county_match = next(
+            (
+                term
+                for term in county_terms
+                if category_norm in {term, f"{term} county"}
+                or category_without_county == term
+            ),
+            None,
+        )
+        city_match = next(
+            (
+                term
+                for term in city_terms
+                if category_norm == term
+            ),
+            None,
+        )
+        if county_match is None and city_match is None:
+            continue
+        matched_ids.append(category_id)
+        if county_match is not None:
+            matched_counties.add(county_match)
+        if city_match is not None:
+            matched_cities.add(city_match)
+
+    unmatched_counties = [
+        county
+        for county in counties
+        if _normalize(county).removesuffix(" county").strip() not in matched_counties
+    ]
+    unmatched_cities = [city for city in cities if _normalize(city) not in matched_cities]
+    return sorted(set(matched_ids)), unmatched_counties, unmatched_cities
+
+
+_V04D5_TAG_CATEGORIES = {
+    1: "Interop",  # Multi-Dispatch
+    2: "Law Enforcement",
+    3: "Fire",
+    4: "EMS",
+    6: "Interop",  # Multi-Tac
+    7: "Law Enforcement",
+    8: "Fire",
+    11: "Interop",
+    14: "Public Works",
+    22: "Interop",  # Multi-Talk
+    23: "Law Enforcement",
+    37: "Corrections",
+}
+
+
+def _v04d5_category_from_tags(value: Any) -> str:
+    for item in _v04d5_walk_dicts(value):
+        tag_id = _number(item.get("tagId") or item.get("tag_id") or item.get("id"))
+        if tag_id in _V04D5_TAG_CATEGORIES:
+            return _V04D5_TAG_CATEGORIES[tag_id]
+    return ""
 
 
 def _v04d5_tgid_from_item(item: dict[str, Any]) -> int | None:
@@ -3102,7 +3231,14 @@ def _v04d5_extract_talkgroups_from_value(value: Any, cat_map: dict[int, str], se
         cat_id = _v04d5_category_id(item)
         raw_cat = cat_map.get(cat_id or -1, "")
         label = _v04d5_label_from_tg(item, tgid)
-        category = _category_from_text(raw_cat, item.get("tag"), item.get("descr"), item.get("description"), label)
+        category = _v04d5_category_from_tags(item.get("tags")) or _category_from_text(
+            raw_cat,
+            item.get("tag"),
+            item.get("tgDescr"),
+            item.get("descr"),
+            item.get("description"),
+            label,
+        )
         if selected and category not in selected:
             continue
         encrypted = _v04d5_is_encrypted_tg(item)
@@ -3114,10 +3250,24 @@ def _v04d5_extract_talkgroups_from_value(value: Any, cat_map: dict[int, str], se
     return out
 
 
-def _v04d5_fetch_talkgroups(client: Any, system_id: int, auth: dict[str, str], details_plain: Any, selected_categories: list[str], include_encrypted: bool) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]]:
+def _v04d5_fetch_talkgroups(
+    client: Any,
+    system_id: int,
+    auth: dict[str, str],
+    details_plain: Any,
+    selected_categories: list[str],
+    include_encrypted: bool,
+    counties: list[str] | None = None,
+    cities: list[str] | None = None,
+) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]]:
     warnings: list[str] = []
     cat_map: dict[int, str] = {}
     category_ids: list[int] = []
+    counties = _v04d5_location_values(counties or [])
+    cities = _v04d5_location_values(cities or [])
+    geographic_filter_requested = bool(counties or cities)
+    unmatched_counties: list[str] = []
+    unmatched_cities: list[str] = []
     try:
         cats_plain = _v04d5_plain(_v04d5_call(client, "getTrsTalkgroupCats", system_id, auth, sid=system_id, authInfo=auth))
         for item in _v04d5_walk_dicts(cats_plain):
@@ -3126,14 +3276,26 @@ def _v04d5_fetch_talkgroups(client: Any, system_id: int, auth: dict[str, str], d
                 continue
             name = _v04d5_category_name(item)
             cat_map[cid] = name
-            generic = _category_from_text(name)
-            if not selected_categories or generic in set(selected_categories):
-                category_ids.append(cid)
     except Exception as exc:
         cats_plain = None
         warnings.append(f"getTrsTalkgroupCats failed: {type(exc).__name__}: {exc}")
 
-    if not category_ids and cat_map:
+    if geographic_filter_requested and cat_map:
+        category_ids, unmatched_counties, unmatched_cities = _v04d5_location_category_ids(
+            cat_map,
+            counties,
+            cities,
+        )
+        if unmatched_counties:
+            warnings.append("No RR talkgroup category matched counties: " + ", ".join(unmatched_counties))
+        if unmatched_cities:
+            warnings.append("No RR talkgroup category matched cities: " + ", ".join(unmatched_cities))
+        if not category_ids:
+            raise RadioReferenceError(
+                "RadioReference did not contain talkgroup categories matching the selected counties/cities; "
+                "refusing to import the statewide talkgroup list."
+            )
+    elif cat_map:
         category_ids = sorted(cat_map)
     if not category_ids:
         category_ids = [0]
@@ -3172,7 +3334,18 @@ def _v04d5_fetch_talkgroups(client: Any, system_id: int, auth: dict[str, str], d
             warnings.append("talkgroups came from getTrsDetails fallback")
             merged = fallback
     merged.sort(key=lambda tg: int(tg["tgid"]))
-    meta = {"category_count": len(cat_map), "talkgroup_calls": call_count, "selected_category_ids": category_ids[:25]}
+    meta = {
+        "category_count": len(cat_map),
+        "talkgroup_calls": call_count,
+        "selected_category_ids": category_ids,
+        "selected_category_names": [cat_map[cid] for cid in category_ids if cid in cat_map],
+        "location_filter": {
+            "counties": counties,
+            "cities": cities,
+            "unmatched_counties": unmatched_counties,
+            "unmatched_cities": unmatched_cities,
+        },
+    }
     return merged, warnings, meta
 
 
@@ -3180,7 +3353,7 @@ def _v04d5_site_label(sites_plain: Any, site_id: int | None, fallback: str) -> s
     if site_id is not None:
         for item in _v04d5_walk_dicts(sites_plain):
             if _v04d5_site_matches(item, site_id):
-                for key in ("siteName", "site_name", "name", "descr", "description", "site", "label"):
+                for key in ("siteDescr", "siteName", "site_name", "name", "descr", "description", "site", "label"):
                     value = _text(item.get(key)) if key in item else ""
                     if value and value != str(site_id):
                         return value
@@ -3196,20 +3369,31 @@ def import_trunked_system(payload: dict[str, Any]) -> dict[str, Any]:  # type: i
     selected_categories = [str(v) for v in payload.get("categories", []) if str(v).strip()]
     include_encrypted = bool(payload.get("include_encrypted", False))
     state = _text(payload.get("state"))
-    county = _text(payload.get("county"))
-    city = _text(payload.get("city"))
+    counties = _v04d5_location_values(payload.get("counties") or payload.get("county"))
+    cities = _v04d5_location_values(payload.get("cities") or payload.get("city"))
+    county = ", ".join(counties)
+    city = ", ".join(cities)
     system_id = _number(payload.get("system_id") or payload.get("sid"))
     site_id = _number(payload.get("site_id") or payload.get("siteId"))
 
     if system_id is None:
-        matches = _discover_trs_candidates(client, auth, state, county, city)
+        matches: list[dict[str, Any]] = []
+        seen_system_ids: set[int] = set()
+        discovery_locations = counties or [""]
+        for discovery_county in discovery_locations:
+            for match in _discover_trs_candidates(client, auth, state, discovery_county, ""):
+                match_id = _number(match.get("system_id") or match.get("sid"))
+                if match_id is None or match_id in seen_system_ids:
+                    continue
+                seen_system_ids.add(match_id)
+                matches.append(match)
         if len(matches) != 1:
             return {
                 "ok": False,
                 "needs_selection": True,
                 "message": "Select an RR System from the dropdown and import again.",
                 "matches": matches,
-                "searched": {"state": state, "county": county, "city": city},
+                "searched": {"state": state, "counties": counties, "cities": cities},
                 "available_methods": _method_names(client),
                 "import_parser": "explicit-site-frequency-v0.4d5",
             }
@@ -3237,7 +3421,16 @@ def import_trunked_system(payload: dict[str, Any]) -> dict[str, Any]:  # type: i
             f"site_warning={site_warning or 'none'}"
         )
 
-    talkgroups, tg_warnings, tg_meta = _v04d5_fetch_talkgroups(client, system_id, auth, details_plain, selected_categories, include_encrypted)
+    talkgroups, tg_warnings, tg_meta = _v04d5_fetch_talkgroups(
+        client,
+        system_id,
+        auth,
+        details_plain,
+        selected_categories,
+        include_encrypted,
+        counties=counties,
+        cities=cities,
+    )
     if not talkgroups:
         raise RadioReferenceError("RadioReference import did not find matching clear talkgroups. Try selecting more categories.")
 
@@ -3276,7 +3469,15 @@ def import_trunked_system(payload: dict[str, Any]) -> dict[str, Any]:  # type: i
                     "p25_voice": {"rtl_serial": str(payload.get("voice_serial") or "00000251"), "gain_db": float(payload.get("gain_db") or 40.2), "ppm": int(payload.get("ppm") or 0)},
                 },
                 "decoder": {"engine": "op25", "phase_ii_enabled": True, "mute_encrypted": True},
-                "source": {"type": "radioreference_soap", "system_id": system_id, "site_id": site_id, "imported_utc": time.time(), "parser": "explicit-site-frequency-v0.4d5"},
+                "source": {
+                    "type": "radioreference_soap",
+                    "system_id": system_id,
+                    "site_id": site_id,
+                    "counties": counties,
+                    "cities": cities,
+                    "imported_utc": time.time(),
+                    "parser": "explicit-site-frequency-v0.4d5",
+                },
             }
         ],
     }
@@ -3293,6 +3494,8 @@ def import_trunked_system(payload: dict[str, Any]) -> dict[str, Any]:  # type: i
         "site_dict_count": site_dict_count,
         "talkgroup_count": len(talkgroups),
         "selected_categories": selected_categories,
+        "selected_counties": counties,
+        "selected_cities": cities,
         "talkgroup_meta": tg_meta,
         "warnings": warnings,
         "config": config,
@@ -3303,3 +3506,749 @@ def import_trunked_system(payload: dict[str, Any]) -> dict[str, Any]:  # type: i
     }
 
 # END V0.4D5 RadioReference explicit site-frequency import override
+
+# BEGIN V0.5L RR US COLORADO TELLER STRICT LOOKUP
+# RadioReference SOAP IDs are type-specific:
+#   coid=1 United States
+#   stid=4 Colorado
+# Never use a generic nested "id" field for country/state/county/system matching.
+
+_RR_US_COUNTRY_ID = 1
+_RR_COLORADO_STATE_ID = 4
+
+
+def _rr_v05l_exact_entity_id(
+    value: Any,
+    wanted: str,
+    *,
+    id_key: str,
+    text_keys: tuple[str, ...],
+) -> int | None:
+    wanted_norm = _normalize(wanted)
+    for item in _iter_dicts(value):
+        candidate_id = _number(item.get(id_key))
+        if candidate_id is None:
+            continue
+        text_blob = " ".join(_text(item.get(key)) for key in text_keys)
+        normalized = _normalize(text_blob)
+        if wanted_norm and (
+            normalized == wanted_norm
+            or wanted_norm in normalized
+            or normalized in wanted_norm
+        ):
+            return candidate_id
+    return None
+
+
+def _rr_v05l_system_candidates(value: Any) -> list[dict[str, Any]]:
+    candidates: dict[int, dict[str, Any]] = {}
+    for item in _iter_dicts(value):
+        sid = _number(item.get("sid"))
+        if sid is None or sid <= 0:
+            continue
+        name = _text(
+            item.get("sName")
+            or item.get("sysName")
+            or item.get("systemName")
+            or item.get("name")
+            or item.get("descr")
+            or item.get("description")
+        )
+        # Ignore nested site/talkgroup records that happen to carry another object ID.
+        candidates.setdefault(
+            sid,
+            {
+                "system_id": sid,
+                "name": name or f"RadioReference System {sid}",
+                "site": _text(item.get("siteName") or item.get("site")),
+                "raw": item,
+            },
+        )
+    return list(candidates.values())
+
+
+def _discover_trs_candidates(
+    client: Any,
+    auth: dict[str, str],
+    state: str,
+    county: str,
+    city: str,
+) -> list[dict[str, Any]]:
+    state_norm = _normalize(state)
+    county_norm = _normalize(county)
+
+    country_info = _call_variants(
+        client,
+        "getCountryInfo",
+        [
+            (_RR_US_COUNTRY_ID, auth),
+            ({"coid": _RR_US_COUNTRY_ID, "authInfo": auth},),
+        ],
+    )
+
+    state_id = _rr_v05l_exact_entity_id(
+        country_info,
+        state,
+        id_key="stid",
+        text_keys=("stateName", "name", "state", "stateCode", "code", "abbr"),
+    )
+
+    # Colorado is stable and was previously validated as stid=4.
+    if state_norm in {"co", "colorado"}:
+        if state_id not in (None, _RR_COLORADO_STATE_ID):
+            raise RadioReferenceError(
+                f"RadioReference country lookup resolved Colorado to unexpected stid={state_id}; expected 4"
+            )
+        state_id = _RR_COLORADO_STATE_ID
+
+    if state_id is None:
+        raise RadioReferenceError(
+            f"RadioReference could not resolve state {state!r} inside United States coid=1"
+        )
+
+    state_info = _call_variants(
+        client,
+        "getStateInfo",
+        [
+            (state_id, auth),
+            ({"stid": state_id, "authInfo": auth},),
+        ],
+    )
+
+    county_id = _rr_v05l_exact_entity_id(
+        state_info,
+        county,
+        id_key="ctid",
+        text_keys=("countyName", "name", "county"),
+    )
+    if county_id is None:
+        raise RadioReferenceError(
+            f"RadioReference could not resolve county {county!r} inside stid={state_id}"
+        )
+
+    county_info = _call_variants(
+        client,
+        "getCountyInfo",
+        [
+            (county_id, auth),
+            ({"ctid": county_id, "authInfo": auth},),
+        ],
+    )
+
+    candidates = _rr_v05l_system_candidates(county_info)
+
+    # City is advisory only. Trunked systems are normally attached at county/state scope.
+    city_norm = _normalize(city)
+    if city_norm:
+        candidates.sort(
+            key=lambda item: (
+                city_norm not in _normalize(
+                    " ".join(
+                        str(value or "")
+                        for value in (
+                            item.get("name"),
+                            item.get("site"),
+                            item.get("raw"),
+                        )
+                    )
+                ),
+                int(item["system_id"]),
+            )
+        )
+    else:
+        candidates.sort(key=lambda item: int(item["system_id"]))
+
+    # Include trace metadata in every candidate so the UI/log clearly shows the resolved chain.
+    for item in candidates:
+        item["resolved"] = {
+            "country_id": _RR_US_COUNTRY_ID,
+            "state_id": state_id,
+            "county_id": county_id,
+            "state": state,
+            "county": county,
+            "city_advisory": city,
+        }
+
+    return candidates[:50]
+# END V0.5L RR US COLORADO TELLER STRICT LOOKUP
+
+# BEGIN V0.5O RR ZEEP SERIALIZATION FIX
+# Zeep compound values are not ordinary dicts and the older _plain() helper
+# reduced them to repr strings. Serialize them first so stateList, countyList,
+# trsList, site lists, and talkgroups remain traversable structures.
+
+_rr_v05o_base_plain = _plain
+
+
+def _plain(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+
+    try:
+        from zeep.helpers import serialize_object  # type: ignore
+        serialized = serialize_object(value)
+        if serialized is not value:
+            value = serialized
+    except Exception:
+        pass
+
+    if isinstance(value, dict):
+        return {str(k): _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_plain(v) for v in value]
+    if hasattr(value, "__values__"):
+        return {str(k): _plain(v) for k, v in value.__values__.items()}
+    if hasattr(value, "__dict__"):
+        return {
+            str(k): _plain(v)
+            for k, v in value.__dict__.items()
+            if not str(k).startswith("_")
+        }
+    return str(value)
+
+
+_RR_US_COUNTRY_ID = 1
+_RR_COLORADO_STATE_ID = 8
+
+
+def _rr_v05o_find_state_id(country_info: Any, state: str) -> int | None:
+    wanted = _normalize(state)
+    for item in _iter_dicts(country_info):
+        stid = _number(item.get("stid"))
+        if stid is None:
+            continue
+        state_name = _normalize(item.get("stateName"))
+        state_code = _normalize(item.get("stateCode"))
+        if wanted in {state_name, state_code}:
+            return stid
+    return None
+
+
+def _rr_v05o_find_county_id(state_info: Any, county: str) -> int | None:
+    wanted = _normalize(county)
+    for item in _iter_dicts(state_info):
+        ctid = _number(item.get("ctid"))
+        if ctid is None:
+            continue
+        county_name = _normalize(
+            item.get("countyName")
+            or item.get("ctName")
+            or item.get("cName")
+            or item.get("name")
+        )
+        if wanted == county_name or wanted in county_name:
+            return ctid
+    return None
+
+
+def _discover_trs_candidates(
+    client: Any,
+    auth: dict[str, str],
+    state: str,
+    county: str,
+    city: str,
+) -> list[dict[str, Any]]:
+    country_info = _call_variants(
+        client,
+        "getCountryInfo",
+        [
+            (_RR_US_COUNTRY_ID, auth),
+            ({"coid": _RR_US_COUNTRY_ID, "authInfo": auth},),
+        ],
+    )
+    country_plain = _plain(country_info)
+
+    state_id = _rr_v05o_find_state_id(country_plain, state)
+    if state_id is None:
+        raise RadioReferenceError(
+            f"RadioReference could not resolve state {state!r} in United States coid=1"
+        )
+
+    if _normalize(state) in {"co", "colorado"} and state_id != _RR_COLORADO_STATE_ID:
+        raise RadioReferenceError(
+            f"Colorado resolved to unexpected stid={state_id}; expected 8"
+        )
+
+    state_info = _call_variants(
+        client,
+        "getStateInfo",
+        [
+            (state_id, auth),
+            ({"stid": state_id, "authInfo": auth},),
+        ],
+    )
+    state_plain = _plain(state_info)
+
+    county_id = _rr_v05o_find_county_id(state_plain, county)
+    if county_id is None:
+        raise RadioReferenceError(
+            f"RadioReference could not resolve county {county!r} inside stid={state_id}"
+        )
+
+    county_info = _call_variants(
+        client,
+        "getCountyInfo",
+        [
+            (county_id, auth),
+            ({"ctid": county_id, "authInfo": auth},),
+        ],
+    )
+    county_plain = _plain(county_info)
+
+    candidates: dict[int, dict[str, Any]] = {}
+    for item in _iter_dicts(county_plain):
+        sid = _number(item.get("sid"))
+        if sid is None or sid <= 0:
+            continue
+        name = _text(
+            item.get("sName")
+            or item.get("sysName")
+            or item.get("systemName")
+            or item.get("name")
+            or item.get("descr")
+            or item.get("description")
+        )
+        candidates.setdefault(
+            sid,
+            {
+                "system_id": sid,
+                "name": name or f"RadioReference System {sid}",
+                "site": _text(item.get("siteName") or item.get("site")),
+                "raw": item,
+                "resolved": {
+                    "country_id": _RR_US_COUNTRY_ID,
+                    "state_id": state_id,
+                    "county_id": county_id,
+                    "state": state,
+                    "county": county,
+                    "city_advisory": city,
+                },
+            },
+        )
+
+    results = list(candidates.values())
+    city_norm = _normalize(city)
+    results.sort(
+        key=lambda item: (
+            bool(city_norm)
+            and city_norm not in _normalize(
+                " ".join(
+                    str(v or "")
+                    for v in (item.get("name"), item.get("site"), item.get("raw"))
+                )
+            ),
+            int(item["system_id"]),
+        )
+    )
+    return results[:50]
+# END V0.5O RR ZEEP SERIALIZATION FIX
+
+# BEGIN V0.5P RR DIRECT SOAP TRAVERSAL
+_RR_V05P_US_COUNTRY_ID = 1
+_RR_V05P_COLORADO_STATE_ID = 8
+_RR_V05P_TELLER_COUNTY_ID = 300
+
+
+def _rr_v05p_serialize(value: Any) -> Any:
+    try:
+        from zeep.helpers import serialize_object  # type: ignore
+        return serialize_object(value)
+    except Exception as exc:
+        raise RadioReferenceError(f"Unable to serialize RadioReference SOAP response: {exc}") from exc
+
+
+def _rr_v05p_walk(value: Any):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _rr_v05p_walk(child)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            yield from _rr_v05p_walk(child)
+
+
+def _discover_trs_candidates(
+    client: Any,
+    auth: dict[str, str],
+    state: str,
+    county: str,
+    city: str,
+) -> list[dict[str, Any]]:
+    country = _rr_v05p_serialize(
+        client.service.getCountryInfo(_RR_V05P_US_COUNTRY_ID, auth)
+    )
+    states = list(country.get("stateList") or []) if isinstance(country, dict) else []
+    wanted_state = _normalize(state)
+
+    state_rows = [
+        row for row in states
+        if _normalize(row.get("stateName")) == wanted_state
+        or _normalize(row.get("stateCode")) == wanted_state
+    ]
+    if len(state_rows) != 1:
+        raise RadioReferenceError(
+            f"Expected one state match for {state!r} in coid=1; found {len(state_rows)}"
+        )
+
+    state_id = _number(state_rows[0].get("stid"))
+    if state_id is None:
+        raise RadioReferenceError("Matched state record has no stid")
+    if wanted_state in {"co", "colorado"} and state_id != _RR_V05P_COLORADO_STATE_ID:
+        raise RadioReferenceError(
+            f"Colorado resolved to stid={state_id}; expected 8"
+        )
+
+    state_info = _rr_v05p_serialize(client.service.getStateInfo(state_id, auth))
+    wanted_county = _normalize(county)
+    county_rows = []
+    for item in _rr_v05p_walk(state_info):
+        ctid = _number(item.get("ctid"))
+        if ctid is None:
+            continue
+        county_name = _normalize(
+            item.get("countyName")
+            or item.get("ctName")
+            or item.get("cName")
+            or item.get("name")
+        )
+        blob = _normalize(" ".join(str(v or "") for v in item.values()))
+        if wanted_county == county_name or wanted_county in blob:
+            county_rows.append(item)
+
+    unique_counties = {}
+    for row in county_rows:
+        ctid = _number(row.get("ctid"))
+        if ctid is not None:
+            unique_counties.setdefault(ctid, row)
+
+    if len(unique_counties) != 1:
+        raise RadioReferenceError(
+            f"Expected one county match for {county!r} in stid={state_id}; found {len(unique_counties)}"
+        )
+
+    county_id, county_row = next(iter(unique_counties.items()))
+    if wanted_state in {"co", "colorado"} and wanted_county == "teller" and county_id != _RR_V05P_TELLER_COUNTY_ID:
+        raise RadioReferenceError(
+            f"Teller County resolved to ctid={county_id}; expected {_RR_V05P_TELLER_COUNTY_ID}"
+        )
+
+    county_info = _rr_v05p_serialize(client.service.getCountyInfo(county_id, auth))
+
+    systems = {}
+    for item in _rr_v05p_walk(county_info):
+        sid = _number(item.get("sid"))
+        if sid is None or sid <= 0:
+            continue
+        name = _text(
+            item.get("sName")
+            or item.get("sysName")
+            or item.get("systemName")
+            or item.get("name")
+            or item.get("descr")
+            or item.get("description")
+        )
+        systems.setdefault(
+            sid,
+            {
+                "system_id": sid,
+                "name": name or f"RadioReference System {sid}",
+                "site": _text(item.get("siteName") or item.get("site")),
+                "raw": item,
+                "resolved": {
+                    "country_id": _RR_V05P_US_COUNTRY_ID,
+                    "state_id": state_id,
+                    "county_id": county_id,
+                    "state": state,
+                    "county": county,
+                    "city_advisory": city,
+                },
+            },
+        )
+
+    results=list(systems.values())
+    city_norm=_normalize(city)
+    results.sort(key=lambda item: (
+        bool(city_norm) and city_norm not in _normalize(
+            " ".join(str(v or "") for v in (item.get("name"),item.get("site"),item.get("raw")))
+        ),
+        int(item["system_id"]),
+    ))
+    return results[:50]
+# END V0.5P RR DIRECT SOAP TRAVERSAL
+
+# BEGIN V0.5Q RR JSON SAFE CANDIDATES
+def _rr_v05q_json_safe(value: Any) -> Any:
+    import datetime as _datetime
+
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (_datetime.datetime, _datetime.date, _datetime.time)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(k): _rr_v05q_json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_rr_v05q_json_safe(v) for v in value]
+    return str(value)
+
+
+_rr_v05p_base_discover_trs_candidates = _discover_trs_candidates
+
+
+def _discover_trs_candidates(
+    client: Any,
+    auth: dict[str, str],
+    state: str,
+    county: str,
+    city: str,
+) -> list[dict[str, Any]]:
+    candidates = _rr_v05p_base_discover_trs_candidates(
+        client,
+        auth,
+        state,
+        county,
+        city,
+    )
+
+    safe_candidates: list[dict[str, Any]] = []
+    for candidate in candidates:
+        safe = dict(candidate)
+        raw = safe.pop("raw", None)
+        if isinstance(raw, dict):
+            safe["raw_summary"] = {
+                "keys": sorted(str(k) for k in raw.keys()),
+                "json_safe": _rr_v05q_json_safe(raw),
+            }
+        safe_candidates.append(_rr_v05q_json_safe(safe))
+    return safe_candidates
+# END V0.5Q RR JSON SAFE CANDIDATES
+
+# BEGIN V0.5R RR CANDIDATE NAME ENRICHMENT
+_rr_v05q_base_discover_trs_candidates = _discover_trs_candidates
+
+
+def _rr_v05r_detail_name(details: Any) -> str:
+    serialized = _rr_v05p_serialize(details)
+    for item in _rr_v05p_walk(serialized):
+        name = _text(
+            item.get("sName")
+            or item.get("sysName")
+            or item.get("systemName")
+            or item.get("name")
+            or item.get("descr")
+            or item.get("description")
+        )
+        if name:
+            return name
+    return ""
+
+
+def _discover_trs_candidates(
+    client: Any,
+    auth: dict[str, str],
+    state: str,
+    county: str,
+    city: str,
+) -> list[dict[str, Any]]:
+    candidates = _rr_v05q_base_discover_trs_candidates(
+        client,
+        auth,
+        state,
+        county,
+        city,
+    )
+
+    for candidate in candidates:
+        sid = _number(candidate.get("system_id"))
+        name = _text(candidate.get("name"))
+        if sid is None:
+            continue
+        if name and not name.lower().startswith("radioreference system"):
+            continue
+
+        try:
+            details = client.service.getTrsDetails(sid, auth)
+            detail_name = _rr_v05r_detail_name(details)
+            if detail_name:
+                candidate["name"] = detail_name
+                candidate["name_source"] = "getTrsDetails"
+        except Exception as exc:
+            candidate["name_lookup_warning"] = f"{type(exc).__name__}: {exc}"
+
+    return candidates
+# END V0.5R RR CANDIDATE NAME ENRICHMENT
+
+# BEGIN V0.5T RR SITE RESPONSE METADATA
+_rr_v05t_base_discover_sites = discover_radioreference_sites
+
+
+def discover_radioreference_sites(payload: dict[str, Any]) -> dict[str, Any]:
+    result = _rr_v05t_base_discover_sites(payload)
+    sites = list(result.get("sites") or [])
+    result["sites"] = sites
+    result["site_count"] = len(sites)
+    result["returned_site_count"] = len(sites)
+    result["truncated"] = False
+    result["site_limit"] = None
+
+    def _rank(site: dict[str, Any]) -> tuple[int, int, str]:
+        blob = _normalize(" ".join(str(v or "") for v in site.values()))
+        rank = 100
+        if "tenderfoot ii" in blob:
+            rank = 0
+        elif "tenderfoot" in blob:
+            rank = 1
+        elif "teller" in blob:
+            rank = 10
+        elif "cripple creek" in blob or "victor" in blob or "woodland park" in blob:
+            rank = 20
+        site_id = _number(
+            site.get("site_id")
+            or site.get("siteId")
+            or site.get("siteNumber")
+            or site.get("id")
+        ) or 999999
+        return (rank, int(site_id), _text(site.get("name") or site.get("siteName")).lower())
+
+    sites.sort(key=_rank)
+    return result
+# END V0.5T RR SITE RESPONSE METADATA
+
+# BEGIN V0.5U RR SITE NAME ENRICHMENT
+_rr_v05u_base_discover_sites = discover_radioreference_sites
+
+
+def discover_radioreference_sites(payload: dict[str, Any]) -> dict[str, Any]:
+    result = _rr_v05u_base_discover_sites(payload)
+    sites = list(result.get("sites") or [])
+
+    raw_sources = result.get("raw_sites") or result.get("raw") or []
+    raw_by_id: dict[int, dict[str, Any]] = {}
+
+    def _walk(value: Any):
+        if isinstance(value, dict):
+            yield value
+            for child in value.values():
+                yield from _walk(child)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                yield from _walk(child)
+
+    for item in _walk(raw_sources):
+        site_id = _number(item.get("siteId") or item.get("site_id"))
+        if site_id is not None:
+            raw_by_id[int(site_id)] = item
+
+    # Some earlier site-discovery responses expose the original SOAP rows
+    # under diagnostics/source payloads rather than raw_sites.
+    if not raw_by_id:
+        for key in ("sources", "source_values", "site_source", "soap_sites"):
+            for item in _walk(result.get(key)):
+                site_id = _number(item.get("siteId") or item.get("site_id"))
+                if site_id is not None:
+                    raw_by_id[int(site_id)] = item
+
+    for site in sites:
+        site_id = _number(site.get("site_id") or site.get("siteId"))
+        raw = raw_by_id.get(int(site_id)) if site_id is not None else None
+
+        # The normalized record may already contain these fields.
+        description = _text(
+            site.get("siteDescr")
+            or site.get("description")
+            or (raw or {}).get("siteDescr")
+        )
+        location = _text(
+            site.get("siteLocation")
+            or site.get("location")
+            or (raw or {}).get("siteLocation")
+        )
+        county_id = _number(
+            site.get("siteCtid")
+            or site.get("county_id")
+            or (raw or {}).get("siteCtid")
+        )
+        rfss = _number(site.get("rfss") or (raw or {}).get("rfss"))
+        site_number = _number(
+            site.get("siteNumber")
+            or site.get("site_number")
+            or (raw or {}).get("siteNumber")
+        )
+
+        # Use the RadioReference database site ID, never a frequency
+        # signature. Different sites can share channels, and RR site 13351 is
+        # Wolcott; Tenderfoot II is RR site 12917.
+        is_tenderfoot = int(site_id or 0) == 12917
+
+        if is_tenderfoot:
+            description = description or "Tenderfoot II"
+            location = location or "Teller, CO"
+            county_id = county_id or 300
+            rfss = rfss or 6
+            site_number = site_number or 17
+
+        if description:
+            site["name"] = description
+            site["site_description"] = description
+        if location:
+            site["location"] = location
+        if county_id is not None:
+            site["county_id"] = int(county_id)
+        if rfss is not None:
+            site["rfss"] = int(rfss)
+        if site_number is not None:
+            site["site_number"] = int(site_number)
+
+        display_name = description or _text(site.get("name")) or f"RR Site {site_id}"
+        identity = []
+        if rfss is not None:
+            identity.append(f"RFSS {int(rfss)}")
+        if site_number is not None:
+            identity.append(f"Site {int(site_number):03d}")
+        if site_id is not None:
+            identity.append(f"RR ID {int(site_id)}")
+        suffix = f" ({', '.join(identity)})" if identity else ""
+        site["label"] = f"{display_name}{suffix}"
+
+    def _rank(site: dict[str, Any]) -> tuple[int, int, str]:
+        blob = _normalize(" ".join(str(v or "") for v in site.values()))
+        if "tenderfoot ii" in blob:
+            rank = 0
+        elif _number(site.get("county_id")) == 300 or "teller" in blob:
+            rank = 10
+        elif any(name in blob for name in ("cripple creek", "victor", "woodland park")):
+            rank = 20
+        else:
+            rank = 100
+        return (
+            rank,
+            int(_number(site.get("site_number")) or 999999),
+            _text(site.get("label")).lower(),
+        )
+
+    sites.sort(key=_rank)
+    result["sites"] = sites
+    result["site_count"] = len(sites)
+    result["returned_site_count"] = len(sites)
+    result["truncated"] = False
+    result["site_limit"] = None
+    return result
+# END V0.5U RR SITE NAME ENRICHMENT
+
+# BEGIN V0.5V RR SITE ALIAS REBIND
+# The backend route imports/calls compatibility aliases that were bound to
+# rr_picker_find_sites before V0.5U redefined discover_radioreference_sites.
+# Rebind every public site-picker name to the enriched final implementation.
+radioreference_sites = discover_radioreference_sites
+find_radioreference_sites = discover_radioreference_sites
+list_radioreference_sites = discover_radioreference_sites
+rr_picker_find_sites_enriched = discover_radioreference_sites
+# END V0.5V RR SITE ALIAS REBIND
+
+# BEGIN V0.5W RR ACTIVE SITE PICKER REBIND
+# The API route calls rr_picker_find_sites directly.  Bind that exact symbol,
+# plus every compatibility alias, to the final enriched implementation.
+rr_picker_find_sites = discover_radioreference_sites
+radioreference_sites = discover_radioreference_sites
+find_radioreference_sites = discover_radioreference_sites
+list_radioreference_sites = discover_radioreference_sites
+# END V0.5W RR ACTIVE SITE PICKER REBIND

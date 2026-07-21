@@ -20,6 +20,7 @@ _TGID_PATTERNS = [
 ]
 
 _FREQ_PATTERNS = [
+    re.compile(r"\bcontrol\s+channel\s*(?:[:=]\s*|\s+)(?P<freq>\d+(?:\.\d+)?)\b", re.IGNORECASE),
     re.compile(r"\bfreq(?:uency)?\s*(?:[:=]\s*|\s+)(?P<freq>\d+(?:\.\d+)?)\b", re.IGNORECASE),
     re.compile(r"\bfreq\((?P<freq>\d+(?:\.\d+)?)\)", re.IGNORECASE),
     re.compile(r"\bchannel\s*(?:[:=]\s*|\s+)(?P<freq>\d{6,12}(?:\.\d+)?)\b", re.IGNORECASE),
@@ -43,6 +44,7 @@ class RuntimeStatusUpdate:
     p25_phase: str = ""
     encrypted: bool | None = None
     muted: bool | None = None
+    control_channel_state: str = ""
     parser_notes: list[str] = field(default_factory=list)
 
     @property
@@ -56,6 +58,7 @@ class RuntimeStatusUpdate:
                 self.p25_phase,
                 self.encrypted is not None,
                 self.muted is not None,
+                self.control_channel_state,
                 self.parser_notes,
             ]
         )
@@ -70,6 +73,7 @@ class RuntimeStatusUpdate:
             "p25_phase": self.p25_phase,
             "encrypted": self.encrypted,
             "muted": self.muted,
+            "control_channel_state": self.control_channel_state,
             "parser_notes": list(self.parser_notes),
         }
 
@@ -84,6 +88,20 @@ class RuntimeStatusParser:
 
         if not text:
             return update
+
+        if "control channel timeout" in lower:
+            update.control_channel_state = "searching"
+            update.parser_notes.append("control_channel_timeout")
+        elif "set control channel" in lower:
+            update.control_channel_state = "searching"
+            update.parser_notes.append("control_channel_hunt")
+        elif any(token in lower for token in (
+            "tsbk", "network status broadcast", "rfss status broadcast",
+            "identifier update", "voice update", "voice grant",
+            "reconfiguring nac",
+        )):
+            update.control_channel_state = "locked"
+            update.parser_notes.append("control_channel_activity")
 
         parsed_tgid = self._parse_tgid(text)
         if parsed_tgid is not None and self._looks_like_configured_talkgroup(lower):
