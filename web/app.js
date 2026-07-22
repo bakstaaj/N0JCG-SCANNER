@@ -50,6 +50,7 @@ let latestReceiverInventory = null; // PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
 let latestAnalogStatus = null; // PHASE4_DUAL_ANALOG_WORKERS_V0_6C
 let latestAnalogConfig = null; // PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
 let latestAnalogActivity = null; // PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
+let latestAnalogRecordings = null; // PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
 function analogWorkerRecord(payload, role) {
   return (Array.isArray(payload?.workers) ? payload.workers : []).find((item) => item?.role === role) || null;
 }
@@ -384,6 +385,42 @@ function renderCurrentAnalogActivity(payload, role, nameId, detailId) {
   );
 }
 
+// PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
+function formatRecordingBytes(bytes) {
+  const value = Number(bytes || 0);
+  if (value < 1024) return `${value} bytes`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function renderAnalogRecordings(payload) {
+  latestAnalogRecordings = payload;
+  setText('analogRecordingCount', payload?.recording_count ?? 0);
+  setText('analogRecordingSize', formatRecordingBytes(payload?.total_size_bytes || 0));
+}
+
+function makeRecordingCell(event) {
+  const cell = document.createElement('td');
+  if (!event?.recording_url) {
+    cell.textContent = '-';
+    return cell;
+  }
+  const audio = document.createElement('audio');
+  audio.controls = true;
+  audio.preload = 'none';
+  audio.src = event.recording_url;
+  audio.className = 'analog-recording-player';
+
+  const link = document.createElement('a');
+  link.href = event.recording_url;
+  link.download = event.recording_filename || 'analog-recording.wav';
+  link.textContent = 'Download';
+  link.className = 'analog-recording-download';
+
+  cell.append(audio, link);
+  return cell;
+}
+
 function renderAnalogActivity(payload) {
   latestAnalogActivity = payload;
   const events = Array.isArray(payload?.events) ? payload.events : [];
@@ -408,7 +445,7 @@ function renderAnalogActivity(payload) {
     if (!events.length) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 7;
+      cell.colSpan = 8;
       cell.textContent = 'No analog activity recorded yet.';
       row.append(cell);
       body.append(row);
@@ -429,6 +466,7 @@ function renderAnalogActivity(payload) {
           cell.textContent = value;
           row.append(cell);
         });
+        row.append(makeRecordingCell(event));
         body.append(row);
       });
     }
@@ -445,11 +483,28 @@ function renderAnalogActivity(payload) {
 
 async function refreshAnalogActivity() {
   try {
-    const payload = await fetchJson('/api/analog/activity');
+    const [payload, recordings] = await Promise.all([
+      fetchJson('/api/analog/activity'),
+      fetchJson('/api/analog/recordings'),
+    ]);
     renderAnalogActivity(payload);
+    renderAnalogRecordings(recordings);
   } catch (error) {
     setBadge('analogActivityBadge', 'Activity error', 'bad');
     setText('analogActivityStatusText', `Analog activity failed: ${error.message}`);
+  }
+}
+
+// PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
+async function clearAnalogRecordings() {
+  if (!window.confirm('Delete all saved analog WAV recordings? Activity history will remain.')) return;
+  try {
+    const payload = await postJson('/api/analog/recordings/clear', {});
+    renderAnalogRecordings(payload.recordings || {});
+    await refreshAnalogActivity();
+  } catch (error) {
+    setBadge('analogActivityBadge', 'Recording clear failed', 'bad');
+    setText('analogActivityStatusText', `Recording clear failed: ${error.message}`);
   }
 }
 
@@ -930,6 +985,7 @@ function attachEventHandlers() {
   field('reloadAnalogConfigBtn')?.addEventListener('click', loadAnalogConfigEditor);
   field('refreshAnalogActivityBtn')?.addEventListener('click', refreshAnalogActivity);
   field('clearAnalogActivityBtn')?.addEventListener('click', clearAnalogActivity);
+  field('clearAnalogRecordingsBtn')?.addEventListener('click', clearAnalogRecordings);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
   field('loadProfileBtn')?.addEventListener('click', loadSelectedProfile);
   field('saveProfileBtn')?.addEventListener('click', saveCurrentProfile);

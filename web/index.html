@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=0.6e-activity-history">
+  <link rel="stylesheet" href="/app.css?v=0.6f-recording-playback">
 </head>
 <body>
   <div class="app-shell">
@@ -160,10 +160,17 @@
               <strong id="analogActivityDuration">0.0 s</strong>
               <small>Visible history window</small>
             </article>
+            <!-- PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F -->
+            <article>
+              <span>Recordings</span>
+              <strong id="analogRecordingCount">0</strong>
+              <small id="analogRecordingSize">0 bytes</small>
+            </article>
           </div>
           <div class="wizard-actions compact-actions analog-activity-actions">
             <button id="refreshAnalogActivityBtn" type="button">Refresh Activity</button>
             <button id="clearAnalogActivityBtn" type="button">Clear Analog History</button>
+            <button id="clearAnalogRecordingsBtn" type="button">Clear Recordings</button>
           </div>
           <div class="analog-activity-table-wrap">
             <table class="analog-activity-table">
@@ -176,10 +183,11 @@
                   <th>Mode</th>
                   <th>Duration</th>
                   <th>Peak RMS</th>
+                  <th>Audio</th>
                 </tr>
               </thead>
               <tbody id="analogActivityTableBody">
-                <tr><td colspan="7">No analog activity recorded yet.</td></tr>
+                <tr><td colspan="8">No analog activity recorded yet.</td></tr>
               </tbody>
             </table>
           </div>
@@ -302,6 +310,6 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=0.6e-activity-history"></script>
+  <script src="/app.js?v=0.6f-recording-playback"></script>
 </body>
 </html>

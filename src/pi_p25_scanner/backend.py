@@ -9,6 +9,7 @@ import mimetypes
 import os
 import re
 import shlex
+import shutil
 import socket
 import subprocess
 import sys
@@ -16,6 +17,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import parse_qs, urlparse
 from collections import deque
 from dataclasses import asdict, dataclass, field
 from http import HTTPStatus
@@ -53,6 +55,11 @@ if __package__ in (None, ""):
         AnalogWorkerError,
         analog_config_payload,
         analog_activity_payload,
+        AnalogRecordingError,
+        analog_recordings_payload,
+        clear_analog_recordings,
+        delete_analog_recording,
+        resolve_analog_recording,
         clear_analog_activity,
         analog_service_action,
         analog_status_payload,
@@ -101,6 +108,11 @@ else:
         AnalogWorkerError,
         analog_config_payload,
         analog_activity_payload,
+        AnalogRecordingError,
+        analog_recordings_payload,
+        clear_analog_recordings,
+        delete_analog_recording,
+        resolve_analog_recording,
         clear_analog_activity,
         analog_service_action,
         analog_status_payload,
@@ -485,7 +497,7 @@ class ScannerManager:
                 self.status.ok = True
                 if self.status.scanner_state == "config_error":
                     self.status.scanner_state = "stopped"
-            except (ConfigError, AnalogWorkerError, AnalogRuntimeError) as exc:
+            except (ConfigError, AnalogWorkerError, AnalogRuntimeError, AnalogRecordingError) as exc:
                 self.talkgroup_labels = {}
                 self.blocked_talkgroup_ids = set()
                 self.status.talkgroup_catalog = {"count": 0, "labels": {}}
@@ -512,6 +524,19 @@ class ScannerManager:
     # PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
     def analog_activity_payload(self) -> dict[str, Any]:
         return analog_activity_payload(limit=100)
+
+    # PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
+    def analog_recordings_payload(self) -> dict[str, Any]:
+        return analog_recordings_payload()
+
+    def resolve_analog_recording(self, request: dict[str, Any]) -> Path:
+        return resolve_analog_recording(request)
+
+    def clear_analog_recordings(self, request: dict[str, Any]) -> dict[str, Any]:
+        return clear_analog_recordings(request)
+
+    def delete_analog_recording(self, request: dict[str, Any]) -> dict[str, Any]:
+        return delete_analog_recording(request)
 
     def clear_analog_activity(self, request: dict[str, Any]) -> dict[str, Any]:
         return clear_analog_activity(request)
@@ -1144,6 +1169,25 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
+    def _send_binary_file(
+        self,
+        path: Path,
+        content_type: str = "application/octet-stream",
+    ) -> None:
+        stat = path.stat()
+        self.send_response(HTTPStatus.OK.value)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(stat.st_size))
+        self.send_header("Cache-Control", "private, no-store")
+        self.send_header(
+            "Content-Disposition",
+            f'inline; filename="{path.name}"',
+        )
+        self.end_headers()
+        with path.open("rb") as handle:
+            shutil.copyfileobj(handle, self.wfile)
+
     def _read_json(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length > MAX_JSON_BODY_BYTES:
@@ -1164,7 +1208,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - http.server method name
         try:
-            path = self.path.split("?", 1)[0]
+            parsed_request = urlparse(self.path)
+            path = parsed_request.path
             if path == "/api/status":
                 self._send_json(MANAGER.status_payload())
                 return
@@ -1186,6 +1231,21 @@ class Handler(SimpleHTTPRequestHandler):
             # PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
             if path == "/api/analog/activity":
                 self._send_json(MANAGER.analog_activity_payload())
+                return
+            # PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
+            if path == "/api/analog/recordings":
+                self._send_json(MANAGER.analog_recordings_payload())
+                return
+            if path == "/api/analog/recordings/file":
+                query = parse_qs(parsed_request.query)
+                request = {
+                    "role": (query.get("role") or [""])[-1],
+                    "filename": (query.get("filename") or [""])[-1],
+                }
+                self._send_binary_file(
+                    MANAGER.resolve_analog_recording(request),
+                    "audio/wav",
+                )
                 return
             if path == "/api/config/named":
                 self._send_json(MANAGER.named_configs_payload())
@@ -1262,6 +1322,19 @@ class Handler(SimpleHTTPRequestHandler):
                     HTTPStatus.ACCEPTED,
                 )
                 return
+            # PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
+            if path == "/api/analog/recordings/clear":
+                self._send_json(
+                    MANAGER.clear_analog_recordings(self._read_json()),
+                    HTTPStatus.ACCEPTED,
+                )
+                return
+            if path == "/api/analog/recordings/delete":
+                self._send_json(
+                    MANAGER.delete_analog_recording(self._read_json()),
+                    HTTPStatus.ACCEPTED,
+                )
+                return
             if path in ("/api/audio/start", "/api/audio/stop"):
                 self._send_json(MANAGER.audio_status(self.headers.get("Host", "")), HTTPStatus.ACCEPTED)
                 return
@@ -1310,7 +1383,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json(result, HTTPStatus.ACCEPTED)
                 return
             self._send_json({"ok": False, "error": "unknown endpoint"}, HTTPStatus.NOT_FOUND)
-        except (ConfigError, AnalogWorkerError, AnalogRuntimeError) as exc:
+        except (ConfigError, AnalogWorkerError, AnalogRuntimeError, AnalogRecordingError) as exc:
             self._handle_exception(exc, HTTPStatus.BAD_REQUEST)
         except Exception as exc:
             self._handle_exception(exc, HTTPStatus.INTERNAL_SERVER_ERROR)

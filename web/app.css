@@ -578,3 +578,30 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     grid-template-columns: 1fr;
   }
 }
+
+
+/* PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F */
+.analog-activity-actions {
+  grid-template-columns: repeat(3, minmax(170px, 1fr));
+}
+.analog-recording-player {
+  width: 230px;
+  max-width: 100%;
+  height: 34px;
+  display: block;
+}
+.analog-recording-download {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  text-decoration: none;
+}
+.analog-recording-download:hover {
+  text-decoration: underline;
+}
+@media (max-width: 700px) {
+  .analog-activity-actions {
+    grid-template-columns: 1fr;
+  }
+}

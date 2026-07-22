@@ -27,6 +27,10 @@ from .analog_activity import (
     complete_activity_event,
     new_activity_event,
 )  # PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
+from .analog_recordings import (
+    WavRecordingSession,
+    enforce_retention,
+)  # PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "runtime" / "settings" / "analog_receivers.json"
@@ -382,6 +386,8 @@ class AnalogWorker:
         self.last_activity_utc: float | None = None
         self.current_activity: dict[str, Any] | None = None
         self.activity_history_path = str(activity_log_path(role))
+        self.current_recording: WavRecordingSession | None = None
+        self.last_recording: dict[str, Any] | None = None
         self.smoke_deadline = (
             self.started_utc + self.smoke_seconds
             if self.smoke_seconds > 0
@@ -425,6 +431,12 @@ class AnalogWorker:
             "last_activity_utc": self.last_activity_utc,
             "current_activity": self.current_activity,
             "activity_history_path": self.activity_history_path,
+            "current_recording": (
+                str(self.current_recording.path)
+                if self.current_recording is not None
+                else None
+            ),
+            "last_recording": self.last_recording,
             "last_error": self.last_error,
             "stderr_tail": list(self.stderr_lines),
             "started_utc": self.started_utc,
@@ -475,7 +487,13 @@ class AnalogWorker:
             )
 
     # PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
-    def begin_activity(self, channel: dict[str, Any], rms: int) -> None:
+    # PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
+    def begin_activity(
+        self,
+        channel: dict[str, Any],
+        rms: int,
+        first_frame: bytes,
+    ) -> None:
         if self.smoke_seconds > 0 or self.current_activity is not None:
             return
         event = new_activity_event(
@@ -486,6 +504,17 @@ class AnalogWorker:
         event["peak_rms"] = int(rms)
         event["active_frames"] = 1
         self.current_activity = event
+        if bool(channel.get("recording_enabled", False)):
+            try:
+                self.current_recording = WavRecordingSession(
+                    self.role,
+                    event["event_id"],
+                    rate_hz=self.config["audio_rate_hz"],
+                )
+                self.current_recording.write(first_frame)
+            except Exception as exc:
+                self.current_recording = None
+                event["recording_error"] = str(exc)
 
     def update_activity(self, rms: int) -> None:
         if self.current_activity is None:
@@ -505,6 +534,16 @@ class AnalogWorker:
             self.current_activity,
             end_reason=reason,
         )
+        if self.current_recording is not None:
+            try:
+                recording = self.current_recording.close()
+                completed.update(recording)
+                self.last_recording = recording
+                enforce_retention()
+            except Exception as exc:
+                completed["recording_error"] = str(exc)
+            finally:
+                self.current_recording = None
         append_completed_event(completed)
         self.current_activity = None
 
@@ -551,12 +590,14 @@ class AnalogWorker:
                     del buffer[:frame_bytes]
                     self.frames_received += 1
                     rms = pcm_rms(frame)
+                    if self.current_recording is not None:
+                        self.current_recording.write(frame)
                     self.last_rms = rms
                     self.peak_rms = max(self.peak_rms, rms)
                     if rms >= channel["squelch_rms"]:
                         if not activity_seen:
                             self.activity_events += 1
-                            self.begin_activity(channel, rms)
+                            self.begin_activity(channel, rms, frame)
                         else:
                             self.update_activity(rms)
                         activity_seen = True

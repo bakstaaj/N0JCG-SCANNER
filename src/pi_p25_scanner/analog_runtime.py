@@ -20,6 +20,13 @@ from .analog_activity import (
     activity_payload,
     clear_activity_history,
 )  # PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
+from .analog_recordings import (
+    AnalogRecordingError,
+    clear_recordings,
+    delete_recording,
+    recordings_payload,
+    resolve_recording_file,
+)  # PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATUS_DIR = PROJECT_ROOT / "runtime" / "status"
@@ -121,6 +128,34 @@ def clear_analog_activity(request: dict[str, Any]) -> dict[str, Any]:
         raise AnalogRuntimeError(f"unsupported activity role: {role}")
     result = clear_activity_history(role=role)
     result["activity"] = activity_payload(limit=100)
+    return result
+
+
+# PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
+def analog_recordings_payload() -> dict[str, Any]:
+    return recordings_payload(limit=500)
+
+
+def resolve_analog_recording(request: dict[str, Any]) -> Path:
+    role = str(request.get("role") or "").strip()
+    filename = str(request.get("filename") or "").strip()
+    return resolve_recording_file(role, filename)
+
+
+def clear_analog_recordings(request: dict[str, Any]) -> dict[str, Any]:
+    role = str(request.get("role") or "").strip() or None
+    if role not in (None, "analog_2m", "analog_70cm"):
+        raise AnalogRuntimeError(f"unsupported recording role: {role}")
+    result = clear_recordings(role=role)
+    result["recordings"] = recordings_payload(limit=500)
+    return result
+
+
+def delete_analog_recording(request: dict[str, Any]) -> dict[str, Any]:
+    role = str(request.get("role") or "").strip()
+    filename = str(request.get("filename") or "").strip()
+    result = delete_recording(role, filename)
+    result["recordings"] = recordings_payload(limit=500)
     return result
 
 
