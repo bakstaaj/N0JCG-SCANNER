@@ -47,6 +47,7 @@ let rrSystems = [];
 let rrSites = [];
 let browserAudioLastEvent = 'Ready';
 let latestReceiverInventory = null; // PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
+let latestAnalogStatus = null; // PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
 
 const CATEGORY_DEFAULTS = [
   'Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Utilities', 'Transportation',
@@ -281,6 +282,57 @@ async function refreshReceiverInventory() {
   } catch (error) {
     setBadge('receiverInventoryBadge', 'Inventory error', 'bad');
     setText('receiverInventoryStatus', `Receiver inventory failed: ${error.message}`);
+  }
+}
+
+// PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
+function analogWorkerRecord(payload, role) {
+  return (Array.isArray(payload?.workers) ? payload.workers : [])
+    .find((item) => item?.role === role) || null;
+}
+
+function renderAnalogStatus(payload) {
+  const record = analogWorkerRecord(payload, 'analog_2m');
+  const service = record?.service || {};
+  const runtime = record?.runtime || {};
+  const config = record?.config || {};
+  const active = Boolean(service.active);
+  setBadge('analog2mBadge', active ? 'Running' : 'Stopped', active ? 'ok' : 'warn');
+  setText('analog2mSerial', config.rtl_serial || '00000440');
+  const channel = Array.isArray(config.channels) ? config.channels[0] : null;
+  setText('analog2mChannel', channel?.frequency_hz ? formatHz(channel.frequency_hz) : '-');
+  setText('analog2mRms', runtime.last_rms ?? '-');
+  setText('audioArbiterSource', payload?.audio_arbiter?.active_source || 'none');
+  const summary = {
+    service,
+    runtime,
+    audio_arbiter: payload?.audio_arbiter || {},
+    config_path: payload?.config_path || '',
+  };
+  setText('analog2mStatusText', safeJson(summary));
+  const startButton = field('startAnalog2mBtn');
+  const stopButton = field('stopAnalog2mBtn');
+  if (startButton) startButton.disabled = active || !record?.controllable;
+  if (stopButton) stopButton.disabled = !active || !record?.controllable;
+}
+
+async function refreshAnalogStatus() {
+  try {
+    latestAnalogStatus = await fetchJson('/api/analog/status');
+    renderAnalogStatus(latestAnalogStatus);
+  } catch (error) {
+    setBadge('analog2mBadge', 'Analog error', 'bad');
+    setText('analog2mStatusText', `Analog status failed: ${error.message}`);
+  }
+}
+
+async function analog2mAction(action) {
+  try {
+    latestAnalogStatus = await postJson(`/api/analog/2m/${action}`);
+    renderAnalogStatus(latestAnalogStatus);
+  } catch (error) {
+    setBadge('analog2mBadge', 'Action failed', 'bad');
+    setText('analog2mStatusText', `Analog ${action} failed: ${error.message}`);
   }
 }
 
@@ -737,6 +789,9 @@ function attachEventHandlers() {
   field('startBtn')?.addEventListener('click', (event) => { if (p25AllowManualStart(event)) startScannerAndAudio(); });
   field('stopBtn')?.addEventListener('click', stopScanner);
   field('refreshReceiverInventoryBtn')?.addEventListener('click', refreshReceiverInventory);
+  field('startAnalog2mBtn')?.addEventListener('click', () => analog2mAction('start'));
+  field('stopAnalog2mBtn')?.addEventListener('click', () => analog2mAction('stop'));
+  field('refreshAnalogStatusBtn')?.addEventListener('click', refreshAnalogStatus);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
   field('loadProfileBtn')?.addEventListener('click', loadSelectedProfile);
   field('saveProfileBtn')?.addEventListener('click', saveCurrentProfile);
@@ -758,10 +813,12 @@ p25RemoveDashboardAutostartTuningRemnants();
   refreshProfiles();
   refreshRadioReferenceStatus();
   refreshReceiverInventory();
+  refreshAnalogStatus();
   refreshStatus();
   refreshConfig();
   setInterval(refreshStatus, 3000);
   setInterval(refreshReceiverInventory, 15000);
+  setInterval(refreshAnalogStatus, 3000);
 }
 
 if (document.readyState === 'loading') {

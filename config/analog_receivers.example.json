@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "audio_udp_host": "127.0.0.1",
+  "workers": {
+    "analog_2m": {
+      "enabled": false,
+      "rtl_serial": "00000440",
+      "modulation": "fm",
+      "gain_db": 40.2,
+      "ppm": 0,
+      "sample_rate_hz": 24000,
+      "audio_rate_hz": 8000,
+      "audio_udp_port": 23458,
+      "frame_bytes": 320,
+      "dwell_seconds": 2.0,
+      "hang_seconds": 0.9,
+      "squelch_rms": 1800,
+      "channels": [
+        {
+          "enabled": true,
+          "frequency_hz": 146520000,
+          "label": "2 m simplex calling (test channel)"
+        }
+      ]
+    },
+    "analog_70cm": {
+      "enabled": false,
+      "rtl_serial": "00000144",
+      "modulation": "fm",
+      "gain_db": 40.2,
+      "ppm": 0,
+      "sample_rate_hz": 24000,
+      "audio_rate_hz": 8000,
+      "audio_udp_port": 23459,
+      "frame_bytes": 320,
+      "dwell_seconds": 2.0,
+      "hang_seconds": 0.9,
+      "squelch_rms": 1800,
+      "channels": [
+        {
+          "enabled": true,
+          "frequency_hz": 446000000,
+          "label": "70 cm simplex calling (reserved)"
+        }
+      ]
+    }
+  }
+}

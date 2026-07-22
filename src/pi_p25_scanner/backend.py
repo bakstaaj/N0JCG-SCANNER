@@ -48,6 +48,7 @@ if __package__ in (None, ""):
     from pi_p25_scanner.runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from pi_p25_scanner.runtime_activity import RuntimeActivityTracker
     from pi_p25_scanner.receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
+    from pi_p25_scanner.analog_runtime import analog_service_action, analog_status_payload  # PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
     try:
         from pi_p25_scanner.radioreference_import import (
             RadioReferenceError,
@@ -86,6 +87,7 @@ else:
     from .runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from .runtime_activity import RuntimeActivityTracker
     from .receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
+    from .analog_runtime import analog_service_action, analog_status_payload  # PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
     try:
         from .radioreference_import import (
             RadioReferenceError,
@@ -477,6 +479,13 @@ class ScannerManager:
     # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
     def receiver_inventory_payload(self) -> dict[str, Any]:
         return build_receiver_inventory()
+
+    # PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
+    def analog_status_payload(self) -> dict[str, Any]:
+        return analog_status_payload()
+
+    def analog_action(self, role: str, action: str) -> dict[str, Any]:
+        return analog_service_action(role, action)
 
     def config_payload(self) -> dict[str, Any]:
         payload, path = read_active_config_payload()
@@ -1134,6 +1143,10 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/receivers/inventory":
                 self._send_json(MANAGER.receiver_inventory_payload())
                 return
+            # PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
+            if path == "/api/analog/status":
+                self._send_json(MANAGER.analog_status_payload())
+                return
             if path == "/api/config/named":
                 self._send_json(MANAGER.named_configs_payload())
                 return
@@ -1168,6 +1181,19 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/scanner/stop":
                 payload, status = MANAGER.stop()
                 self._send_json(payload, status)
+                return
+            # PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
+            if path == "/api/analog/2m/start":
+                self._send_json(
+                    MANAGER.analog_action("analog_2m", "start"),
+                    HTTPStatus.ACCEPTED,
+                )
+                return
+            if path == "/api/analog/2m/stop":
+                self._send_json(
+                    MANAGER.analog_action("analog_2m", "stop"),
+                    HTTPStatus.ACCEPTED,
+                )
                 return
             if path in ("/api/audio/start", "/api/audio/stop"):
                 self._send_json(MANAGER.audio_status(self.headers.get("Host", "")), HTTPStatus.ACCEPTED)

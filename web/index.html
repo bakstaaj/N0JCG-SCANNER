@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=0.6a-receiver-inventory">
+  <link rel="stylesheet" href="/app.css?v=0.6b-analog-arbiter">
 </head>
 <body>
   <div class="app-shell">
@@ -84,6 +84,29 @@
           <pre id="receiverInventoryStatus">Receiver inventory not loaded yet.</pre>
         </section>
 
+        <!-- PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B -->
+        <section class="rr-panel analog-worker-panel" data-v06-section="analog-worker">
+          <div class="section-row">
+            <div>
+              <strong>Analog 2 m Worker</strong>
+              <p>Independent receiver on serial 00000440. Current-transmission audio arbitration prevents overlap with P25.</p>
+            </div>
+            <span id="analog2mBadge" class="pill warn">Stopped</span>
+          </div>
+          <div class="wizard-actions compact-actions analog-worker-actions">
+            <button id="startAnalog2mBtn" type="button" class="primary">Start 2 m Worker</button>
+            <button id="stopAnalog2mBtn" type="button">Stop 2 m Worker</button>
+            <button id="refreshAnalogStatusBtn" type="button">Refresh Analog Status</button>
+          </div>
+          <div class="details-grid analog-worker-grid">
+            <article><span>Receiver</span><strong id="analog2mSerial">00000440</strong></article>
+            <article><span>Channel</span><strong id="analog2mChannel">146.520000 MHz</strong></article>
+            <article><span>RMS</span><strong id="analog2mRms">-</strong></article>
+            <article><span>Audio Owner</span><strong id="audioArbiterSource">-</strong></article>
+          </div>
+          <pre id="analog2mStatusText">Analog worker status not loaded.</pre>
+        </section>
+
         <section class="rr-panel" data-v05d-section="profiles">
           <div class="section-row"><div><strong>1. Saved Profiles</strong><p>Reload a known-good profile or save the current active setup for future use.</p></div><span id="profileStatusBadge" class="pill warn">Profiles</span></div>
           <div class="wizard-grid">
@@ -157,6 +180,6 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=0.6a-receiver-inventory"></script>
+  <script src="/app.js?v=0.6b-analog-arbiter"></script>
 </body>
 </html>

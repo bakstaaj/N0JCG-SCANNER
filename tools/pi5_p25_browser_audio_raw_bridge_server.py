@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""Raw PI-P25 browser audio bridge.
-
-Receives OP25 UDP PCM frames on localhost and exposes a browser-readable WAV
-stream. This is the normal clear-audio baseline path: it counts OP25 2-byte
-control flag packets but does not use them to drop, gate, or modify audio.
-"""
+# PI-SCANNER source-aware UDP PCM to browser WAV audio arbiter.
 
 from __future__ import annotations
 
 import argparse
+import array
 import json
 import math
 import signal
 import socket
 import struct
+import sys
 import threading
 import time
 from collections import deque
@@ -25,27 +22,52 @@ from typing import Any
 PCM_RATE_HZ = 8000
 PCM_CHANNELS = 1
 PCM_BITS = 16
-OP25_AUDIO_FRAME_BYTES = 320
-SILENCE_FRAME = b"\x00" * OP25_AUDIO_FRAME_BYTES
+AUDIO_FRAME_BYTES = 320
+SILENCE_FRAME = b"\x00" * AUDIO_FRAME_BYTES
 DEFAULT_HTTP_HOST = "0.0.0.0"
 DEFAULT_HTTP_PORT = 8072
 DEFAULT_UDP_HOST = "127.0.0.1"
-DEFAULT_UDP_PORT = 23456
-DEFAULT_MAX_QUEUE_CHUNKS = 9000
+DEFAULT_P25_PORT = 23456
+DEFAULT_ANALOG_2M_PORT = 23458
+DEFAULT_ANALOG_70CM_PORT = 23459
+DEFAULT_RELEASE_SECONDS = 0.75
+DEFAULT_ACTIVITY_RMS = 120
+DEFAULT_MAX_QUEUE_CHUNKS = 1500
 
 
-def wav_header(sample_rate: int = PCM_RATE_HZ, channels: int = PCM_CHANNELS, bits: int = PCM_BITS) -> bytes:
-    byte_rate = sample_rate * channels * bits // 8
-    block_align = channels * bits // 8
+def pcm_rms(frame: bytes) -> int:
+    usable = len(frame) - (len(frame) % 2)
+    if usable <= 0:
+        return 0
+    values = array.array("h")
+    values.frombytes(frame[:usable])
+    if sys.byteorder != "little":
+        values.byteswap()
+    if not values:
+        return 0
+    return int(math.sqrt(sum(int(v) * int(v) for v in values) / len(values)))
+
+
+def wav_header() -> bytes:
+    byte_rate = PCM_RATE_HZ * PCM_CHANNELS * PCM_BITS // 8
+    block_align = PCM_CHANNELS * PCM_BITS // 8
     data_size = 0x7FFF0000
-    riff_size = 36 + data_size
     return b"".join(
         [
             b"RIFF",
-            struct.pack("<I", riff_size),
+            struct.pack("<I", 36 + data_size),
             b"WAVE",
             b"fmt ",
-            struct.pack("<IHHIIHH", 16, 1, channels, sample_rate, byte_rate, block_align, bits),
+            struct.pack(
+                "<IHHIIHH",
+                16,
+                1,
+                PCM_CHANNELS,
+                PCM_RATE_HZ,
+                byte_rate,
+                block_align,
+                PCM_BITS,
+            ),
             b"data",
             struct.pack("<I", data_size),
         ]
@@ -53,21 +75,29 @@ def wav_header(sample_rate: int = PCM_RATE_HZ, channels: int = PCM_CHANNELS, bit
 
 
 def generated_tone_wav(seconds: float = 1.0, frequency_hz: float = 880.0) -> bytes:
-    sample_count = int(PCM_RATE_HZ * seconds)
     frames = bytearray()
-    for n in range(sample_count):
-        sample = int(math.sin((2.0 * math.pi * frequency_hz * n) / PCM_RATE_HZ) * 12000)
+    for n in range(int(PCM_RATE_HZ * seconds)):
+        sample = int(
+            math.sin((2.0 * math.pi * frequency_hz * n) / PCM_RATE_HZ) * 12000
+        )
         frames.extend(struct.pack("<h", sample))
     data_size = len(frames)
-    byte_rate = PCM_RATE_HZ * PCM_CHANNELS * PCM_BITS // 8
-    block_align = PCM_CHANNELS * PCM_BITS // 8
     header = b"".join(
         [
             b"RIFF",
             struct.pack("<I", 36 + data_size),
             b"WAVE",
             b"fmt ",
-            struct.pack("<IHHIIHH", 16, 1, PCM_CHANNELS, PCM_RATE_HZ, byte_rate, block_align, PCM_BITS),
+            struct.pack(
+                "<IHHIIHH",
+                16,
+                1,
+                PCM_CHANNELS,
+                PCM_RATE_HZ,
+                PCM_RATE_HZ * PCM_CHANNELS * PCM_BITS // 8,
+                PCM_CHANNELS * PCM_BITS // 8,
+                PCM_BITS,
+            ),
             b"data",
             struct.pack("<I", data_size),
         ]
@@ -76,71 +106,114 @@ def generated_tone_wav(seconds: float = 1.0, frequency_hz: float = 880.0) -> byt
 
 
 @dataclass
-class AudioState:
-    max_queue_chunks: int = DEFAULT_MAX_QUEUE_CHUNKS
-    chunks: deque[bytes] = field(init=False)
+class SourceStats:
+    name: str
+    port: int
     packets: int = 0
     audio_packets: int = 0
     flag_packets: int = 0
-    flag_zero_count: int = 0
-    flag_one_count: int = 0
-    flag_other_count: int = 0
     ignored_packets: int = 0
+    accepted_frames: int = 0
+    dropped_non_owner_frames: int = 0
+    silent_frames: int = 0
     bytes_received: int = 0
+    last_packet_utc: float | None = None
+    last_audio_utc: float | None = None
+    last_active_utc: float | None = None
+    last_rms: int = 0
+    peak_rms: int = 0
+
+
+@dataclass
+class AudioArbiterState:
+    release_seconds: float = DEFAULT_RELEASE_SECONDS
+    activity_rms: int = DEFAULT_ACTIVITY_RMS
+    max_queue_chunks: int = DEFAULT_MAX_QUEUE_CHUNKS
+    queue: deque[bytes] = field(init=False)
+    sources: dict[str, SourceStats] = field(default_factory=dict)
+    active_source: str | None = None
+    active_since_utc: float | None = None
+    source_switches: int = 0
     chunks_sent: int = 0
     silence_chunks_sent: int = 0
     stream_clients: int = 0
     underruns: int = 0
     started_utc: float = field(default_factory=time.time)
-    last_packet_utc: float | None = None
-    last_audio_utc: float | None = None
     last_sent_utc: float | None = None
-    last_flag_utc: float | None = None
-    last_flag_value: int | None = None
     bind_errors: list[str] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def __post_init__(self) -> None:
-        self.chunks = deque(maxlen=self.max_queue_chunks)
+        self.queue = deque(maxlen=self.max_queue_chunks)
 
-    def add_packet(self, payload: bytes) -> None:
+    def register_source(self, name: str, port: int) -> None:
+        with self.lock:
+            self.sources[name] = SourceStats(name=name, port=port)
+
+    def _release_if_stale_locked(self, now: float) -> None:
+        if self.active_source is None:
+            return
+        source = self.sources.get(self.active_source)
+        last_active = source.last_active_utc if source else None
+        if last_active is None or now - last_active > self.release_seconds:
+            self.active_source = None
+            self.active_since_utc = None
+            self.queue.clear()
+
+    def add_packet(self, source_name: str, payload: bytes) -> None:
         now = time.time()
         with self.lock:
-            self.packets += 1
-            self.bytes_received += len(payload)
-            self.last_packet_utc = now
-            if len(payload) == OP25_AUDIO_FRAME_BYTES:
-                self.audio_packets += 1
-                self.last_audio_utc = now
-                self.chunks.append(payload)
+            source = self.sources[source_name]
+            source.packets += 1
+            source.bytes_received += len(payload)
+            source.last_packet_utc = now
+
+            if len(payload) == 2 and source_name.startswith("p25"):
+                source.flag_packets += 1
                 return
-            if len(payload) == 2:
-                value = int.from_bytes(payload, byteorder="little", signed=False)
-                self.flag_packets += 1
-                self.last_flag_utc = now
-                self.last_flag_value = value
-                if value == 0:
-                    self.flag_zero_count += 1
-                elif value == 1:
-                    self.flag_one_count += 1
-                else:
-                    self.flag_other_count += 1
+            if len(payload) != AUDIO_FRAME_BYTES:
+                source.ignored_packets += 1
                 return
-            self.ignored_packets += 1
+
+            source.audio_packets += 1
+            source.last_audio_utc = now
+            rms = pcm_rms(payload)
+            source.last_rms = rms
+            source.peak_rms = max(source.peak_rms, rms)
+            self._release_if_stale_locked(now)
+
+            if rms < self.activity_rms:
+                source.silent_frames += 1
+                return
+
+            source.last_active_utc = now
+            if self.active_source is None:
+                self.active_source = source_name
+                self.active_since_utc = now
+                self.source_switches += 1
+                self.queue.clear()
+
+            if self.active_source == source_name:
+                source.accepted_frames += 1
+                self.queue.append(payload)
+            else:
+                source.dropped_non_owner_frames += 1
 
     def pop_audio(self) -> bytes | None:
+        now = time.time()
         with self.lock:
-            if not self.chunks:
+            self._release_if_stale_locked(now)
+            if not self.queue:
                 self.underruns += 1
                 return None
-            self.last_sent_utc = time.time()
             self.chunks_sent += 1
-            return self.chunks.popleft()
+            self.last_sent_utc = now
+            return self.queue.popleft()
 
-    def note_silence_sent(self) -> None:
+    def note_silence(self) -> None:
         with self.lock:
-            self.last_sent_utc = time.time()
             self.silence_chunks_sent += 1
+            self.last_sent_utc = time.time()
 
     def client_started(self) -> None:
         with self.lock:
@@ -153,33 +226,47 @@ class AudioState:
     def snapshot(self) -> dict[str, Any]:
         now = time.time()
         with self.lock:
+            self._release_if_stale_locked(now)
             return {
-                "ok": True,
-                "mode": "raw-clear-v0.3o",
-                "sample_rate_hz": PCM_RATE_HZ,
-                "channels": PCM_CHANNELS,
-                "bits_per_sample": PCM_BITS,
-                "format": "s16le-mono-pcm-wav-stream",
-                "packets": self.packets,
-                "audio_packets": self.audio_packets,
-                "flag_packets": self.flag_packets,
-                "flag_zero_count": self.flag_zero_count,
-                "flag_one_count": self.flag_one_count,
-                "flag_other_count": self.flag_other_count,
-                "ignored_packets": self.ignored_packets,
-                "bytes_received": self.bytes_received,
-                "queued_chunks": len(self.chunks),
-                "max_queue_chunks": self.max_queue_chunks,
+                "ok": not bool(self.bind_errors),
+                "mode": "source-aware-current-transmission-wins-v0.6b",
+                "active_source": self.active_source,
+                "active_since_utc": self.active_since_utc,
+                "release_seconds": self.release_seconds,
+                "activity_rms": self.activity_rms,
+                "source_switches": self.source_switches,
+                "queued_chunks": len(self.queue),
                 "chunks_sent": self.chunks_sent,
                 "silence_chunks_sent": self.silence_chunks_sent,
-                "underruns": self.underruns,
                 "stream_clients": self.stream_clients,
-                "last_packet_age_seconds": None if self.last_packet_utc is None else round(now - self.last_packet_utc, 3),
-                "last_audio_age_seconds": None if self.last_audio_utc is None else round(now - self.last_audio_utc, 3),
-                "last_sent_age_seconds": None if self.last_sent_utc is None else round(now - self.last_sent_utc, 3),
-                "last_flag_age_seconds": None if self.last_flag_utc is None else round(now - self.last_flag_utc, 3),
-                "last_flag_value": self.last_flag_value,
+                "underruns": self.underruns,
                 "uptime_seconds": round(now - self.started_utc, 3),
+                "last_sent_age_seconds": (
+                    None
+                    if self.last_sent_utc is None
+                    else round(now - self.last_sent_utc, 3)
+                ),
+                "sources": {
+                    name: {
+                        **vars(source),
+                        "last_packet_age_seconds": (
+                            None
+                            if source.last_packet_utc is None
+                            else round(now - source.last_packet_utc, 3)
+                        ),
+                        "last_audio_age_seconds": (
+                            None
+                            if source.last_audio_utc is None
+                            else round(now - source.last_audio_utc, 3)
+                        ),
+                        "last_active_age_seconds": (
+                            None
+                            if source.last_active_utc is None
+                            else round(now - source.last_active_utc, 3)
+                        ),
+                    }
+                    for name, source in self.sources.items()
+                },
                 "bind_errors": list(self.bind_errors),
                 "stream_path": "/audio.wav",
                 "test_tone_path": "/test-tone.wav",
@@ -187,13 +274,21 @@ class AudioState:
 
 
 class UdpReceiver(threading.Thread):
-    def __init__(self, state: AudioState, host: str, port: int) -> None:
+    def __init__(
+        self,
+        state: AudioArbiterState,
+        source_name: str,
+        host: str,
+        port: int,
+    ) -> None:
         super().__init__(daemon=True)
         self.state = state
+        self.source_name = source_name
         self.host = host
         self.port = port
         self.keep_running = True
         self.sock: socket.socket | None = None
+        self.state.register_source(source_name, port)
 
     def run(self) -> None:
         try:
@@ -203,16 +298,18 @@ class UdpReceiver(threading.Thread):
             self.sock = sock
         except OSError as exc:
             with self.state.lock:
-                self.state.bind_errors.append(f"{self.host}:{self.port}: {exc}")
+                self.state.bind_errors.append(
+                    f"{self.source_name} {self.host}:{self.port}: {exc}"
+                )
             return
         while self.keep_running:
             try:
-                payload, _addr = sock.recvfrom(2048)
+                payload, _addr = sock.recvfrom(4096)
             except socket.timeout:
                 continue
             except OSError:
                 break
-            self.state.add_packet(payload)
+            self.state.add_packet(self.source_name, payload)
 
     def stop(self) -> None:
         self.keep_running = False
@@ -229,31 +326,35 @@ class ReusableThreadingHTTPServer(ThreadingHTTPServer):
 
 
 class AudioHandler(BaseHTTPRequestHandler):
-    server_version = "PiP25RawBrowserAudioBridge/0.3O"
+    server_version = "PiScannerAudioArbiter/0.6B"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         return
 
     @property
-    def audio_state(self) -> AudioState:
+    def state(self) -> AudioArbiterState:
         return self.server.audio_state  # type: ignore[attr-defined]
 
     def _cors(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Cache-Control", "no-store")
 
-    def _send_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
-        data = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+    def _send_json(
+        self,
+        payload: dict[str, Any],
+        status: HTTPStatus = HTTPStatus.OK,
+    ) -> None:
+        body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Length", str(len(body)))
         self._cors()
         self.end_headers()
-        self.wfile.write(data)
+        self.wfile.write(body)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path == "/api/audio/status":
-            self._send_json(self.audio_state.snapshot())
+            self._send_json(self.state.snapshot())
             return
         if self.path == "/test-tone.wav":
             data = generated_tone_wav()
@@ -275,40 +376,64 @@ class AudioHandler(BaseHTTPRequestHandler):
         try:
             self.wfile.write(wav_header())
             self.wfile.flush()
-            self.audio_state.client_started()
+            self.state.client_started()
             while True:
-                payload = self.audio_state.pop_audio()
+                payload = self.state.pop_audio()
                 if payload is None:
                     payload = SILENCE_FRAME
-                    self.audio_state.note_silence_sent()
+                    self.state.note_silence()
                 self.wfile.write(payload)
                 self.wfile.flush()
                 time.sleep(0.02)
         except (BrokenPipeError, ConnectionResetError, OSError):
             return
         finally:
-            self.audio_state.client_ended()
+            self.state.client_ended()
 
 
 def self_test() -> int:
-    state = AudioState()
-    state.add_packet(SILENCE_FRAME)
-    state.add_packet((0).to_bytes(2, "little"))
-    snap = state.snapshot()
-    if snap["audio_packets"] != 1 or snap["flag_packets"] != 1:
-        print("FAIL: raw bridge self-test packet counters incorrect")
+    state = AudioArbiterState(release_seconds=0.05, activity_rms=100)
+    for name, port in (
+        ("p25_control", 23456),
+        ("p25_voice", 23457),
+        ("analog_2m", 23458),
+        ("analog_70cm", 23459),
+    ):
+        state.register_source(name, port)
+    active = array.array("h", [2000] * 160)
+    if sys.byteorder != "little":
+        active.byteswap()
+    active_frame = active.tobytes()
+    state.add_packet("p25_control", active_frame)
+    state.add_packet("analog_2m", active_frame)
+    first = state.snapshot()
+    if first["active_source"] != "p25_control":
+        print("FAIL: first current transmission did not win")
         return 1
-    print("PASS: raw browser audio bridge self-test")
+    time.sleep(0.06)
+    state.add_packet("analog_2m", active_frame)
+    second = state.snapshot()
+    if second["active_source"] != "analog_2m":
+        print("FAIL: stale source did not release")
+        return 1
+    if second["sources"]["analog_2m"]["accepted_frames"] != 1:
+        print("FAIL: analog accepted-frame count")
+        return 1
+    print("PASS: source-aware audio arbiter self-test")
     print("FINAL: PASS")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Raw OP25 UDP PCM to browser WAV bridge")
+    parser = argparse.ArgumentParser(description="PI-SCANNER browser audio arbiter")
     parser.add_argument("--host", default=DEFAULT_HTTP_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_HTTP_PORT)
     parser.add_argument("--udp-host", default=DEFAULT_UDP_HOST)
-    parser.add_argument("--udp-port", type=int, default=DEFAULT_UDP_PORT)
+    parser.add_argument("--udp-port", type=int, default=DEFAULT_P25_PORT)
+    parser.add_argument("--analog-2m-port", type=int, default=DEFAULT_ANALOG_2M_PORT)
+    parser.add_argument("--analog-70cm-port", type=int, default=DEFAULT_ANALOG_70CM_PORT)
+    parser.add_argument("--release-seconds", type=float, default=DEFAULT_RELEASE_SECONDS)
+    parser.add_argument("--activity-rms", type=int, default=DEFAULT_ACTIVITY_RMS)
     parser.add_argument("--max-queue-chunks", type=int, default=DEFAULT_MAX_QUEUE_CHUNKS)
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args(argv)
@@ -316,8 +441,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.self_test:
         return self_test()
 
-    state = AudioState(max_queue_chunks=args.max_queue_chunks)
-    receivers = [UdpReceiver(state, args.udp_host, args.udp_port), UdpReceiver(state, args.udp_host, args.udp_port + 1)]
+    state = AudioArbiterState(
+        release_seconds=max(0.1, args.release_seconds),
+        activity_rms=max(0, args.activity_rms),
+        max_queue_chunks=max(100, args.max_queue_chunks),
+    )
+    sources = (
+        ("p25_control", args.udp_port),
+        ("p25_voice", args.udp_port + 1),
+        ("analog_2m", args.analog_2m_port),
+        ("analog_70cm", args.analog_70cm_port),
+    )
+    receivers = [
+        UdpReceiver(state, name, args.udp_host, port)
+        for name, port in sources
+    ]
     for receiver in receivers:
         receiver.start()
 
@@ -334,8 +472,9 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
     print(
-        f"PI-P25 raw browser audio bridge listening on http://{args.host}:{args.port}/audio.wav "
-        f"udp={args.udp_host}:{args.udp_port},{args.udp_port + 1}",
+        "PI-SCANNER browser audio arbiter listening "
+        f"http={args.host}:{args.port} "
+        + " ".join(f"{name}={args.udp_host}:{port}" for name, port in sources),
         flush=True,
     )
     try:

@@ -411,3 +411,22 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     grid-template-columns: 1fr;
   }
 }
+
+
+/* PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B */
+.analog-worker-actions {
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  margin-bottom: 10px;
+}
+.analog-worker-grid {
+  margin-bottom: 10px;
+}
+.analog-worker-panel #analog2mStatusText {
+  max-height: 190px;
+}
+@media (max-width: 700px) {
+  .analog-worker-actions,
+  .analog-worker-grid {
+    grid-template-columns: 1fr;
+  }
+}
