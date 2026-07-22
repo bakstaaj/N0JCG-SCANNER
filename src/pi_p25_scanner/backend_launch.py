@@ -52,6 +52,7 @@ class ValidatedOp25Command:
     marker_path: str
     app: str
     device_args: str
+    demod_type: str
     trunk_tsv: str
     pythonpath: str
     report: str
@@ -67,6 +68,7 @@ class ValidatedOp25Command:
             "app": self.app,
             "cwd": self.cwd,
             "device_args": self.device_args,
+            "demod_type": self.demod_type,
             "trunk_tsv": self.trunk_tsv,
             "pythonpath": self.pythonpath,
             "report": self.report,
@@ -104,6 +106,12 @@ def _metadata_from_values(marker: Path, values: dict[str, str]) -> dict[str, Any
         "app": values.get("P25_VALIDATED_RX_APP", ""),
         "cwd": values.get("P25_VALIDATED_RX_APP_DIR", ""),
         "device_args": values.get("P25_VALIDATED_RX_ARGS", ""),
+        "demod_type": (
+            values.get("P25_VALIDATED_RX_DEMOD_TYPE", "")
+            .strip()
+            .lower()
+            or "cqpsk"
+        ),
         "trunk_tsv": values.get("P25_VALIDATED_RX_TRUNK_TSV", ""),
         "pythonpath": values.get("P25_VALIDATED_RX_PYTHONPATH", ""),
         "report": values.get("P25_VALIDATED_RX_REPORT", ""),
@@ -242,6 +250,18 @@ def build_validated_op25_command(project_root: Path) -> ValidatedOp25Command | N
     if not trunk_tsv.exists():
         raise LaunchConfigError(f"validated OP25 trunk TSV does not exist: {trunk_tsv}")
 
+    # PHASE13_C4FM_TENDERFOOT_CONTROL_FIX_V0_6K
+    demod_type = (
+        values.get("P25_VALIDATED_RX_DEMOD_TYPE", "")
+        .strip()
+        .lower()
+        or "cqpsk"
+    )
+    if demod_type not in ("cqpsk", "fsk4"):
+        raise LaunchConfigError(
+            "P25_VALIDATED_RX_DEMOD_TYPE must be cqpsk or fsk4"
+        )
+
     command = [
         str(app),
         "--args",
@@ -252,6 +272,8 @@ def build_validated_op25_command(project_root: Path) -> ValidatedOp25Command | N
         values["P25_VALIDATED_RX_PPM"],
         "-N",
         values["P25_VALIDATED_RX_GAIN"],
+        "-D",
+        demod_type,
         "-T",
         str(trunk_tsv),
         "-V",
@@ -280,6 +302,7 @@ def build_validated_op25_command(project_root: Path) -> ValidatedOp25Command | N
         marker_path=str(marker),
         app=str(app),
         device_args=values["P25_VALIDATED_RX_ARGS"],
+        demod_type=demod_type,
         trunk_tsv=str(trunk_tsv),
         pythonpath=values["P25_VALIDATED_RX_PYTHONPATH"],
         report=values.get("P25_VALIDATED_RX_REPORT", ""),
