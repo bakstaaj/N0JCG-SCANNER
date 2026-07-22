@@ -51,6 +51,342 @@ let latestAnalogStatus = null; // PHASE4_DUAL_ANALOG_WORKERS_V0_6C
 let latestAnalogConfig = null; // PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
 let latestAnalogActivity = null; // PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
 let latestAnalogRecordings = null; // PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
+
+// PHASE7_UI_CORE_RESTORE_V0_6F2
+const CATEGORY_DEFAULTS = [
+  'Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Utilities', 'Transportation',
+  'Interop', 'Emergency Management', 'Corrections', 'Schools', 'Federal', 'Other',
+];
+
+function field(id) { return document.getElementById(id); }
+function setText(id, value) { const el = field(id); if (el) el.textContent = value ?? '-'; }
+function setBadge(id, text, kind) { const el = field(id); if (!el) return; el.textContent = text; el.className = `pill ${kind || ''}`.trim(); }
+function formatHz(value) { return value ? `${(Number(value) / 1000000).toFixed(6)} MHz` : '-'; }
+function formatList(values) { return Array.isArray(values) && values.length ? values.join('\n') : '-'; }
+function commandText(command) { return Array.isArray(command) ? command.join(' ') : (typeof command === 'string' ? command : ''); }
+function audioStreamUrl() { return `http://${window.location.hostname}:8072/audio.wav`; }
+function testToneUrl() { return `http://${window.location.hostname}:8072/test-tone.wav`; }
+function safeJson(value) { try { return JSON.stringify(value, null, 2); } catch { return String(value); } }
+function numberOrNull(value) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : null; }
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, { cache: 'no-store', ...options });
+  const text = await response.text();
+  let payload = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch (error) {
+    payload = {
+      ok: false,
+      error: `Invalid JSON: ${error.message}`,
+      raw: text,
+    };
+  }
+  if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  return payload;
+}
+
+async function postJson(url, payload = {}) {
+  return fetchJson(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+function openDrawer() {
+  field('drawer')?.classList.add('open');
+  field('drawerBackdrop')?.classList.add('open');
+}
+
+function closeDrawer() {
+  field('drawer')?.classList.remove('open');
+  field('drawerBackdrop')?.classList.remove('open');
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach((el) => {
+    el.classList.toggle('active', el.id === id);
+  });
+  document.querySelectorAll('.nav-item').forEach((el) => {
+    el.classList.toggle('active', el.dataset.screen === id);
+  });
+  closeDrawer();
+}
+
+function markerIsReady(marker) {
+  return Boolean(marker?.start_ready || (marker?.exists && marker?.validated));
+}
+
+function extractOp25HttpListener(status) {
+  const process = status?.decoder_process || {};
+  const marker = process.validated_marker || {};
+  const combined = `${commandText(process.command)} ${safeJson(marker)}`;
+  const match = combined.match(/http:(?:\[[^\]]+\]|[^:\s]+):(\d{1,5})/);
+  if (!match) return null;
+  const port = Number(match[1]);
+  return Number.isInteger(port) && port > 0 && port < 65536
+    ? { port, piLocalUrl: `http://127.0.0.1:${port}/` }
+    : null;
+}
+
+function setButtonsForState(status) {
+  const process = status?.decoder_process || {};
+  const marker = process.validated_marker || {};
+  const running = Boolean(process.running);
+  const canStart = markerIsReady(marker) || Boolean(process.start_enabled);
+  const startBtn = field('startBtn');
+  const stopBtn = field('stopBtn');
+  if (startBtn) startBtn.disabled = running || !canStart;
+  if (stopBtn) stopBtn.disabled = !running;
+}
+
+function bestTalkgroup(status) {
+  const recent = Array.isArray(status?.activity_summary?.recent_events)
+    ? status.activity_summary.recent_events
+    : [];
+  const fallback = [...recent]
+    .reverse()
+    .find((event) => event && (event.tgid || event.talkgroup_label));
+  const tgid =
+    status?.active_tgid ||
+    status?.last_active_tgid ||
+    fallback?.tgid ||
+    null;
+  const configuredLabel = tgid
+    ? status?.talkgroup_catalog?.labels?.[String(tgid)]
+    : '';
+  const activeLabel =
+    status?.active_tgid === tgid ? status?.active_talkgroup_label : '';
+  const lastLabel =
+    status?.last_active_tgid === tgid ? status?.last_active_talkgroup_label : '';
+  const fallbackLabel =
+    fallback?.tgid === tgid || !fallback?.tgid
+      ? fallback?.talkgroup_label
+      : '';
+  const rawLabel =
+    configuredLabel || activeLabel || lastLabel || fallbackLabel || '';
+  const running = Boolean(status?.decoder_process?.running);
+  const labelOnly =
+    rawLabel ||
+    (tgid
+      ? 'Unmapped talkgroup'
+      : (running ? 'Scanning for voice activity' : 'Waiting for activity'));
+  const activeNow = Boolean(
+    status?.active_tgid || status?.active_talkgroup_label
+  );
+  const prefix = activeNow ? 'Active' : (tgid ? 'Last heard' : '');
+  return {
+    has_talkgroup: Boolean(tgid || rawLabel),
+    tgid,
+    tgid_text: tgid ? `TGID ${tgid}` : '-',
+    label: prefix ? `${prefix}: ${labelOnly}` : labelOnly,
+    short_label: tgid ? `${labelOnly} · TGID ${tgid}` : labelOnly,
+    voice_frequency_hz:
+      status?.active_voice_frequency_hz ||
+      status?.last_active_voice_frequency_hz ||
+      fallback?.voice_frequency_hz ||
+      null,
+  };
+}
+
+function formatActivityEvent(event) {
+  const pieces = [];
+  if (event.tgid) pieces.push(`TGID ${event.tgid}`);
+  if (event.talkgroup_label) pieces.push(event.talkgroup_label);
+  if (event.voice_frequency_hz) {
+    pieces.push(formatHz(event.voice_frequency_hz));
+  }
+  if (event.control_frequency_hz) {
+    pieces.push(`control ${formatHz(event.control_frequency_hz)}`);
+  }
+  if (event.p25_phase) pieces.push(event.p25_phase);
+  if (event.encrypted === true) pieces.push('encrypted');
+  if (event.encrypted === false) pieces.push('clear');
+  if (event.muted === true) pieces.push('muted');
+  return pieces.length ? pieces.join(' | ') : (event.line || '-');
+}
+
+function renderActivitySummary(activity) {
+  setText('activityUniqueTgids', activity?.unique_tgid_count ?? 0);
+  setText('activityClearEvents', activity?.clear_voice_events ?? 0);
+  setText('activityEncryptedEvents', activity?.encrypted_events ?? 0);
+  setText('activityMutedEvents', activity?.muted_events ?? 0);
+  const recent = Array.isArray(activity?.recent_events)
+    ? activity.recent_events
+    : [];
+  setText(
+    'activityRecentEvents',
+    recent.length
+      ? recent.slice(-10).map(formatActivityEvent).join('\n')
+      : 'No parsed activity yet.'
+  );
+}
+
+function updateAudioPanel(message) {
+  const audio = field('browserAudioPlayer');
+  if (audio && !audio.src) audio.src = audioStreamUrl();
+  if (message) browserAudioLastEvent = message;
+  setText('browserAudioLastEvent', browserAudioLastEvent);
+}
+
+function renderDashboard(status) {
+  const process = status?.decoder_process || {};
+  const marker = process.validated_marker || {};
+  const running = Boolean(process.running);
+  const ready =
+    markerIsReady(marker) ||
+    Boolean(process.start_enabled);
+  const talkgroup = bestTalkgroup(status || {});
+  const listener = extractOp25HttpListener(status || {});
+  const controlState =
+    status?.control_channel_state ||
+    (running ? 'searching' : 'idle');
+  const controlSummary =
+    controlState === 'locked'
+      ? `Locked: ${formatHz(status?.active_control_frequency_hz)}`
+      : `Searching: ${formatHz(status?.active_control_frequency_hz)}`;
+
+  setText(
+    'dashboardSummary',
+    running
+      ? (talkgroup.has_talkgroup ? talkgroup.short_label : controlSummary)
+      : (ready ? 'Ready to start' : 'Not launch-ready')
+  );
+  setText('scannerState', status?.scanner_state || '-');
+  setText('decoderPid', process.pid || '-');
+  setText(
+    'controlFrequency',
+    formatHz(status?.active_control_frequency_hz)
+  );
+  setText('voiceFrequency', formatHz(talkgroup.voice_frequency_hz));
+  setText('activeTgid', talkgroup.tgid_text);
+  setText('activeTalkgroupLabel', talkgroup.label);
+  setText('p25Phase', status?.p25_phase || '-');
+  setText('op25HttpListener', listener ? listener.piLocalUrl : '-');
+  setText('launchReady', ready ? 'yes' : 'no');
+  setText('commandSource', process.command_source || '-');
+  setText(
+    'validatedMarkerState',
+    markerIsReady(marker)
+      ? 'validated'
+      : (marker.exists ? 'present' : 'missing')
+  );
+  setText('validatedCommand', formatList(process.command));
+  setText('lastEvent', status?.last_event || '-');
+  setText('logTail', formatList(status?.log_tail));
+  setText('lastUpdated', `Last update: ${new Date().toLocaleTimeString()}`);
+  setBadge(
+    'stateBadge',
+    running ? 'ON AIR' : (status?.scanner_state || '-'),
+    running ? 'ok' : (status?.ok ? 'warn' : 'bad')
+  );
+  setBadge('connectionStatus', 'Connected', 'ok');
+  renderActivitySummary(status?.activity_summary || {});
+  updateAudioPanel();
+  setButtonsForState(status || {});
+}
+
+async function refreshStatus() {
+  try {
+    latestStatus = await fetchJson('/api/status');
+    renderDashboard(latestStatus);
+  } catch (error) {
+    setBadge('connectionStatus', 'Offline', 'bad');
+    setText('dashboardSummary', `Status error: ${error.message}`);
+    setText('lastEvent', `Status error: ${error.message}`);
+  }
+}
+
+function receiverStateKind(state) {
+  if (state === 'active' || state === 'ready') return 'ok';
+  if (state === 'missing') return 'bad';
+  return 'warn';
+}
+
+function renderReceiverInventory(payload) {
+  const grid = field('receiverInventoryGrid');
+  const roles = Array.isArray(payload?.roles) ? payload.roles : [];
+  const expected = Number(payload?.expected_rtl_count || 0);
+  const present = Number(payload?.device_count || 0);
+
+  setBadge(
+    'receiverInventoryBadge',
+    `${present}/${expected || '?'} RTL`,
+    payload?.ok ? 'ok' : 'bad'
+  );
+
+  if (grid) {
+    grid.innerHTML = '';
+    roles.forEach((role) => {
+      const card = document.createElement('article');
+      card.className = `receiver-card ${role.state || 'unknown'}`;
+
+      const top = document.createElement('div');
+      top.className = 'receiver-card-top';
+
+      const title = document.createElement('strong');
+      title.textContent = role.label || role.role || 'Receiver';
+
+      const badge = document.createElement('span');
+      badge.className = `pill ${receiverStateKind(role.state)}`;
+      badge.textContent = String(role.state || 'unknown').toUpperCase();
+
+      top.append(title, badge);
+
+      const serial = document.createElement('div');
+      serial.className = 'receiver-serial';
+      serial.textContent = role.rtl_serial || '-';
+
+      const detail = document.createElement('div');
+      detail.className = 'receiver-detail';
+      const device = role.device || {};
+      const pieces = [
+        role.role,
+        device.product || role.service,
+        device.usb_path ? `USB ${device.usb_path}` : '',
+        role.active &&
+        Array.isArray(role.processes) &&
+        role.processes.length
+          ? `PID ${role.processes[0].pid}`
+          : '',
+      ].filter(Boolean);
+      detail.textContent = pieces.join(' · ') || '-';
+
+      const note = document.createElement('div');
+      note.className = 'receiver-note';
+      note.textContent = role.notes || (role.enabled ? 'Enabled' : 'Reserved');
+
+      card.append(top, serial, detail, note);
+      grid.append(card);
+    });
+  }
+
+  const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
+  const summary = [
+    `Role registry: ${payload?.role_config_path || '-'}`,
+    `Configured roles: ${payload?.configured_role_count ?? 0}`,
+    `Present devices: ${present} / ${expected || '-'}`,
+    `Missing configured serials: ${(payload?.missing_configured_serials || []).join(', ') || 'none'}`,
+    `Unassigned serials: ${(payload?.unassigned_serials || []).join(', ') || 'none'}`,
+    `Warnings: ${warnings.join(' | ') || 'none'}`,
+  ];
+  setText('receiverInventoryStatus', summary.join('\n'));
+}
+
+async function refreshReceiverInventory() {
+  try {
+    latestReceiverInventory = await fetchJson('/api/receivers/inventory');
+    renderReceiverInventory(latestReceiverInventory);
+  } catch (error) {
+    setBadge('receiverInventoryBadge', 'Inventory error', 'bad');
+    setText(
+      'receiverInventoryStatus',
+      `Receiver inventory failed: ${error.message}`
+    );
+  }
+}
+
 function analogWorkerRecord(payload, role) {
   return (Array.isArray(payload?.workers) ? payload.workers : []).find((item) => item?.role === role) || null;
 }
@@ -1076,98 +1412,6 @@ if (document.readyState === 'loading') {
   boot();
 }
 
-/* V0_5K_AUTO_START_RTL_POOL_BEGIN */
-(function installV05KAutoStartScannerAudio() {
-  'use strict';
-
-  window.PI_P25_V05K_MARKER = 'V0_5K_AUTO_START_RTL_POOL';
-  window.PI_P25_ALLOWED_RTL_SERIAL_POOL = '0000025X';
-
-  function byId(id) {
-    return document.getElementById(id);
-  }
-
-  function setUiText(id, text) {
-    const target = byId(id);
-    if (target) target.textContent = text;
-  }
-
-  function audioUrl() {
-    return `http://${window.location.hostname}:8072/audio.wav`;
-  }
-
-  async function jsonFetch(url, options = {}) {
-    const response = await fetch(url, { cache: 'no-store', ...options });
-    const bodyText = await response.text();
-    let payload = {};
-    try {
-      payload = bodyText ? JSON.parse(bodyText) : {};
-    } catch (error) {
-      throw new Error(`Invalid JSON from ${url}: ${error.message}`);
-    }
-    if (!response.ok) {
-      throw new Error(payload.error || `HTTP ${response.status}`);
-    }
-    return payload;
-  }
-
-  async function startScannerIfNeeded() {
-    const status = await jsonFetch('/api/status');
-    if (status?.decoder_process?.running) return status;
-    return jsonFetch('/api/scanner/start', { method: 'POST' });
-  }
-
-  async function tryStartAudio(reason) {
-    const audio = byId('browserAudioPlayer');
-    if (!audio) return false;
-
-    if (audio.src !== audioUrl()) audio.src = audioUrl();
-
-    try {
-      await audio.play();
-      setUiText('browserAudioLastEvent', reason || 'Browser audio started');
-      window.__p25AutoAudioBlocked = false;
-      return true;
-    } catch (error) {
-      setUiText('browserAudioLastEvent', 'Scanner started; tap/click once to enable audio');
-      window.__p25AutoAudioBlocked = true;
-      return false;
-    }
-  }
-
-  async function autoStart() {
-    if (window.__p25V05KAutoStartAttempted) return;
-    window.__p25V05KAutoStartAttempted = true;
-
-    try {
-      setUiText('lastEvent', 'Auto-starting scanner and browser audio...');
-      await startScannerIfNeeded();
-      await tryStartAudio('Scanner and browser audio auto-started');
-      setUiText('lastEvent', 'Scanner auto-start requested.');
-    } catch (error) {
-      setUiText('lastEvent', `Auto-start failed: ${error.message}`);
-      setUiText('browserAudioLastEvent', `Auto-start failed: ${error.message}`);
-    }
-  }
-
-  function retryAudioAfterUserGesture() {
-    if (!window.__p25AutoAudioBlocked) return;
-    tryStartAudio('Browser audio enabled after tap/click');
-  }
-
-  function install() {
-    window.setTimeout(autoStart, 400);
-    document.addEventListener('pointerdown', retryAudioAfterUserGesture, { passive: true });
-    document.addEventListener('keydown', retryAudioAfterUserGesture);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', install, { once: true });
-  } else {
-    install();
-  }
-})();
-/* V0_5K_AUTO_START_RTL_POOL_END */
 
 
 function p25RemoveDashboardAutostartTuningRemnants() {
