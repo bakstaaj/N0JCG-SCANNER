@@ -403,6 +403,18 @@ function renderAnalogWorker(payload, role, ids, fallbackSerial) {
   setText(ids.channel, channel?.frequency_hz ? formatHz(channel.frequency_hz) : '-');
   setText(ids.rms, runtime.last_rms ?? '-');
   setText(ids.frames, runtime.frames_received ?? 0);
+  if (ids.tone) {
+    const configured = runtime.configured_ctcss_hz ?? channel?.ctcss_hz;
+    const detected = runtime.detected_ctcss_hz;
+    const locked = Boolean(runtime.ctcss_locked);
+    const gate = Boolean(runtime.ctcss_gate_required);
+    setText(
+      ids.tone,
+      configured
+        ? `${gate ? 'Gate ' : 'Watch '}${Number(configured).toFixed(1)} Hz · ${locked ? `LOCK ${Number(detected || configured).toFixed(1)}` : 'search'}`
+        : 'Carrier only'
+    );
+  }
   setText(ids.status, safeJson({ service, runtime, config }));
   const startButton = field(ids.start);
   const stopButton = field(ids.stop);
@@ -413,10 +425,10 @@ function renderAnalogWorker(payload, role, ids, fallbackSerial) {
 
 function renderAnalogStatus(payload) {
   const active2m = renderAnalogWorker(payload, 'analog_2m', {
-    badge: 'analog2mBadge', serial: 'analog2mSerial', channel: 'analog2mChannel', rms: 'analog2mRms', frames: 'analog2mFrames', status: 'analog2mStatusText', start: 'startAnalog2mBtn', stop: 'stopAnalog2mBtn'
+    badge: 'analog2mBadge', serial: 'analog2mSerial', channel: 'analog2mChannel', rms: 'analog2mRms', frames: 'analog2mFrames', tone: 'analog2mTone', status: 'analog2mStatusText', start: 'startAnalog2mBtn', stop: 'stopAnalog2mBtn'
   }, '00000440');
   const active70cm = renderAnalogWorker(payload, 'analog_70cm', {
-    badge: 'analog70cmBadge', serial: 'analog70cmSerial', channel: 'analog70cmChannel', rms: 'analog70cmRms', frames: 'analog70cmFrames', status: 'analog70cmStatusText', start: 'startAnalog70cmBtn', stop: 'stopAnalog70cmBtn'
+    badge: 'analog70cmBadge', serial: 'analog70cmSerial', channel: 'analog70cmChannel', rms: 'analog70cmRms', frames: 'analog70cmFrames', tone: 'analog70cmTone', status: 'analog70cmStatusText', start: 'startAnalog70cmBtn', stop: 'stopAnalog70cmBtn'
   }, '00000144');
   const arbiter = payload?.audio_arbiter || {};
   const owner = arbiter.active_source || 'none';
@@ -562,6 +574,9 @@ function makeAnalogChannelRow(role, channel = {}) {
       field: 'ctcss_hz',
       attributes: { min: 50, max: 300, step: 0.1, placeholder: 'optional' },
     }),
+    analogEditorInput('Tone Gate', 'checkbox', channel.tone_gate === true, {
+      field: 'tone_gate',
+    }),
     analogEditorInput('DCS', 'text', channel.dcs_code || '', {
       field: 'dcs_code',
       attributes: { maxlength: 8, placeholder: 'optional' },
@@ -623,6 +638,7 @@ function collectAnalogChannelRow(row) {
     hold_seconds: analogEditorNumber(value('hold_seconds')?.value, 0.9),
     resume_delay_seconds: analogEditorNumber(value('resume_delay_seconds')?.value, 1.2),
     ctcss_hz: ctcssText ? analogEditorNumber(ctcssText, null) : null,
+    tone_gate: Boolean(value('tone_gate')?.checked),
     dcs_code: value('dcs_code')?.value?.trim().toUpperCase() || '',
     recording_enabled: Boolean(value('recording_enabled')?.checked),
   };
@@ -630,7 +646,7 @@ function collectAnalogChannelRow(row) {
 
 function collectAnalogConfigEditor() {
   const config = structuredClone(latestAnalogConfig || {});
-  config.schema_version = 2;
+  config.schema_version = 3;
   config.audio_udp_host = config.audio_udp_host || '127.0.0.1';
   config.workers = config.workers || {};
 
@@ -781,7 +797,7 @@ function renderAnalogActivity(payload) {
     if (!events.length) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 8;
+      cell.colSpan = 9;
       cell.textContent = 'No analog activity recorded yet.';
       row.append(cell);
       body.append(row);
@@ -796,6 +812,11 @@ function renderAnalogActivity(payload) {
           String(event.mode || '-').toUpperCase(),
           `${Number(event.duration_seconds || 0).toFixed(2)} s`,
           String(event.peak_rms ?? '-'),
+          event.detected_ctcss_hz
+            ? `${Number(event.detected_ctcss_hz).toFixed(1)} Hz`
+            : (event.configured_ctcss_hz
+                ? `${Number(event.configured_ctcss_hz).toFixed(1)} Hz${event.ctcss_gate_required ? ' gate' : ''}`
+                : '-'),
         ];
         values.forEach((value) => {
           const cell = document.createElement('td');

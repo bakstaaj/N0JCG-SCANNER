@@ -605,3 +605,11 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     grid-template-columns: 1fr;
   }
 }
+
+
+/* PHASE8_CTCSS_TONE_GATE_V0_6G */
+.analog-channel-row {
+  grid-template-columns:
+    58px minmax(170px, 1.5fr) 118px 88px 82px 92px 110px
+    82px 82px 96px 74px 86px 68px 48px;
+}

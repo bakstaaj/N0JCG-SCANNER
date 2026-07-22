@@ -31,6 +31,7 @@ from .analog_recordings import (
     WavRecordingSession,
     enforce_retention,
 )  # PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
+from .analog_ctcss import CtcssDetector  # PHASE8_CTCSS_TONE_GATE_V0_6G
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "runtime" / "settings" / "analog_receivers.json"
@@ -123,6 +124,11 @@ def normalize_channel(
         raise AnalogWorkerError(
             f"{role} channel {index + 1} CTCSS must be 50.0 through 300.0 Hz"
         )
+    tone_gate = bool(raw.get("tone_gate", False))
+    if tone_gate and ctcss_hz is None:
+        raise AnalogWorkerError(
+            f"{role} channel {index + 1} enables Tone Gate without a CTCSS frequency"
+        )
     return {
         "id": channel_id(role, index, raw.get("id") or name),
         "enabled": bool(raw.get("enabled", True)),
@@ -158,6 +164,7 @@ def normalize_channel(
             ),
         ),
         "ctcss_hz": ctcss_hz,
+        "tone_gate": tone_gate,
         "dcs_code": dcs_code,
         "recording_enabled": bool(raw.get("recording_enabled", False)),
     }
@@ -258,7 +265,7 @@ def validate_analog_config(payload: Any) -> dict[str, Any]:
     if len(ports) != len(set(ports)):
         raise AnalogWorkerError("analog workers cannot share an audio UDP port")
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "audio_udp_host": str(
             payload.get("audio_udp_host") or "127.0.0.1"
         ),
@@ -388,6 +395,11 @@ class AnalogWorker:
         self.activity_history_path = str(activity_log_path(role))
         self.current_recording: WavRecordingSession | None = None
         self.last_recording: dict[str, Any] | None = None
+        self.ctcss_detector: CtcssDetector | None = None
+        self.ctcss_snapshot: dict[str, Any] = {}
+        self.ctcss_rejected_frames = 0
+        self.ctcss_gate_open_frames = 0
+        self.last_detected_ctcss_hz: float | None = None
         self.smoke_deadline = (
             self.started_utc + self.smoke_seconds
             if self.smoke_seconds > 0
@@ -437,6 +449,18 @@ class AnalogWorker:
                 else None
             ),
             "last_recording": self.last_recording,
+            "ctcss_gate_required": bool(
+                (self.current_channel or {}).get("tone_gate", False)
+            ),
+            "configured_ctcss_hz": (
+                (self.current_channel or {}).get("ctcss_hz")
+            ),
+            "detected_ctcss_hz": self.last_detected_ctcss_hz,
+            "ctcss_locked": bool(self.ctcss_snapshot.get("locked", False)),
+            "ctcss_confidence": self.ctcss_snapshot.get("confidence", 0.0),
+            "ctcss_detector": self.ctcss_snapshot,
+            "ctcss_rejected_frames": self.ctcss_rejected_frames,
+            "ctcss_gate_open_frames": self.ctcss_gate_open_frames,
             "last_error": self.last_error,
             "stderr_tail": list(self.stderr_lines),
             "started_utc": self.started_utc,
@@ -488,11 +512,12 @@ class AnalogWorker:
 
     # PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
     # PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
+    # PHASE8_CTCSS_TONE_GATE_V0_6G
     def begin_activity(
         self,
         channel: dict[str, Any],
         rms: int,
-        first_frame: bytes,
+        opening_frames: list[bytes],
     ) -> None:
         if self.smoke_seconds > 0 or self.current_activity is not None:
             return
@@ -502,7 +527,11 @@ class AnalogWorker:
             channel,
         )
         event["peak_rms"] = int(rms)
-        event["active_frames"] = 1
+        event["active_frames"] = max(1, len(opening_frames))
+        event["ctcss_gate_required"] = bool(channel.get("tone_gate", False))
+        event["configured_ctcss_hz"] = channel.get("ctcss_hz")
+        event["detected_ctcss_hz"] = self.last_detected_ctcss_hz
+        event["ctcss_confidence"] = self.ctcss_snapshot.get("confidence", 0.0)
         self.current_activity = event
         if bool(channel.get("recording_enabled", False)):
             try:
@@ -511,7 +540,8 @@ class AnalogWorker:
                     event["event_id"],
                     rate_hz=self.config["audio_rate_hz"],
                 )
-                self.current_recording.write(first_frame)
+                for frame in opening_frames:
+                    self.current_recording.write(frame)
             except Exception as exc:
                 self.current_recording = None
                 event["recording_error"] = str(exc)
@@ -526,6 +556,14 @@ class AnalogWorker:
         self.current_activity["active_frames"] = (
             int(self.current_activity.get("active_frames") or 0) + 1
         )
+        if self.last_detected_ctcss_hz is not None:
+            self.current_activity["detected_ctcss_hz"] = (
+                self.last_detected_ctcss_hz
+            )
+            self.current_activity["ctcss_confidence"] = max(
+                float(self.current_activity.get("ctcss_confidence") or 0.0),
+                float(self.ctcss_snapshot.get("confidence") or 0.0),
+            )
 
     def end_activity(self, reason: str) -> None:
         if self.current_activity is None:
@@ -570,6 +608,23 @@ class AnalogWorker:
         last_active = 0.0
         activity_seen = False
         last_state_write = 0.0
+        configured_ctcss = channel.get("ctcss_hz")
+        tone_gate_required = bool(channel.get("tone_gate", False))
+        self.ctcss_detector = (
+            CtcssDetector(
+                float(configured_ctcss),
+                sample_rate_hz=self.config["audio_rate_hz"],
+            )
+            if configured_ctcss is not None
+            else None
+        )
+        self.ctcss_snapshot = (
+            self.ctcss_detector.snapshot()
+            if self.ctcss_detector is not None
+            else {}
+        )
+        self.last_detected_ctcss_hz = None
+        prebuffer_frames: deque[bytes] = deque(maxlen=24)
         self.write_status("tuning")
 
         while self.keep_running and process.poll() is None:
@@ -590,33 +645,81 @@ class AnalogWorker:
                     del buffer[:frame_bytes]
                     self.frames_received += 1
                     rms = pcm_rms(frame)
+                    prebuffer_frames.append(frame)
                     if self.current_recording is not None:
                         self.current_recording.write(frame)
                     self.last_rms = rms
                     self.peak_rms = max(self.peak_rms, rms)
-                    if rms >= channel["squelch_rms"]:
+
+                    if self.ctcss_detector is not None:
+                        self.ctcss_snapshot = self.ctcss_detector.feed(frame)
+                        if self.ctcss_snapshot.get("locked"):
+                            self.last_detected_ctcss_hz = float(
+                                self.ctcss_snapshot["detected_hz"]
+                            )
+
+                    carrier_open = rms >= channel["squelch_rms"]
+                    tone_locked = bool(
+                        self.ctcss_snapshot.get("locked", False)
+                    )
+                    tone_recent = False
+                    last_tone_match = self.ctcss_snapshot.get("last_match_utc")
+                    if last_tone_match is not None:
+                        tone_recent = (
+                            time.time() - float(last_tone_match) <= 0.60
+                        )
+                    gate_open = (
+                        carrier_open
+                        and (
+                            not tone_gate_required
+                            or tone_locked
+                            or (activity_seen and tone_recent)
+                        )
+                    )
+
+                    if carrier_open and tone_gate_required and not gate_open:
+                        self.ctcss_rejected_frames += 1
+
+                    if gate_open:
+                        opening_frames = (
+                            list(prebuffer_frames)
+                            if tone_gate_required and not activity_seen
+                            else [frame]
+                        )
                         if not activity_seen:
                             self.activity_events += 1
-                            self.begin_activity(channel, rms, frame)
+                            self.begin_activity(
+                                channel,
+                                rms,
+                                opening_frames,
+                            )
                         else:
                             self.update_activity(rms)
                         activity_seen = True
+                        self.ctcss_gate_open_frames += 1
                         last_active = time.time()
                         self.last_activity_utc = last_active
                         self.last_active_channel = copy.deepcopy(channel)
                         if not self.no_forward:
-                            self.udp_socket.sendto(
-                                frame,
-                                (
-                                    self.udp_host,
-                                    self.config["audio_udp_port"],
-                                ),
-                            )
-                            self.frames_forwarded += 1
+                            for output_frame in opening_frames:
+                                self.udp_socket.sendto(
+                                    output_frame,
+                                    (
+                                        self.udp_host,
+                                        self.config["audio_udp_port"],
+                                    ),
+                                )
+                                self.frames_forwarded += 1
 
             now = time.time()
             state = "scanning"
             should_advance = False
+            if (
+                not activity_seen
+                and tone_gate_required
+                and self.last_rms >= channel["squelch_rms"]
+            ):
+                state = "tone_search"
             if activity_seen:
                 age = now - last_active
                 if age <= channel["hold_seconds"]:
@@ -653,6 +756,7 @@ class AnalogWorker:
                 process.wait(timeout=2)
         rc = process.returncode
         self.current_process = None
+        self.ctcss_detector = None
         if rc not in (0, -signal.SIGTERM) and self.keep_running:
             self.last_error = f"rtl_fm exited rc={rc}"
             self.write_status("error")
@@ -702,7 +806,7 @@ def self_test() -> int:
         tone.byteswap()
     checks = [
         pcm_rms(tone.tobytes()) > 0,
-        normalized["schema_version"] == 2,
+        normalized["schema_version"] == 3,
         normalized["workers"]["analog_2m"]["rtl_serial"] == "00000440",
         normalized["workers"]["analog_70cm"]["rtl_serial"] == "00000144",
         normalized["workers"]["analog_2m"]["channels"][0]["mode"] == "nfm",
