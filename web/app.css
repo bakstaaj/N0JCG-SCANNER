@@ -621,3 +621,127 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     58px minmax(170px, 1.5fr) 118px 88px 82px 92px 110px
     82px 82px 96px 74px 86px 74px 68px 48px;
 }
+
+
+/* PHASE10_UNIFIED_ACTIVITY_ARBITRATION_V0_6I */
+.unified-activity-card {
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #081725;
+}
+.unified-active-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.unified-active-row strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 19px;
+}
+.unified-active-row small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+.unified-source-health {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.unified-source-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 8px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #07131f;
+}
+.unified-source-item.owner {
+  outline: 1px solid var(--accent);
+}
+.unified-source-item small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 10px;
+}
+.unified-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(90px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.unified-summary-grid article {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #07131f;
+}
+.unified-summary-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.unified-summary-grid strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 17px;
+}
+.unified-policy {
+  margin: 10px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.unified-history-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.unified-history-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+}
+.unified-history-table th,
+.unified-history-table td {
+  padding: 8px 9px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-size: 11px;
+}
+.unified-history-table th {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.unified-history-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.unified-recording-player {
+  width: 190px;
+  max-width: 100%;
+  height: 32px;
+  display: block;
+}
+.unified-recording-link {
+  display: inline-block;
+  margin-top: 3px;
+  color: var(--accent);
+  font-size: 10px;
+  text-decoration: none;
+}
+@media (max-width: 900px) {
+  .unified-source-health {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+  .unified-summary-grid {
+    grid-template-columns: repeat(2, minmax(100px, 1fr));
+  }
+}

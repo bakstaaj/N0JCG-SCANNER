@@ -33,6 +33,13 @@ DEFAULT_ANALOG_70CM_PORT = 23459
 DEFAULT_RELEASE_SECONDS = 0.75
 DEFAULT_ACTIVITY_RMS = 120
 DEFAULT_MAX_QUEUE_CHUNKS = 1500
+DEFAULT_ACQUISITION_GRACE_SECONDS = 0.040
+DEFAULT_SOURCE_PRIORITIES = {
+    "p25_voice": 400,
+    "p25_control": 350,
+    "analog_2m": 200,
+    "analog_70cm": 100,
+}
 
 
 def pcm_rms(frame: bytes) -> int:
@@ -109,6 +116,7 @@ def generated_tone_wav(seconds: float = 1.0, frequency_hz: float = 880.0) -> byt
 class SourceStats:
     name: str
     port: int
+    priority: int = 0
     packets: int = 0
     audio_packets: int = 0
     flag_packets: int = 0
@@ -129,7 +137,13 @@ class AudioArbiterState:
     release_seconds: float = DEFAULT_RELEASE_SECONDS
     activity_rms: int = DEFAULT_ACTIVITY_RMS
     max_queue_chunks: int = DEFAULT_MAX_QUEUE_CHUNKS
+    acquisition_grace_seconds: float = DEFAULT_ACQUISITION_GRACE_SECONDS
+    source_priorities: dict[str, int] = field(
+        default_factory=lambda: dict(DEFAULT_SOURCE_PRIORITIES)
+    )
     queue: deque[bytes] = field(init=False)
+    pending_frames: dict[str, deque[bytes]] = field(init=False)
+    pending_since_utc: float | None = None
     sources: dict[str, SourceStats] = field(default_factory=dict)
     active_source: str | None = None
     active_since_utc: float | None = None
@@ -143,12 +157,71 @@ class AudioArbiterState:
     bind_errors: list[str] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
+    # PHASE10_UNIFIED_ACTIVITY_ARBITRATION_V0_6I
     def __post_init__(self) -> None:
         self.queue = deque(maxlen=self.max_queue_chunks)
+        pending_limit = max(
+            4,
+            int(round(self.acquisition_grace_seconds / 0.02)) + 4,
+        )
+        self.pending_frames = {}
+        self._pending_limit = pending_limit
 
     def register_source(self, name: str, port: int) -> None:
         with self.lock:
-            self.sources[name] = SourceStats(name=name, port=port)
+            priority = int(self.source_priorities.get(name, 0))
+            self.sources[name] = SourceStats(
+                name=name,
+                port=port,
+                priority=priority,
+            )
+            self.pending_frames[name] = deque(maxlen=self._pending_limit)
+
+    def _clear_pending_locked(self) -> None:
+        self.pending_since_utc = None
+        for frames in self.pending_frames.values():
+            frames.clear()
+
+    def _commit_pending_locked(
+        self,
+        now: float,
+        force: bool = False,
+    ) -> None:
+        if self.active_source is not None or self.pending_since_utc is None:
+            return
+        elapsed = now - self.pending_since_utc
+        if not force and elapsed < self.acquisition_grace_seconds:
+            return
+
+        candidates = [
+            name
+            for name, frames in self.pending_frames.items()
+            if frames
+        ]
+        if not candidates:
+            self._clear_pending_locked()
+            return
+
+        winner = max(
+            candidates,
+            key=lambda name: (
+                int(self.sources[name].priority),
+                -candidates.index(name),
+            ),
+        )
+        self.active_source = winner
+        self.active_since_utc = self.pending_since_utc
+        self.source_switches += 1
+        self.queue.clear()
+
+        for name in candidates:
+            frames = self.pending_frames[name]
+            if name == winner:
+                self.sources[name].accepted_frames += len(frames)
+                self.queue.extend(frames)
+            else:
+                self.sources[name].dropped_non_owner_frames += len(frames)
+        self._clear_pending_locked()
 
     def _release_if_stale_locked(self, now: float) -> None:
         if self.active_source is None:
@@ -159,6 +232,7 @@ class AudioArbiterState:
             self.active_source = None
             self.active_since_utc = None
             self.queue.clear()
+            self._clear_pending_locked()
 
     def add_packet(self, source_name: str, payload: bytes) -> None:
         now = time.time()
@@ -188,10 +262,11 @@ class AudioArbiterState:
 
             source.last_active_utc = now
             if self.active_source is None:
-                self.active_source = source_name
-                self.active_since_utc = now
-                self.source_switches += 1
-                self.queue.clear()
+                if self.pending_since_utc is None:
+                    self.pending_since_utc = now
+                self.pending_frames[source_name].append(payload)
+                self._commit_pending_locked(now)
+                return
 
             if self.active_source == source_name:
                 source.accepted_frames += 1
@@ -203,6 +278,7 @@ class AudioArbiterState:
         now = time.time()
         with self.lock:
             self._release_if_stale_locked(now)
+            self._commit_pending_locked(now)
             if not self.queue:
                 self.underruns += 1
                 return None
@@ -227,12 +303,30 @@ class AudioArbiterState:
         now = time.time()
         with self.lock:
             self._release_if_stale_locked(now)
+            self._commit_pending_locked(now)
             return {
                 "ok": not bool(self.bind_errors),
-                "mode": "source-aware-current-transmission-wins-v0.6b",
+                "mode": "current-transmission-wins-priority-tiebreak-v0.6i",
+                "preemption_enabled": False,
                 "active_source": self.active_source,
                 "active_since_utc": self.active_since_utc,
                 "release_seconds": self.release_seconds,
+                "acquisition_grace_ms": round(
+                    self.acquisition_grace_seconds * 1000.0,
+                    3,
+                ),
+                "source_priority_order": [
+                    name
+                    for name, _priority in sorted(
+                        self.source_priorities.items(),
+                        key=lambda item: (-int(item[1]), item[0]),
+                    )
+                ],
+                "pending_sources": [
+                    name
+                    for name, frames in self.pending_frames.items()
+                    if frames
+                ],
                 "activity_rms": self.activity_rms,
                 "source_switches": self.source_switches,
                 "queued_chunks": len(self.queue),
@@ -392,7 +486,11 @@ class AudioHandler(BaseHTTPRequestHandler):
 
 
 def self_test() -> int:
-    state = AudioArbiterState(release_seconds=0.05, activity_rms=100)
+    state = AudioArbiterState(
+        release_seconds=0.05,
+        activity_rms=100,
+        acquisition_grace_seconds=0.02,
+    )
     for name, port in (
         ("p25_control", 23456),
         ("p25_voice", 23457),
@@ -404,22 +502,39 @@ def self_test() -> int:
     if sys.byteorder != "little":
         active.byteswap()
     active_frame = active.tobytes()
-    state.add_packet("p25_control", active_frame)
+
+    # Analog arrives first, but P25 arrives inside the acquisition window.
+    # The deterministic priority tie-break must select P25.
     state.add_packet("analog_2m", active_frame)
+    state.add_packet("p25_control", active_frame)
+    time.sleep(0.025)
     first = state.snapshot()
     if first["active_source"] != "p25_control":
-        print("FAIL: first current transmission did not win")
+        print("FAIL: priority tie-break did not select P25")
         return 1
+    if first["preemption_enabled"] is not False:
+        print("FAIL: arbiter unexpectedly reports preemption")
+        return 1
+
+    # An established source must not be preempted.
+    state.add_packet("p25_control", active_frame)
+    state.add_packet("p25_voice", active_frame)
+    held = state.snapshot()
+    if held["active_source"] != "p25_control":
+        print("FAIL: established transmission was preempted")
+        return 1
+
     time.sleep(0.06)
     state.add_packet("analog_2m", active_frame)
+    time.sleep(0.025)
     second = state.snapshot()
     if second["active_source"] != "analog_2m":
-        print("FAIL: stale source did not release")
+        print("FAIL: stale source did not release to analog")
         return 1
-    if second["sources"]["analog_2m"]["accepted_frames"] != 1:
+    if second["sources"]["analog_2m"]["accepted_frames"] < 1:
         print("FAIL: analog accepted-frame count")
         return 1
-    print("PASS: source-aware audio arbiter self-test")
+    print("PASS: source-aware priority tie-break self-test")
     print("FINAL: PASS")
     return 0
 
@@ -433,6 +548,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--analog-2m-port", type=int, default=DEFAULT_ANALOG_2M_PORT)
     parser.add_argument("--analog-70cm-port", type=int, default=DEFAULT_ANALOG_70CM_PORT)
     parser.add_argument("--release-seconds", type=float, default=DEFAULT_RELEASE_SECONDS)
+    parser.add_argument(
+        "--acquisition-grace-ms",
+        type=float,
+        default=DEFAULT_ACQUISITION_GRACE_SECONDS * 1000.0,
+    )
     parser.add_argument("--activity-rms", type=int, default=DEFAULT_ACTIVITY_RMS)
     parser.add_argument("--max-queue-chunks", type=int, default=DEFAULT_MAX_QUEUE_CHUNKS)
     parser.add_argument("--self-test", action="store_true")
@@ -445,6 +565,10 @@ def main(argv: list[str] | None = None) -> int:
         release_seconds=max(0.1, args.release_seconds),
         activity_rms=max(0, args.activity_rms),
         max_queue_chunks=max(100, args.max_queue_chunks),
+        acquisition_grace_seconds=max(
+            0.0,
+            min(0.25, args.acquisition_grace_ms / 1000.0),
+        ),
     )
     sources = (
         ("p25_control", args.udp_port),

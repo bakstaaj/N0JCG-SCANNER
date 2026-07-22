@@ -50,6 +50,7 @@ if __package__ in (None, ""):
     from pi_p25_scanner.runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from pi_p25_scanner.runtime_activity import RuntimeActivityTracker
     from pi_p25_scanner.receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
+    from pi_p25_scanner.unified_activity import build_unified_activity  # PHASE10_UNIFIED_ACTIVITY_ARBITRATION_V0_6I
     from pi_p25_scanner.analog_runtime import (
         AnalogRuntimeError,
         AnalogWorkerError,
@@ -103,6 +104,7 @@ else:
     from .runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from .runtime_activity import RuntimeActivityTracker
     from .receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
+    from .unified_activity import build_unified_activity  # PHASE10_UNIFIED_ACTIVITY_ARBITRATION_V0_6I
     from .analog_runtime import (
         AnalogRuntimeError,
         AnalogWorkerError,
@@ -513,6 +515,18 @@ class ScannerManager:
     # PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
     def analog_status_payload(self) -> dict[str, Any]:
         return analog_status_payload()
+
+    # PHASE10_UNIFIED_ACTIVITY_ARBITRATION_V0_6I
+    def unified_activity_payload(self) -> dict[str, Any]:
+        p25 = self.status_payload()
+        analog_status = analog_status_payload()
+        analog_activity = analog_activity_payload(limit=100)
+        return build_unified_activity(
+            p25,
+            analog_status,
+            analog_activity,
+            limit=100,
+        )
 
     def analog_action(self, role: str, action: str) -> dict[str, Any]:
         return analog_service_action(role, action)
@@ -1239,6 +1253,10 @@ class Handler(SimpleHTTPRequestHandler):
             # PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
             if path == "/api/analog/status":
                 self._send_json(MANAGER.analog_status_payload())
+                return
+            # PHASE10_UNIFIED_ACTIVITY_ARBITRATION_V0_6I
+            if path == "/api/activity/unified":
+                self._send_json(MANAGER.unified_activity_payload())
                 return
             # PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
             if path == "/api/analog/config":

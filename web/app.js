@@ -51,6 +51,7 @@ let latestAnalogStatus = null; // PHASE4_DUAL_ANALOG_WORKERS_V0_6C
 let latestAnalogConfig = null; // PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
 let latestAnalogActivity = null; // PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
 let latestAnalogRecordings = null; // PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
+let latestUnifiedActivity = null; // PHASE10_UNIFIED_ACTIVITY_ARBITRATION_V0_6I
 
 // PHASE7_UI_CORE_RESTORE_V0_6F2
 const CATEGORY_DEFAULTS = [
@@ -228,6 +229,163 @@ function updateAudioPanel(message) {
   if (audio && !audio.src) audio.src = audioStreamUrl();
   if (message) browserAudioLastEvent = message;
   setText('browserAudioLastEvent', browserAudioLastEvent);
+}
+
+// PHASE10_UNIFIED_ACTIVITY_ARBITRATION_V0_6I
+function unifiedSourceLabel(source) {
+  const labels = {
+    p25_control: 'P25',
+    p25_voice: 'P25 Voice',
+    analog_2m: '2 m',
+    analog_70cm: '70 cm',
+  };
+  return labels[source] || source || 'Idle';
+}
+
+function unifiedFrequency(value) {
+  return value ? `${(Number(value) / 1e6).toFixed(6)} MHz` : '-';
+}
+
+function unifiedTime(value) {
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds > 0
+    ? new Date(seconds * 1000).toLocaleTimeString()
+    : '-';
+}
+
+function unifiedAudioCell(event) {
+  const cell = document.createElement('td');
+  if (!event?.recording_url) {
+    cell.textContent = event?.protocol === 'p25' ? 'Live only' : '-';
+    return cell;
+  }
+  const audio = document.createElement('audio');
+  audio.controls = true;
+  audio.preload = 'none';
+  audio.src = event.recording_url;
+  audio.className = 'unified-recording-player';
+  const link = document.createElement('a');
+  link.href = event.recording_url;
+  link.download = event.recording_filename || 'scanner-recording.wav';
+  link.textContent = 'Download';
+  link.className = 'unified-recording-link';
+  cell.append(audio, link);
+  return cell;
+}
+
+function renderUnifiedActivity(payload) {
+  latestUnifiedActivity = payload;
+  const active = payload?.active || null;
+  const activeSource = payload?.active_source || null;
+  setBadge(
+    'unifiedActiveBadge',
+    activeSource ? unifiedSourceLabel(activeSource).toUpperCase() : 'IDLE',
+    activeSource ? 'ok' : 'warn'
+  );
+  setText(
+    'unifiedActiveLabel',
+    active?.channel_label || 'No active transmission'
+  );
+  const activePieces = [];
+  if (active?.source_label) activePieces.push(active.source_label);
+  if (active?.talkgroup_id) activePieces.push(`TGID ${active.talkgroup_id}`);
+  if (active?.frequency_hz) activePieces.push(unifiedFrequency(active.frequency_hz));
+  if (active?.signaling) activePieces.push(active.signaling);
+  if (active?.started_utc) {
+    activePieces.push(`${Math.max(0, Date.now() / 1000 - Number(active.started_utc)).toFixed(1)} s`);
+  }
+  setText(
+    'unifiedActiveDetail',
+    activePieces.join(' · ') || 'Waiting for P25, 2 m, or 70 cm activity'
+  );
+
+  const summary = payload?.summary || {};
+  setText('unifiedHistoryCount', summary.history_count ?? 0);
+  setText('unifiedP25Count', summary.p25_events ?? 0);
+  setText('unifiedAnalogCount', summary.analog_events ?? 0);
+  setText('unifiedRecordedCount', summary.recorded_events ?? 0);
+  setText('unifiedAudioSwitches', summary.audio_source_switches ?? 0);
+
+  const policy = payload?.policy || {};
+  const order = Array.isArray(policy.source_priority_order)
+    ? policy.source_priority_order.map(unifiedSourceLabel).join(' → ')
+    : '-';
+  setText(
+    'unifiedPolicy',
+    `Current transmission holds until ${policy.release_seconds ?? '-'} s silence; ` +
+      `no preemption; ${policy.acquisition_grace_ms ?? '-'} ms tie-break: ${order}.`
+  );
+
+  const health = field('unifiedSourceHealth');
+  if (health) {
+    health.innerHTML = '';
+    (payload?.source_health || []).forEach((source) => {
+      const item = document.createElement('article');
+      item.className = `unified-source-item ${source.is_audio_owner ? 'owner' : ''}`;
+      const title = document.createElement('strong');
+      title.textContent = source.source_label || unifiedSourceLabel(source.source);
+      const badge = document.createElement('span');
+      const healthy = Boolean(source.service_active);
+      badge.className = `pill ${source.is_audio_owner || healthy ? 'ok' : 'warn'}`;
+      badge.textContent = source.is_audio_owner
+        ? 'AUDIO'
+        : (healthy ? String(source.runtime_state || 'ready').toUpperCase() : 'OFF');
+      const detail = document.createElement('small');
+      detail.textContent =
+        `Accepted ${source.accepted_frames ?? 0} · Dropped ${source.dropped_non_owner_frames ?? 0}`;
+      item.append(title, badge, detail);
+      health.append(item);
+    });
+  }
+
+  const body = field('unifiedHistoryBody');
+  if (body) {
+    body.innerHTML = '';
+    const history = Array.isArray(payload?.history) ? payload.history : [];
+    if (!history.length) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 7;
+      cell.textContent = 'No unified activity recorded yet.';
+      row.append(cell);
+      body.append(row);
+    } else {
+      history.slice(0, 30).forEach((event) => {
+        const row = document.createElement('tr');
+        const statusSuffix =
+          event.encrypted === true
+            ? ' · encrypted'
+            : (event.muted === true ? ' · muted' : '');
+        const values = [
+          unifiedTime(event.ended_utc || event.started_utc),
+          event.source_label || unifiedSourceLabel(event.source),
+          `${event.channel_label || '-'}${event.talkgroup_id ? ` · TGID ${event.talkgroup_id}` : ''}${statusSuffix}`,
+          unifiedFrequency(event.frequency_hz),
+          event.signaling || event.p25_phase || '-',
+          event.duration_seconds == null
+            ? '-'
+            : `${Number(event.duration_seconds).toFixed(2)} s`,
+        ];
+        values.forEach((value) => {
+          const cell = document.createElement('td');
+          cell.textContent = value;
+          row.append(cell);
+        });
+        row.append(unifiedAudioCell(event));
+        body.append(row);
+      });
+    }
+  }
+}
+
+async function refreshUnifiedActivity() {
+  try {
+    const payload = await fetchJson('/api/activity/unified');
+    renderUnifiedActivity(payload);
+  } catch (error) {
+    setBadge('unifiedActiveBadge', 'ERROR', 'bad');
+    setText('unifiedActiveLabel', `Unified activity error: ${error.message}`);
+  }
 }
 
 function renderDashboard(status) {
@@ -1429,6 +1587,7 @@ function boot() {
   // Scanner status is the critical dashboard path and must run first.
   runUiBootTask('Scanner state', refreshStatus);
   runUiBootTask('Scanner configuration', refreshConfig);
+  runUiBootTask('Unified activity', refreshUnifiedActivity);
 
   // All supplemental panels are isolated so one failed feature cannot leave
   // the main dashboard at its static "Loading scanner state..." placeholder.
@@ -1446,6 +1605,7 @@ function boot() {
   );
   setInterval(() => runUiBootTask('Analog status', refreshAnalogStatus), 3000);
   setInterval(() => runUiBootTask('Analog activity', refreshAnalogActivity), 2000);
+  setInterval(() => runUiBootTask('Unified activity', refreshUnifiedActivity), 2000);
 }
 
 if (document.readyState === 'loading') {

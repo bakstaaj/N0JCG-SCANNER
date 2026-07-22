@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=0.6h-dcs-tone-gate">
+  <link rel="stylesheet" href="/app.css?v=0.6i-unified-activity">
 </head>
 <body>
   <div class="app-shell">
@@ -52,6 +52,45 @@
             <div><span>Audio</span><strong id="browserAudioLastEvent">Ready</strong></div>
           </div>
         </section>
+        <!-- PHASE10_UNIFIED_ACTIVITY_ARBITRATION_V0_6I -->
+        <section class="unified-activity-card" aria-label="unified scanner activity">
+          <div class="unified-active-row">
+            <div>
+              <span class="label">Browser Audio Source</span>
+              <strong id="unifiedActiveLabel">No active transmission</strong>
+              <small id="unifiedActiveDetail">Waiting for P25, 2 m, or 70 cm activity</small>
+            </div>
+            <span id="unifiedActiveBadge" class="pill warn">IDLE</span>
+          </div>
+          <div class="unified-source-health" id="unifiedSourceHealth"></div>
+          <div class="unified-summary-grid">
+            <article><span>Recent Events</span><strong id="unifiedHistoryCount">0</strong></article>
+            <article><span>P25</span><strong id="unifiedP25Count">0</strong></article>
+            <article><span>Analog</span><strong id="unifiedAnalogCount">0</strong></article>
+            <article><span>Recordings</span><strong id="unifiedRecordedCount">0</strong></article>
+            <article><span>Audio Switches</span><strong id="unifiedAudioSwitches">0</strong></article>
+          </div>
+          <div class="unified-policy" id="unifiedPolicy">Current transmission wins; no preemption.</div>
+          <div class="unified-history-wrap">
+            <table class="unified-history-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Source</th>
+                  <th>Channel / Talkgroup</th>
+                  <th>Frequency</th>
+                  <th>Code</th>
+                  <th>Duration</th>
+                  <th>Audio</th>
+                </tr>
+              </thead>
+              <tbody id="unifiedHistoryBody">
+                <tr><td colspan="7">No unified activity recorded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <section class="stats-grid" aria-label="statistics">
           <article><span>State</span><strong id="scannerState">-</strong></article>
           <article><span>PID</span><strong id="decoderPid">-</strong></article>
@@ -317,6 +356,6 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=0.6h-dcs-tone-gate"></script>
+  <script src="/app.js?v=0.6i-unified-activity"></script>
 </body>
 </html>
