@@ -1,0 +1,20 @@
+[Unit]
+Description=PI-SCANNER Runtime Monitoring Autostart
+Documentation=file:/home/pi/PI-SCANNER/docs/PHASE_12_RUNTIME_AUTOSTART.md
+Wants=network-online.target pi-scanner.service pi-scanner-browser-audio.service
+After=network-online.target pi-scanner.service pi-scanner-browser-audio.service
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/PI-SCANNER
+ExecStart=/usr/bin/python3 /home/pi/PI-SCANNER/tools/pi_scanner_runtime_autostart.py --apply --backend http://127.0.0.1:8091 --audio http://127.0.0.1:8072
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=140
+
+[Install]
+WantedBy=multi-user.target

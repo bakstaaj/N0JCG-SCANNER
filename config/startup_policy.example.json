@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "enabled": true,
+  "p25_autostart": true,
+  "analog_2m_autostart": true,
+  "analog_70cm_autostart": true,
+  "backend_wait_seconds": 75,
+  "audio_wait_seconds": 45,
+  "validation_seconds": 35,
+  "request_timeout_seconds": 10
+}
