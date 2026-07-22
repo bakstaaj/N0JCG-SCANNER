@@ -48,6 +48,10 @@ let rrSites = [];
 let browserAudioLastEvent = 'Ready';
 let latestReceiverInventory = null; // PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
 
+// PHASE18A_REALTIME_TALKGROUP_STATUS
+const STATUS_REFRESH_INTERVAL_MS = 500;
+let statusRefreshInFlight = false;
+
 const CATEGORY_DEFAULTS = [
   'Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Utilities', 'Transportation',
   'Interop', 'Emergency Management', 'Corrections', 'Schools', 'Federal', 'Other',
@@ -194,6 +198,8 @@ function renderDashboard(status) {
 }
 
 async function refreshStatus() {
+  if (statusRefreshInFlight) return;
+  statusRefreshInFlight = true;
   try {
     latestStatus = await fetchJson('/api/status');
     renderDashboard(latestStatus);
@@ -201,6 +207,8 @@ async function refreshStatus() {
     setBadge('connectionStatus', 'Offline', 'bad');
     setText('dashboardSummary', `Status error: ${error.message}`);
     setText('lastEvent', `Status error: ${error.message}`);
+  } finally {
+    statusRefreshInFlight = false;
   }
 }
 
@@ -760,7 +768,7 @@ p25RemoveDashboardAutostartTuningRemnants();
   refreshReceiverInventory();
   refreshStatus();
   refreshConfig();
-  setInterval(refreshStatus, 3000);
+  setInterval(refreshStatus, STATUS_REFRESH_INTERVAL_MS);
   setInterval(refreshReceiverInventory, 15000);
 }
 
