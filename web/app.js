@@ -54,7 +54,7 @@ let statusRefreshInFlight = false;
 
 // PHASE18B_FAST_ACTIVITY_AND_BUILD_MARKER
 const FAST_ACTIVITY_REFRESH_INTERVAL_MS = 250;
-const PI_P25_UI_BUILD_ID = '18B';
+const PI_P25_UI_BUILD_ID = '18C';
 let fastActivityRefreshInFlight = false;
 let statusRenderSequence = 0;
 let activityRenderSequence = 0;
@@ -182,20 +182,10 @@ function renderDashboard(status) {
   const marker = process.validated_marker || {};
   const running = Boolean(process.running);
   const ready = markerIsReady(marker) || Boolean(process.start_enabled);
-  const talkgroup = bestTalkgroup(status || {});
   const listener = extractOp25HttpListener(status || {});
-  const controlState = status?.control_channel_state || (running ? 'searching' : 'idle');
-  const controlSummary = controlState === 'locked'
-    ? `Locked: ${formatHz(status?.active_control_frequency_hz)}`
-    : `Searching: ${formatHz(status?.active_control_frequency_hz)}`;
-  setText('dashboardSummary', running ? (talkgroup.has_talkgroup ? talkgroup.short_label : controlSummary) : (ready ? 'Ready to start' : 'Not launch-ready'));
   setText('scannerState', status?.scanner_state || '-');
   setText('decoderPid', process.pid || '-');
   setText('controlFrequency', formatHz(status?.active_control_frequency_hz));
-  setText('voiceFrequency', formatHz(talkgroup.voice_frequency_hz));
-  setText('activeTgid', talkgroup.tgid_text);
-  setText('activeTalkgroupLabel', talkgroup.label);
-  setText('p25Phase', status?.p25_phase || '-');
   setText('op25HttpListener', listener ? listener.piLocalUrl : '-');
   setText('launchReady', ready ? 'yes' : 'no');
   setText('commandSource', process.command_source || '-');
@@ -227,30 +217,62 @@ async function refreshStatus() {
   }
 }
 
+function renderFastActivity(activity) {
+  const activeTgid = activity?.active_tgid ?? null;
+  const lastTgid = activity?.last_active_tgid ?? null;
+  const displayTgid = activeTgid ?? activity?.display_tgid ?? lastTgid ?? null;
+  const activeLabel = String(activity?.active_talkgroup_label || '').trim();
+  const lastLabel = String(activity?.last_active_talkgroup_label || '').trim();
+  const displayLabel = activeLabel
+    || String(activity?.display_talkgroup_label || '').trim()
+    || lastLabel
+    || (displayTgid ? 'Unmapped talkgroup' : '');
+  const voiceFrequency = activity?.active_voice_frequency_hz
+    ?? activity?.display_voice_frequency_hz
+    ?? activity?.last_active_voice_frequency_hz
+    ?? null;
+  const activeNow = activeTgid !== null && activeTgid !== undefined;
+  const running = activity?.scanner_state === 'running';
+
+  setText(
+    'dashboardSummary',
+    displayTgid
+      ? `${displayLabel || 'Unmapped talkgroup'} · TGID ${displayTgid}`
+      : (running ? 'Scanning for voice activity' : 'Waiting for activity')
+  );
+  setText('activeTgid', displayTgid ? `TGID ${displayTgid}` : '-');
+  setText(
+    'activeTalkgroupLabel',
+    displayTgid
+      ? `${activeNow ? 'Active' : 'Last heard'}: ${displayLabel || 'Unmapped talkgroup'}`
+      : (running ? 'Scanning for voice activity' : 'Waiting for activity')
+  );
+  setText('voiceFrequency', formatHz(voiceFrequency));
+  setText('p25Phase', activity?.p25_phase || '-');
+
+  activityRenderSequence += 1;
+  const badge = field('activityLiveBadge');
+  if (badge) {
+    badge.textContent = `${PI_P25_UI_BUILD_ID} LIVE · A#${activityRenderSequence} · ${displayTgid ? `TG${displayTgid}` : 'SCAN'}`;
+    badge.className = 'pill ok';
+  }
+  updateUiHeartbeat();
+}
+
 async function refreshFastActivity() {
   if (fastActivityRefreshInFlight) return;
   fastActivityRefreshInFlight = true;
   try {
-    const activity = await fetchJson('/api/activity');
-    latestStatus = { ...(latestStatus || {}), ...(activity || {}) };
-    const talkgroup = bestTalkgroup(latestStatus);
-
-    setText(
-      'dashboardSummary',
-      talkgroup.has_talkgroup
-        ? talkgroup.short_label
-        : (latestStatus?.decoder_process?.running
-            ? 'Scanning for voice activity'
-            : 'Waiting for activity')
+    const activity = await fetchJson(
+      `/api/activity?_=${Date.now()}`
     );
-    setText('activeTgid', talkgroup.tgid_text);
-    setText('activeTalkgroupLabel', talkgroup.label);
-    setText('voiceFrequency', formatHz(talkgroup.voice_frequency_hz));
-    if (activity?.p25_phase) setText('p25Phase', activity.p25_phase);
-
-    activityRenderSequence += 1;
-    updateUiHeartbeat();
+    renderFastActivity(activity);
   } catch (error) {
+    const badge = field('activityLiveBadge');
+    if (badge) {
+      badge.textContent = `${PI_P25_UI_BUILD_ID} ERROR`;
+      badge.className = 'pill bad';
+    }
     setText('lastEvent', `Activity status error: ${error.message}`);
   } finally {
     fastActivityRefreshInFlight = false;
