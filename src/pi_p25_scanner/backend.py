@@ -47,6 +47,7 @@ if __package__ in (None, ""):
     from pi_p25_scanner.op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
     from pi_p25_scanner.runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from pi_p25_scanner.runtime_activity import RuntimeActivityTracker
+    from pi_p25_scanner.receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
     try:
         from pi_p25_scanner.radioreference_import import (
             RadioReferenceError,
@@ -84,6 +85,7 @@ else:
     from .op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
     from .runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from .runtime_activity import RuntimeActivityTracker
+    from .receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
     try:
         from .radioreference_import import (
             RadioReferenceError,
@@ -471,6 +473,10 @@ class ScannerManager:
                 self.status.scanner_state = "config_error"
                 self._append_warning(str(exc))
                 self._set_event(f"Config error: {exc}")
+
+    # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
+    def receiver_inventory_payload(self) -> dict[str, Any]:
+        return build_receiver_inventory()
 
     def config_payload(self) -> dict[str, Any]:
         payload, path = read_active_config_payload()
@@ -1123,6 +1129,10 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             if path == "/api/config":
                 self._send_json(MANAGER.config_payload())
+                return
+            # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
+            if path == "/api/receivers/inventory":
+                self._send_json(MANAGER.receiver_inventory_payload())
                 return
             if path == "/api/config/named":
                 self._send_json(MANAGER.named_configs_payload())
