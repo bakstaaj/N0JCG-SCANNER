@@ -999,23 +999,75 @@ function attachEventHandlers() {
   field('browserAudioPlayer')?.addEventListener('pause', () => updateAudioPanel('Browser audio paused'));
 }
 
+// PHASE7_UI_BOOT_RECOVERY_V0_6F1
+function reportUiBootFailure(taskName, error) {
+  const message = `${taskName} failed: ${error?.message || error || 'unknown error'}`;
+  setText('dashboardSummary', message);
+  setText('lastEvent', message);
+  setBadge('connectionStatus', 'UI error', 'bad');
+  console.error(message, error);
+}
+
+function runUiBootTask(taskName, task) {
+  try {
+    const result = task();
+    if (result && typeof result.catch === 'function') {
+      result.catch((error) => reportUiBootFailure(taskName, error));
+    }
+  } catch (error) {
+    reportUiBootFailure(taskName, error);
+  }
+}
+
+function installUiBootErrorReporting() {
+  if (window.__PI_SCANNER_UI_ERROR_REPORTING__) return;
+  window.__PI_SCANNER_UI_ERROR_REPORTING__ = true;
+  window.addEventListener('error', (event) => {
+    reportUiBootFailure(
+      'JavaScript',
+      event?.error || event?.message || 'script error'
+    );
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    reportUiBootFailure(
+      'Promise',
+      event?.reason || 'unhandled promise rejection'
+    );
+  });
+}
+
 function boot() {
-  attachEventHandlers();
-p25RemoveDashboardAutostartTuningRemnants();
-  renderCategoryChoices();
-  updateAudioPanel();
-  refreshProfiles();
-  refreshRadioReferenceStatus();
-  refreshReceiverInventory();
-  refreshAnalogStatus();
-  loadAnalogConfigEditor();
-  refreshAnalogActivity();
-  refreshStatus();
-  refreshConfig();
-  setInterval(refreshStatus, 3000);
-  setInterval(refreshReceiverInventory, 15000);
-  setInterval(refreshAnalogStatus, 3000);
-  setInterval(refreshAnalogActivity, 2000);
+  installUiBootErrorReporting();
+
+  try {
+    attachEventHandlers();
+    p25RemoveDashboardAutostartTuningRemnants();
+    renderCategoryChoices();
+    updateAudioPanel();
+  } catch (error) {
+    reportUiBootFailure('UI initialization', error);
+  }
+
+  // Scanner status is the critical dashboard path and must run first.
+  runUiBootTask('Scanner state', refreshStatus);
+  runUiBootTask('Scanner configuration', refreshConfig);
+
+  // All supplemental panels are isolated so one failed feature cannot leave
+  // the main dashboard at its static "Loading scanner state..." placeholder.
+  runUiBootTask('Saved profiles', refreshProfiles);
+  runUiBootTask('RadioReference status', refreshRadioReferenceStatus);
+  runUiBootTask('Receiver inventory', refreshReceiverInventory);
+  runUiBootTask('Analog status', refreshAnalogStatus);
+  runUiBootTask('Analog configuration', loadAnalogConfigEditor);
+  runUiBootTask('Analog activity', refreshAnalogActivity);
+
+  setInterval(() => runUiBootTask('Scanner state', refreshStatus), 3000);
+  setInterval(
+    () => runUiBootTask('Receiver inventory', refreshReceiverInventory),
+    15000
+  );
+  setInterval(() => runUiBootTask('Analog status', refreshAnalogStatus), 3000);
+  setInterval(() => runUiBootTask('Analog activity', refreshAnalogActivity), 2000);
 }
 
 if (document.readyState === 'loading') {

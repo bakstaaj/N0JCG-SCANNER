@@ -1160,6 +1160,22 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         print(f"{self.address_string()} - {fmt % args}", flush=True)
 
+    # PHASE7_UI_BOOT_RECOVERY_V0_6F1
+    def end_headers(self) -> None:
+        static_path = urlparse(self.path).path
+        if (
+            static_path in ("/", "/index.html")
+            or static_path.endswith(".js")
+            or static_path.endswith(".css")
+        ):
+            self.send_header(
+                "Cache-Control",
+                "no-store, no-cache, must-revalidate, max-age=0",
+            )
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+        super().end_headers()
+
     def _send_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
         self.send_response(status.value)
