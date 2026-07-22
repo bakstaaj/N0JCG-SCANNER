@@ -32,6 +32,7 @@ from .analog_recordings import (
     enforce_retention,
 )  # PHASE7_ANALOG_RECORDING_PLAYBACK_V0_6F
 from .analog_ctcss import CtcssDetector  # PHASE8_CTCSS_TONE_GATE_V0_6G
+from .analog_dcs import DcsDetector, parse_dcs_code  # PHASE9_DCS_TONE_GATE_V0_6H
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "runtime" / "settings" / "analog_receivers.json"
@@ -115,9 +116,17 @@ def normalize_channel(
     if not name:
         name = str(frequency_hz)
     dcs_code = str(raw.get("dcs_code") or "").strip().upper()
-    if dcs_code and not re.fullmatch(r"[0-9A-Z]{1,8}", dcs_code):
+    if dcs_code:
+        try:
+            dcs_code = parse_dcs_code(dcs_code)["display"]
+        except Exception as exc:
+            raise AnalogWorkerError(
+                f"{role} channel {index + 1} has invalid DCS code: {dcs_code!r}"
+            ) from exc
+    dcs_gate = bool(raw.get("dcs_gate", False))
+    if dcs_gate and not dcs_code:
         raise AnalogWorkerError(
-            f"{role} channel {index + 1} has invalid DCS code: {dcs_code!r}"
+            f"{role} channel {index + 1} enables DCS Gate without a DCS code"
         )
     ctcss_hz = optional_float(raw.get("ctcss_hz"))
     if ctcss_hz is not None and not 50.0 <= ctcss_hz <= 300.0:
@@ -128,6 +137,10 @@ def normalize_channel(
     if tone_gate and ctcss_hz is None:
         raise AnalogWorkerError(
             f"{role} channel {index + 1} enables Tone Gate without a CTCSS frequency"
+        )
+    if tone_gate and dcs_gate:
+        raise AnalogWorkerError(
+            f"{role} channel {index + 1} cannot enable CTCSS Gate and DCS Gate together"
         )
     return {
         "id": channel_id(role, index, raw.get("id") or name),
@@ -166,6 +179,7 @@ def normalize_channel(
         "ctcss_hz": ctcss_hz,
         "tone_gate": tone_gate,
         "dcs_code": dcs_code,
+        "dcs_gate": dcs_gate,
         "recording_enabled": bool(raw.get("recording_enabled", False)),
     }
 
@@ -265,7 +279,7 @@ def validate_analog_config(payload: Any) -> dict[str, Any]:
     if len(ports) != len(set(ports)):
         raise AnalogWorkerError("analog workers cannot share an audio UDP port")
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "audio_udp_host": str(
             payload.get("audio_udp_host") or "127.0.0.1"
         ),
@@ -400,6 +414,12 @@ class AnalogWorker:
         self.ctcss_rejected_frames = 0
         self.ctcss_gate_open_frames = 0
         self.last_detected_ctcss_hz: float | None = None
+        self.dcs_detector: DcsDetector | None = None
+        self.dcs_snapshot: dict[str, Any] = {}
+        self.dcs_rejected_frames = 0
+        self.dcs_gate_open_frames = 0
+        self.last_detected_dcs_code: str | None = None
+        self.last_detected_dcs_polarity: str | None = None
         self.smoke_deadline = (
             self.started_utc + self.smoke_seconds
             if self.smoke_seconds > 0
@@ -461,6 +481,19 @@ class AnalogWorker:
             "ctcss_detector": self.ctcss_snapshot,
             "ctcss_rejected_frames": self.ctcss_rejected_frames,
             "ctcss_gate_open_frames": self.ctcss_gate_open_frames,
+            "dcs_gate_required": bool(
+                (self.current_channel or {}).get("dcs_gate", False)
+            ),
+            "configured_dcs_code": (
+                (self.current_channel or {}).get("dcs_code") or None
+            ),
+            "detected_dcs_code": self.last_detected_dcs_code,
+            "detected_dcs_polarity": self.last_detected_dcs_polarity,
+            "dcs_locked": bool(self.dcs_snapshot.get("locked", False)),
+            "dcs_confidence": self.dcs_snapshot.get("confidence", 0.0),
+            "dcs_detector": self.dcs_snapshot,
+            "dcs_rejected_frames": self.dcs_rejected_frames,
+            "dcs_gate_open_frames": self.dcs_gate_open_frames,
             "last_error": self.last_error,
             "stderr_tail": list(self.stderr_lines),
             "started_utc": self.started_utc,
@@ -532,6 +565,11 @@ class AnalogWorker:
         event["configured_ctcss_hz"] = channel.get("ctcss_hz")
         event["detected_ctcss_hz"] = self.last_detected_ctcss_hz
         event["ctcss_confidence"] = self.ctcss_snapshot.get("confidence", 0.0)
+        event["dcs_gate_required"] = bool(channel.get("dcs_gate", False))
+        event["configured_dcs_code"] = channel.get("dcs_code") or None
+        event["detected_dcs_code"] = self.last_detected_dcs_code
+        event["detected_dcs_polarity"] = self.last_detected_dcs_polarity
+        event["dcs_confidence"] = self.dcs_snapshot.get("confidence", 0.0)
         self.current_activity = event
         if bool(channel.get("recording_enabled", False)):
             try:
@@ -563,6 +601,17 @@ class AnalogWorker:
             self.current_activity["ctcss_confidence"] = max(
                 float(self.current_activity.get("ctcss_confidence") or 0.0),
                 float(self.ctcss_snapshot.get("confidence") or 0.0),
+            )
+        if self.last_detected_dcs_code is not None:
+            self.current_activity["detected_dcs_code"] = (
+                self.last_detected_dcs_code
+            )
+            self.current_activity["detected_dcs_polarity"] = (
+                self.last_detected_dcs_polarity
+            )
+            self.current_activity["dcs_confidence"] = max(
+                float(self.current_activity.get("dcs_confidence") or 0.0),
+                float(self.dcs_snapshot.get("confidence") or 0.0),
             )
 
     def end_activity(self, reason: str) -> None:
@@ -610,6 +659,8 @@ class AnalogWorker:
         last_state_write = 0.0
         configured_ctcss = channel.get("ctcss_hz")
         tone_gate_required = bool(channel.get("tone_gate", False))
+        configured_dcs = str(channel.get("dcs_code") or "").strip()
+        dcs_gate_required = bool(channel.get("dcs_gate", False))
         self.ctcss_detector = (
             CtcssDetector(
                 float(configured_ctcss),
@@ -624,7 +675,22 @@ class AnalogWorker:
             else {}
         )
         self.last_detected_ctcss_hz = None
-        prebuffer_frames: deque[bytes] = deque(maxlen=24)
+        self.dcs_detector = (
+            DcsDetector(
+                configured_dcs,
+                sample_rate_hz=self.config["audio_rate_hz"],
+            )
+            if configured_dcs
+            else None
+        )
+        self.dcs_snapshot = (
+            self.dcs_detector.snapshot()
+            if self.dcs_detector is not None
+            else {}
+        )
+        self.last_detected_dcs_code = None
+        self.last_detected_dcs_polarity = None
+        prebuffer_frames: deque[bytes] = deque(maxlen=32)
         self.write_status("tuning")
 
         while self.keep_running and process.poll() is None:
@@ -658,6 +724,16 @@ class AnalogWorker:
                                 self.ctcss_snapshot["detected_hz"]
                             )
 
+                    if self.dcs_detector is not None:
+                        self.dcs_snapshot = self.dcs_detector.feed(frame)
+                        if self.dcs_snapshot.get("locked"):
+                            self.last_detected_dcs_code = str(
+                                self.dcs_snapshot["detected_code"]
+                            )
+                            self.last_detected_dcs_polarity = str(
+                                self.dcs_snapshot["detected_polarity"]
+                            )
+
                     carrier_open = rms >= channel["squelch_rms"]
                     tone_locked = bool(
                         self.ctcss_snapshot.get("locked", False)
@@ -668,22 +744,45 @@ class AnalogWorker:
                         tone_recent = (
                             time.time() - float(last_tone_match) <= 0.60
                         )
+
+                    dcs_locked = bool(
+                        self.dcs_snapshot.get("locked", False)
+                    )
+                    dcs_recent = False
+                    last_dcs_match = self.dcs_snapshot.get("last_match_utc")
+                    if last_dcs_match is not None:
+                        dcs_recent = (
+                            time.time() - float(last_dcs_match) <= 0.75
+                        )
+
+                    ctcss_qualified = (
+                        not tone_gate_required
+                        or tone_locked
+                        or (activity_seen and tone_recent)
+                    )
+                    dcs_qualified = (
+                        not dcs_gate_required
+                        or dcs_locked
+                        or (activity_seen and dcs_recent)
+                    )
                     gate_open = (
                         carrier_open
-                        and (
-                            not tone_gate_required
-                            or tone_locked
-                            or (activity_seen and tone_recent)
-                        )
+                        and ctcss_qualified
+                        and dcs_qualified
                     )
 
-                    if carrier_open and tone_gate_required and not gate_open:
+                    if carrier_open and tone_gate_required and not ctcss_qualified:
                         self.ctcss_rejected_frames += 1
+                    if carrier_open and dcs_gate_required and not dcs_qualified:
+                        self.dcs_rejected_frames += 1
 
                     if gate_open:
+                        signaling_gate_required = (
+                            tone_gate_required or dcs_gate_required
+                        )
                         opening_frames = (
                             list(prebuffer_frames)
-                            if tone_gate_required and not activity_seen
+                            if signaling_gate_required and not activity_seen
                             else [frame]
                         )
                         if not activity_seen:
@@ -696,7 +795,10 @@ class AnalogWorker:
                         else:
                             self.update_activity(rms)
                         activity_seen = True
-                        self.ctcss_gate_open_frames += 1
+                        if tone_gate_required:
+                            self.ctcss_gate_open_frames += 1
+                        if dcs_gate_required:
+                            self.dcs_gate_open_frames += 1
                         last_active = time.time()
                         self.last_activity_utc = last_active
                         self.last_active_channel = copy.deepcopy(channel)
@@ -716,10 +818,10 @@ class AnalogWorker:
             should_advance = False
             if (
                 not activity_seen
-                and tone_gate_required
+                and (tone_gate_required or dcs_gate_required)
                 and self.last_rms >= channel["squelch_rms"]
             ):
-                state = "tone_search"
+                state = "signaling_search"
             if activity_seen:
                 age = now - last_active
                 if age <= channel["hold_seconds"]:
@@ -757,6 +859,7 @@ class AnalogWorker:
         rc = process.returncode
         self.current_process = None
         self.ctcss_detector = None
+        self.dcs_detector = None
         if rc not in (0, -signal.SIGTERM) and self.keep_running:
             self.last_error = f"rtl_fm exited rc={rc}"
             self.write_status("error")
@@ -806,7 +909,7 @@ def self_test() -> int:
         tone.byteswap()
     checks = [
         pcm_rms(tone.tobytes()) > 0,
-        normalized["schema_version"] == 3,
+        normalized["schema_version"] == 4,
         normalized["workers"]["analog_2m"]["rtl_serial"] == "00000440",
         normalized["workers"]["analog_70cm"]["rtl_serial"] == "00000144",
         normalized["workers"]["analog_2m"]["channels"][0]["mode"] == "nfm",

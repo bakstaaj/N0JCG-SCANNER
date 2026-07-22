@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=0.6g-ctcss-tone-gate">
+  <link rel="stylesheet" href="/app.css?v=0.6h-dcs-tone-gate">
 </head>
 <body>
   <div class="app-shell">
@@ -108,6 +108,7 @@
                 <article><span>RMS</span><strong id="analog2mRms">-</strong></article>
                 <article><span>Frames</span><strong id="analog2mFrames">-</strong></article>
                 <article><span>CTCSS</span><strong id="analog2mTone">Carrier only</strong></article>
+                <article><span>DCS</span><strong id="analog2mDcs">Not configured</strong></article>
               </div>
               <pre id="analog2mStatusText">2 m worker status not loaded.</pre>
             </article>
@@ -120,6 +121,7 @@
                 <article><span>RMS</span><strong id="analog70cmRms">-</strong></article>
                 <article><span>Frames</span><strong id="analog70cmFrames">-</strong></article>
                 <article><span>CTCSS</span><strong id="analog70cmTone">Carrier only</strong></article>
+                <article><span>DCS</span><strong id="analog70cmDcs">Not configured</strong></article>
               </div>
               <pre id="analog70cmStatusText">70 cm worker status not loaded.</pre>
             </article>
@@ -185,7 +187,7 @@
                   <th>Mode</th>
                   <th>Duration</th>
                   <th>Peak RMS</th>
-                  <th>CTCSS</th>
+                  <th>Squelch Code</th>
                   <th>Audio</th>
                 </tr>
               </thead>
@@ -198,6 +200,7 @@
         </section>
 
         <!-- PHASE8_CTCSS_TONE_GATE_V0_6G -->
+        <!-- PHASE9_DCS_TONE_GATE_V0_6H -->
         <!-- PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D -->
         <section class="rr-panel analog-config-editor" data-v06-section="analog-config">
           <div class="section-row">
@@ -314,6 +317,6 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=0.6g-ctcss-tone-gate"></script>
+  <script src="/app.js?v=0.6h-dcs-tone-gate"></script>
 </body>
 </html>

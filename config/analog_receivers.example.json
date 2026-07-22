@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "audio_udp_host": "127.0.0.1",
   "workers": {
     "analog_2m": {
@@ -30,7 +30,8 @@
           "ctcss_hz": null,
           "dcs_code": "",
           "recording_enabled": false,
-          "tone_gate": false
+          "tone_gate": false,
+          "dcs_gate": false
         }
       ],
       "resume_delay_seconds": 1.2
@@ -63,7 +64,8 @@
           "ctcss_hz": null,
           "dcs_code": "",
           "recording_enabled": false,
-          "tone_gate": false
+          "tone_gate": false,
+          "dcs_gate": false
         }
       ],
       "resume_delay_seconds": 1.2
