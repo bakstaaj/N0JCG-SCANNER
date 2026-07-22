@@ -1,0 +1,19 @@
+[Unit]
+Description=PI P25 Multi-Receiver Audio Pool
+Wants=network-online.target pi-p25-raw-audio-bridge.service
+After=network-online.target pi-p25-raw-audio-bridge.service
+Before=pi-p25-scanner.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/PI-P25-SCANNER
+ExecStart=/usr/bin/python3 /home/pi/PI-P25-SCANNER/tools/p25_audio_pool.py --listen-host 127.0.0.1 --base-port 23500 --port-count 10 --output-host 127.0.0.1 --output-port 23456 --state /home/pi/PI-P25-SCANNER/runtime/op25/audio_pool_state.json --min-rms 100 --release-seconds 1.0
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
