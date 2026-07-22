@@ -46,6 +46,7 @@ let currentConfig = null;
 let rrSystems = [];
 let rrSites = [];
 let browserAudioLastEvent = 'Ready';
+let latestReceiverInventory = null; // PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
 
 const CATEGORY_DEFAULTS = [
   'Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Utilities', 'Transportation',
@@ -200,6 +201,86 @@ async function refreshStatus() {
     setBadge('connectionStatus', 'Offline', 'bad');
     setText('dashboardSummary', `Status error: ${error.message}`);
     setText('lastEvent', `Status error: ${error.message}`);
+  }
+}
+
+// PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
+function receiverStateKind(state) {
+  if (state === 'active' || state === 'ready') return 'ok';
+  if (state === 'missing') return 'bad';
+  return 'warn';
+}
+
+function renderReceiverInventory(payload) {
+  const grid = field('receiverInventoryGrid');
+  const roles = Array.isArray(payload?.roles) ? payload.roles : [];
+  const expected = Number(payload?.expected_rtl_count || 0);
+  const present = Number(payload?.device_count || 0);
+  setBadge('receiverInventoryBadge', `${present}/${expected || '?'} RTL`, payload?.ok ? 'ok' : 'bad');
+
+  if (grid) {
+    grid.innerHTML = '';
+    roles.forEach((role) => {
+      const card = document.createElement('article');
+      card.className = `receiver-card ${role.state || 'unknown'}`;
+
+      const top = document.createElement('div');
+      top.className = 'receiver-card-top';
+
+      const title = document.createElement('strong');
+      title.textContent = role.label || role.role || 'Receiver';
+
+      const badge = document.createElement('span');
+      badge.className = `pill ${receiverStateKind(role.state)}`;
+      badge.textContent = String(role.state || 'unknown').toUpperCase();
+
+      top.append(title, badge);
+
+      const serial = document.createElement('div');
+      serial.className = 'receiver-serial';
+      serial.textContent = role.rtl_serial || '-';
+
+      const detail = document.createElement('div');
+      detail.className = 'receiver-detail';
+      const device = role.device || {};
+      const pieces = [
+        role.role,
+        device.product || role.service,
+        device.usb_path ? `USB ${device.usb_path}` : '',
+        role.active && Array.isArray(role.processes) && role.processes.length
+          ? `PID ${role.processes[0].pid}`
+          : '',
+      ].filter(Boolean);
+      detail.textContent = pieces.join(' · ') || '-';
+
+      const note = document.createElement('div');
+      note.className = 'receiver-note';
+      note.textContent = role.notes || (role.enabled ? 'Enabled' : 'Reserved');
+
+      card.append(top, serial, detail, note);
+      grid.append(card);
+    });
+  }
+
+  const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
+  const summary = [
+    `Role registry: ${payload?.role_config_path || '-'}`,
+    `Configured roles: ${payload?.configured_role_count ?? 0}`,
+    `Present devices: ${present} / ${expected || '-'}`,
+    `Missing configured serials: ${(payload?.missing_configured_serials || []).join(', ') || 'none'}`,
+    `Unassigned serials: ${(payload?.unassigned_serials || []).join(', ') || 'none'}`,
+    `Warnings: ${warnings.join(' | ') || 'none'}`,
+  ];
+  setText('receiverInventoryStatus', summary.join('\n'));
+}
+
+async function refreshReceiverInventory() {
+  try {
+    latestReceiverInventory = await fetchJson('/api/receivers/inventory');
+    renderReceiverInventory(latestReceiverInventory);
+  } catch (error) {
+    setBadge('receiverInventoryBadge', 'Inventory error', 'bad');
+    setText('receiverInventoryStatus', `Receiver inventory failed: ${error.message}`);
   }
 }
 
@@ -655,6 +736,7 @@ function attachEventHandlers() {
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => showScreen(button.dataset.screen)));
   field('startBtn')?.addEventListener('click', (event) => { if (p25AllowManualStart(event)) startScannerAndAudio(); });
   field('stopBtn')?.addEventListener('click', stopScanner);
+  field('refreshReceiverInventoryBtn')?.addEventListener('click', refreshReceiverInventory);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
   field('loadProfileBtn')?.addEventListener('click', loadSelectedProfile);
   field('saveProfileBtn')?.addEventListener('click', saveCurrentProfile);
@@ -675,9 +757,11 @@ p25RemoveDashboardAutostartTuningRemnants();
   updateAudioPanel();
   refreshProfiles();
   refreshRadioReferenceStatus();
+  refreshReceiverInventory();
   refreshStatus();
   refreshConfig();
   setInterval(refreshStatus, 3000);
+  setInterval(refreshReceiverInventory, 15000);
 }
 
 if (document.readyState === 'loading') {

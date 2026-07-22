@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>PI P25 Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=0.5ar-compact-spacing">
+  <title>PI Scanner</title>
+  <link rel="stylesheet" href="/app.css?v=0.6a-receiver-inventory">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <button id="menuBtn" class="icon-button" type="button" aria-label="Open menu">☰</button>
       <div class="title-block">
-        <strong>PI P25 Scanner</strong>
+        <strong>PI Scanner</strong>
         <span id="dashboardSummary">Loading scanner state...</span>
       </div>
       <span id="connectionStatus" class="pill warn">Connecting</span>
@@ -67,6 +67,22 @@
           <h1>Radio Setup</h1>
           <p>One workflow: choose a saved profile or import a RadioReference system/site, filter talkgroups, calibrate if needed, then save as a named profile.</p>
         </div>
+
+        <!-- PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A -->
+        <section class="rr-panel receiver-inventory-panel" data-v06-section="receivers">
+          <div class="section-row">
+            <div>
+              <strong>Receiver Inventory</strong>
+              <p>Persistent serial-bound assignments are independent of P25 profiles. Analog workers remain disabled in this phase.</p>
+            </div>
+            <span id="receiverInventoryBadge" class="pill warn">Loading</span>
+          </div>
+          <div class="wizard-actions compact-actions receiver-actions">
+            <button id="refreshReceiverInventoryBtn" type="button">Refresh Receiver Inventory</button>
+          </div>
+          <div id="receiverInventoryGrid" class="receiver-inventory-grid"></div>
+          <pre id="receiverInventoryStatus">Receiver inventory not loaded yet.</pre>
+        </section>
 
         <section class="rr-panel" data-v05d-section="profiles">
           <div class="section-row"><div><strong>1. Saved Profiles</strong><p>Reload a known-good profile or save the current active setup for future use.</p></div><span id="profileStatusBadge" class="pill warn">Profiles</span></div>
@@ -141,6 +157,6 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=0.5ar-tgid-label-fix"></script>
+  <script src="/app.js?v=0.6a-receiver-inventory"></script>
 </body>
 </html>

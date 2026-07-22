@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "expected_rtl_count": 7,
+  "roles": {
+    "p25_control": {
+      "label": "P25 Control",
+      "service": "p25",
+      "rtl_serial": "00000251",
+      "enabled": true,
+      "protected": true,
+      "notes": "Existing proven Tenderfoot control receiver"
+    },
+    "p25_voice": {
+      "label": "P25 Voice",
+      "service": "p25",
+      "rtl_serial": "00000252",
+      "enabled": true,
+      "protected": true,
+      "notes": "Reserved second P25 receiver"
+    },
+    "noaa_airband": {
+      "label": "NOAA / Airband",
+      "service": "noaa_airband",
+      "rtl_serial": "00000162",
+      "enabled": false,
+      "protected": true,
+      "notes": "Existing NOAA/airband receiver reservation"
+    },
+    "adsb_1090": {
+      "label": "ADS-B 1090",
+      "service": "adsb",
+      "rtl_serial": "00001090",
+      "enabled": false,
+      "protected": true,
+      "notes": "Nooelec FlyCatcher ADS-B reservation"
+    },
+    "uat_978": {
+      "label": "UAT 978",
+      "service": "uat",
+      "rtl_serial": "00000978",
+      "enabled": false,
+      "protected": true,
+      "notes": "Nooelec FlyCatcher UAT reservation"
+    },
+    "analog_2m": {
+      "label": "Analog 2 m",
+      "service": "analog",
+      "rtl_serial": "00000440",
+      "enabled": false,
+      "protected": false,
+      "notes": "Phase 3 worker target; disabled in Phase 2"
+    },
+    "analog_70cm": {
+      "label": "Analog 70 cm",
+      "service": "analog",
+      "rtl_serial": "00000144",
+      "enabled": false,
+      "protected": false,
+      "notes": "Phase 3 worker target; disabled in Phase 2"
+    }
+  }
+}
