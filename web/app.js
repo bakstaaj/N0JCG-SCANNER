@@ -47,273 +47,49 @@ let rrSystems = [];
 let rrSites = [];
 let browserAudioLastEvent = 'Ready';
 let latestReceiverInventory = null; // PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
-let latestAnalogStatus = null; // PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
-
-const CATEGORY_DEFAULTS = [
-  'Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Utilities', 'Transportation',
-  'Interop', 'Emergency Management', 'Corrections', 'Schools', 'Federal', 'Other',
-];
-
-function field(id) { return document.getElementById(id); }
-function setText(id, value) { const el = field(id); if (el) el.textContent = value ?? '-'; }
-function setBadge(id, text, kind) { const el = field(id); if (!el) return; el.textContent = text; el.className = `pill ${kind || ''}`.trim(); }
-function formatHz(value) { return value ? `${(Number(value) / 1000000).toFixed(6)} MHz` : '-'; }
-function formatList(values) { return Array.isArray(values) && values.length ? values.join('\n') : '-'; }
-function commandText(command) { return Array.isArray(command) ? command.join(' ') : (typeof command === 'string' ? command : ''); }
-function audioStreamUrl() { return `http://${window.location.hostname}:8072/audio.wav`; }
-function testToneUrl() { return `http://${window.location.hostname}:8072/test-tone.wav`; }
-function safeJson(value) { try { return JSON.stringify(value, null, 2); } catch { return String(value); } }
-function numberOrNull(value) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : null; }
-
-async function fetchJson(url, options = {}) {
-  const response = await fetch(url, { cache: 'no-store', ...options });
-  const text = await response.text();
-  let payload = {};
-  try { payload = text ? JSON.parse(text) : {}; } catch (error) { payload = { ok: false, error: `Invalid JSON: ${error.message}`, raw: text }; }
-  if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
-  return payload;
-}
-
-async function postJson(url, payload = {}) {
-  return fetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-}
-
-function openDrawer() { field('drawer')?.classList.add('open'); field('drawerBackdrop')?.classList.add('open'); }
-function closeDrawer() { field('drawer')?.classList.remove('open'); field('drawerBackdrop')?.classList.remove('open'); }
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach((el) => el.classList.toggle('active', el.id === id));
-  document.querySelectorAll('.nav-item').forEach((el) => el.classList.toggle('active', el.dataset.screen === id));
-  closeDrawer();
-}
-
-function markerIsReady(marker) { return Boolean(marker?.start_ready || (marker?.exists && marker?.validated)); }
-function extractOp25HttpListener(status) {
-  const process = status?.decoder_process || {};
-  const marker = process.validated_marker || {};
-  const combined = `${commandText(process.command)} ${safeJson(marker)}`;
-  const match = combined.match(/http:(?:\[[^\]]+\]|[^:\s]+):(\d{1,5})/);
-  if (!match) return null;
-  const port = Number(match[1]);
-  return Number.isInteger(port) && port > 0 && port < 65536 ? { port, piLocalUrl: `http://127.0.0.1:${port}/` } : null;
-}
-
-function setButtonsForState(status) {
-  const process = status?.decoder_process || {};
-  const marker = process.validated_marker || {};
-  const running = Boolean(process.running);
-  const canStart = markerIsReady(marker) || Boolean(process.start_enabled);
-  const startBtn = field('startBtn');
-  const stopBtn = field('stopBtn');
-  if (startBtn) startBtn.disabled = running || !canStart;
-  if (stopBtn) stopBtn.disabled = !running;
-}
-
-function bestTalkgroup(status) {
-  const recent = Array.isArray(status?.activity_summary?.recent_events) ? status.activity_summary.recent_events : [];
-  const fallback = [...recent].reverse().find((event) => event && (event.tgid || event.talkgroup_label));
-  const tgid = status?.active_tgid || status?.last_active_tgid || fallback?.tgid || null;
-  const configuredLabel = tgid ? status?.talkgroup_catalog?.labels?.[String(tgid)] : '';
-  const activeLabel = status?.active_tgid === tgid ? status?.active_talkgroup_label : '';
-  const lastLabel = status?.last_active_tgid === tgid ? status?.last_active_talkgroup_label : '';
-  const fallbackLabel = fallback?.tgid === tgid || !fallback?.tgid ? fallback?.talkgroup_label : '';
-  const rawLabel = configuredLabel || activeLabel || lastLabel || fallbackLabel || '';
-  const running = Boolean(status?.decoder_process?.running);
-  const labelOnly = rawLabel || (tgid ? 'Unmapped talkgroup' : (running ? 'Scanning for voice activity' : 'Waiting for activity'));
-  const activeNow = Boolean(status?.active_tgid || status?.active_talkgroup_label);
-  const prefix = activeNow ? 'Active' : (tgid ? 'Last heard' : '');
-  return {
-    has_talkgroup: Boolean(tgid || rawLabel),
-    tgid,
-    tgid_text: tgid ? `TGID ${tgid}` : '-',
-    label: prefix ? `${prefix}: ${labelOnly}` : labelOnly,
-    short_label: tgid ? `${labelOnly} · TGID ${tgid}` : labelOnly,
-    voice_frequency_hz: status?.active_voice_frequency_hz || status?.last_active_voice_frequency_hz || fallback?.voice_frequency_hz || null,
-  };
-}
-
-function formatActivityEvent(event) {
-  const pieces = [];
-  if (event.tgid) pieces.push(`TGID ${event.tgid}`);
-  if (event.talkgroup_label) pieces.push(event.talkgroup_label);
-  if (event.voice_frequency_hz) pieces.push(formatHz(event.voice_frequency_hz));
-  if (event.control_frequency_hz) pieces.push(`control ${formatHz(event.control_frequency_hz)}`);
-  if (event.p25_phase) pieces.push(event.p25_phase);
-  if (event.encrypted === true) pieces.push('encrypted');
-  if (event.encrypted === false) pieces.push('clear');
-  if (event.muted === true) pieces.push('muted');
-  return pieces.length ? pieces.join(' | ') : (event.line || '-');
-}
-
-function renderActivitySummary(activity) {
-  setText('activityUniqueTgids', activity?.unique_tgid_count ?? 0);
-  setText('activityClearEvents', activity?.clear_voice_events ?? 0);
-  setText('activityEncryptedEvents', activity?.encrypted_events ?? 0);
-  setText('activityMutedEvents', activity?.muted_events ?? 0);
-  const recent = Array.isArray(activity?.recent_events) ? activity.recent_events : [];
-  setText('activityRecentEvents', recent.length ? recent.slice(-10).map(formatActivityEvent).join('\n') : 'No parsed activity yet.');
-}
-
-function updateAudioPanel(message) {
-  const audio = field('browserAudioPlayer');
-  if (audio && !audio.src) audio.src = audioStreamUrl();
-  if (message) browserAudioLastEvent = message;
-  setText('browserAudioLastEvent', browserAudioLastEvent);
-}
-
-function renderDashboard(status) {
-  const process = status?.decoder_process || {};
-  const marker = process.validated_marker || {};
-  const running = Boolean(process.running);
-  const ready = markerIsReady(marker) || Boolean(process.start_enabled);
-  const talkgroup = bestTalkgroup(status || {});
-  const listener = extractOp25HttpListener(status || {});
-  const controlState = status?.control_channel_state || (running ? 'searching' : 'idle');
-  const controlSummary = controlState === 'locked'
-    ? `Locked: ${formatHz(status?.active_control_frequency_hz)}`
-    : `Searching: ${formatHz(status?.active_control_frequency_hz)}`;
-  setText('dashboardSummary', running ? (talkgroup.has_talkgroup ? talkgroup.short_label : controlSummary) : (ready ? 'Ready to start' : 'Not launch-ready'));
-  setText('scannerState', status?.scanner_state || '-');
-  setText('decoderPid', process.pid || '-');
-  setText('controlFrequency', formatHz(status?.active_control_frequency_hz));
-  setText('voiceFrequency', formatHz(talkgroup.voice_frequency_hz));
-  setText('activeTgid', talkgroup.tgid_text);
-  setText('activeTalkgroupLabel', talkgroup.label);
-  setText('p25Phase', status?.p25_phase || '-');
-  setText('op25HttpListener', listener ? listener.piLocalUrl : '-');
-  setText('launchReady', ready ? 'yes' : 'no');
-  setText('commandSource', process.command_source || '-');
-  setText('validatedMarkerState', markerIsReady(marker) ? 'validated' : (marker.exists ? 'present' : 'missing'));
-  setText('validatedCommand', formatList(process.command));
-  setText('lastEvent', status?.last_event || '-');
-  setText('logTail', formatList(status?.log_tail));
-  setText('lastUpdated', `Last update: ${new Date().toLocaleTimeString()}`);
-  setBadge('stateBadge', running ? 'ON AIR' : (status?.scanner_state || '-'), running ? 'ok' : (status?.ok ? 'warn' : 'bad'));
-  setBadge('connectionStatus', 'Connected', 'ok');
-  renderActivitySummary(status?.activity_summary || {});
-  updateAudioPanel();
-  setButtonsForState(status || {});
-}
-
-async function refreshStatus() {
-  try {
-    latestStatus = await fetchJson('/api/status');
-    renderDashboard(latestStatus);
-  } catch (error) {
-    setBadge('connectionStatus', 'Offline', 'bad');
-    setText('dashboardSummary', `Status error: ${error.message}`);
-    setText('lastEvent', `Status error: ${error.message}`);
-  }
-}
-
-// PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
-function receiverStateKind(state) {
-  if (state === 'active' || state === 'ready') return 'ok';
-  if (state === 'missing') return 'bad';
-  return 'warn';
-}
-
-function renderReceiverInventory(payload) {
-  const grid = field('receiverInventoryGrid');
-  const roles = Array.isArray(payload?.roles) ? payload.roles : [];
-  const expected = Number(payload?.expected_rtl_count || 0);
-  const present = Number(payload?.device_count || 0);
-  setBadge('receiverInventoryBadge', `${present}/${expected || '?'} RTL`, payload?.ok ? 'ok' : 'bad');
-
-  if (grid) {
-    grid.innerHTML = '';
-    roles.forEach((role) => {
-      const card = document.createElement('article');
-      card.className = `receiver-card ${role.state || 'unknown'}`;
-
-      const top = document.createElement('div');
-      top.className = 'receiver-card-top';
-
-      const title = document.createElement('strong');
-      title.textContent = role.label || role.role || 'Receiver';
-
-      const badge = document.createElement('span');
-      badge.className = `pill ${receiverStateKind(role.state)}`;
-      badge.textContent = String(role.state || 'unknown').toUpperCase();
-
-      top.append(title, badge);
-
-      const serial = document.createElement('div');
-      serial.className = 'receiver-serial';
-      serial.textContent = role.rtl_serial || '-';
-
-      const detail = document.createElement('div');
-      detail.className = 'receiver-detail';
-      const device = role.device || {};
-      const pieces = [
-        role.role,
-        device.product || role.service,
-        device.usb_path ? `USB ${device.usb_path}` : '',
-        role.active && Array.isArray(role.processes) && role.processes.length
-          ? `PID ${role.processes[0].pid}`
-          : '',
-      ].filter(Boolean);
-      detail.textContent = pieces.join(' · ') || '-';
-
-      const note = document.createElement('div');
-      note.className = 'receiver-note';
-      note.textContent = role.notes || (role.enabled ? 'Enabled' : 'Reserved');
-
-      card.append(top, serial, detail, note);
-      grid.append(card);
-    });
-  }
-
-  const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
-  const summary = [
-    `Role registry: ${payload?.role_config_path || '-'}`,
-    `Configured roles: ${payload?.configured_role_count ?? 0}`,
-    `Present devices: ${present} / ${expected || '-'}`,
-    `Missing configured serials: ${(payload?.missing_configured_serials || []).join(', ') || 'none'}`,
-    `Unassigned serials: ${(payload?.unassigned_serials || []).join(', ') || 'none'}`,
-    `Warnings: ${warnings.join(' | ') || 'none'}`,
-  ];
-  setText('receiverInventoryStatus', summary.join('\n'));
-}
-
-async function refreshReceiverInventory() {
-  try {
-    latestReceiverInventory = await fetchJson('/api/receivers/inventory');
-    renderReceiverInventory(latestReceiverInventory);
-  } catch (error) {
-    setBadge('receiverInventoryBadge', 'Inventory error', 'bad');
-    setText('receiverInventoryStatus', `Receiver inventory failed: ${error.message}`);
-  }
-}
-
-// PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
+let latestAnalogStatus = null; // PHASE4_DUAL_ANALOG_WORKERS_V0_6C
 function analogWorkerRecord(payload, role) {
-  return (Array.isArray(payload?.workers) ? payload.workers : [])
-    .find((item) => item?.role === role) || null;
+  return (Array.isArray(payload?.workers) ? payload.workers : []).find((item) => item?.role === role) || null;
 }
 
-function renderAnalogStatus(payload) {
-  const record = analogWorkerRecord(payload, 'analog_2m');
+function renderAnalogWorker(payload, role, ids, fallbackSerial) {
+  const record = analogWorkerRecord(payload, role);
   const service = record?.service || {};
   const runtime = record?.runtime || {};
   const config = record?.config || {};
   const active = Boolean(service.active);
-  setBadge('analog2mBadge', active ? 'Running' : 'Stopped', active ? 'ok' : 'warn');
-  setText('analog2mSerial', config.rtl_serial || '00000440');
-  const channel = Array.isArray(config.channels) ? config.channels[0] : null;
-  setText('analog2mChannel', channel?.frequency_hz ? formatHz(channel.frequency_hz) : '-');
-  setText('analog2mRms', runtime.last_rms ?? '-');
-  setText('audioArbiterSource', payload?.audio_arbiter?.active_source || 'none');
-  const summary = {
-    service,
-    runtime,
-    audio_arbiter: payload?.audio_arbiter || {},
-    config_path: payload?.config_path || '',
-  };
-  setText('analog2mStatusText', safeJson(summary));
-  const startButton = field('startAnalog2mBtn');
-  const stopButton = field('stopAnalog2mBtn');
+  setBadge(ids.badge, active ? 'Running' : 'Stopped', active ? 'ok' : 'warn');
+  setText(ids.serial, config.rtl_serial || fallbackSerial);
+  const channel = runtime?.current_channel || (Array.isArray(config.channels) ? config.channels[0] : null);
+  setText(ids.channel, channel?.frequency_hz ? formatHz(channel.frequency_hz) : '-');
+  setText(ids.rms, runtime.last_rms ?? '-');
+  setText(ids.frames, runtime.frames_received ?? 0);
+  setText(ids.status, safeJson({ service, runtime, config }));
+  const startButton = field(ids.start);
+  const stopButton = field(ids.stop);
   if (startButton) startButton.disabled = active || !record?.controllable;
   if (stopButton) stopButton.disabled = !active || !record?.controllable;
+  return active;
+}
+
+function renderAnalogStatus(payload) {
+  const active2m = renderAnalogWorker(payload, 'analog_2m', {
+    badge: 'analog2mBadge', serial: 'analog2mSerial', channel: 'analog2mChannel', rms: 'analog2mRms', frames: 'analog2mFrames', status: 'analog2mStatusText', start: 'startAnalog2mBtn', stop: 'stopAnalog2mBtn'
+  }, '00000440');
+  const active70cm = renderAnalogWorker(payload, 'analog_70cm', {
+    badge: 'analog70cmBadge', serial: 'analog70cmSerial', channel: 'analog70cmChannel', rms: 'analog70cmRms', frames: 'analog70cmFrames', status: 'analog70cmStatusText', start: 'startAnalog70cmBtn', stop: 'stopAnalog70cmBtn'
+  }, '00000144');
+  const arbiter = payload?.audio_arbiter || {};
+  const owner = arbiter.active_source || 'none';
+  setBadge('audioArbiterBadge', owner === 'none' ? 'No audio owner' : `Audio: ${owner}`, owner === 'none' ? 'warn' : 'ok');
+  setText('audioArbiterSource', owner);
+  setText('audioArbiterSwitches', arbiter.source_switches ?? 0);
+  setText('audioArbiterQueued', arbiter.queued_chunks ?? 0);
+  setText('audioArbiterRelease', Number.isFinite(Number(arbiter.release_seconds)) ? `${Number(arbiter.release_seconds).toFixed(2)} s` : '-');
+  const startAll = field('startAllAnalogBtn');
+  const stopAll = field('stopAllAnalogBtn');
+  if (startAll) startAll.disabled = active2m && active70cm;
+  if (stopAll) stopAll.disabled = !active2m && !active70cm;
 }
 
 async function refreshAnalogStatus() {
@@ -322,18 +98,32 @@ async function refreshAnalogStatus() {
     renderAnalogStatus(latestAnalogStatus);
   } catch (error) {
     setBadge('analog2mBadge', 'Analog error', 'bad');
+    setBadge('analog70cmBadge', 'Analog error', 'bad');
     setText('analog2mStatusText', `Analog status failed: ${error.message}`);
+    setText('analog70cmStatusText', `Analog status failed: ${error.message}`);
   }
 }
 
-async function analog2mAction(action) {
+async function analogAction(band, action) {
   try {
-    latestAnalogStatus = await postJson(`/api/analog/2m/${action}`);
+    latestAnalogStatus = await postJson(`/api/analog/${band}/${action}`);
     renderAnalogStatus(latestAnalogStatus);
   } catch (error) {
-    setBadge('analog2mBadge', 'Action failed', 'bad');
-    setText('analog2mStatusText', `Analog ${action} failed: ${error.message}`);
+    const badge = band === '2m' ? 'analog2mBadge' : 'analog70cmBadge';
+    const status = band === '2m' ? 'analog2mStatusText' : 'analog70cmStatusText';
+    setBadge(badge, 'Action failed', 'bad');
+    setText(status, `Analog ${band} ${action} failed: ${error.message}`);
   }
+}
+
+async function analogAllAction(action) {
+  const errors = [];
+  for (const band of ['2m', '70cm']) {
+    try { await postJson(`/api/analog/${band}/${action}`); }
+    catch (error) { errors.push(`${band}: ${error.message}`); }
+  }
+  await refreshAnalogStatus();
+  if (errors.length) setText('analog70cmStatusText', `Combined ${action} issue: ${errors.join(' | ')}`);
 }
 
 async function refreshConfig() {
@@ -789,8 +579,12 @@ function attachEventHandlers() {
   field('startBtn')?.addEventListener('click', (event) => { if (p25AllowManualStart(event)) startScannerAndAudio(); });
   field('stopBtn')?.addEventListener('click', stopScanner);
   field('refreshReceiverInventoryBtn')?.addEventListener('click', refreshReceiverInventory);
-  field('startAnalog2mBtn')?.addEventListener('click', () => analog2mAction('start'));
-  field('stopAnalog2mBtn')?.addEventListener('click', () => analog2mAction('stop'));
+  field('startAnalog2mBtn')?.addEventListener('click', () => analogAction('2m', 'start'));
+  field('stopAnalog2mBtn')?.addEventListener('click', () => analogAction('2m', 'stop'));
+  field('startAnalog70cmBtn')?.addEventListener('click', () => analogAction('70cm', 'start'));
+  field('stopAnalog70cmBtn')?.addEventListener('click', () => analogAction('70cm', 'stop'));
+  field('startAllAnalogBtn')?.addEventListener('click', () => analogAllAction('start'));
+  field('stopAllAnalogBtn')?.addEventListener('click', () => analogAllAction('stop'));
   field('refreshAnalogStatusBtn')?.addEventListener('click', refreshAnalogStatus);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
   field('loadProfileBtn')?.addEventListener('click', loadSelectedProfile);

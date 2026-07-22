@@ -14,8 +14,10 @@ from .analog_worker import DEFAULT_CONFIG_PATH, load_analog_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATUS_DIR = PROJECT_ROOT / "runtime" / "status"
+# PHASE4_DUAL_ANALOG_WORKERS_V0_6C
 UNIT_MAP = {
     "analog_2m": "pi-scanner-analog-2m.service",
+    "analog_70cm": "pi-scanner-analog-70cm.service",
 }
 AUDIO_STATUS_URL = "http://127.0.0.1:8072/api/audio/status"
 

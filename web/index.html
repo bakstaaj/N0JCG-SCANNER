@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=0.6b-analog-arbiter">
+  <link rel="stylesheet" href="/app.css?v=0.6c-dual-analog">
 </head>
 <body>
   <div class="app-shell">
@@ -84,27 +84,50 @@
           <pre id="receiverInventoryStatus">Receiver inventory not loaded yet.</pre>
         </section>
 
-        <!-- PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B -->
-        <section class="rr-panel analog-worker-panel" data-v06-section="analog-worker">
+        <!-- PHASE4_DUAL_ANALOG_WORKERS_V0_6C -->
+        <section class="rr-panel analog-worker-panel" data-v06-section="analog-workers">
           <div class="section-row">
             <div>
-              <strong>Analog 2 m Worker</strong>
-              <p>Independent receiver on serial 00000440. Current-transmission audio arbitration prevents overlap with P25.</p>
+              <strong>Analog Receiver Workers</strong>
+              <p>Independent 2 m and 70 cm receivers monitor continuously. The first active transmission owns browser audio until it becomes quiet.</p>
             </div>
-            <span id="analog2mBadge" class="pill warn">Stopped</span>
+            <span id="audioArbiterBadge" class="pill warn">No audio owner</span>
           </div>
           <div class="wizard-actions compact-actions analog-worker-actions">
-            <button id="startAnalog2mBtn" type="button" class="primary">Start 2 m Worker</button>
-            <button id="stopAnalog2mBtn" type="button">Stop 2 m Worker</button>
+            <button id="startAllAnalogBtn" type="button" class="primary">Start Both Analog Workers</button>
+            <button id="stopAllAnalogBtn" type="button">Stop Both Analog Workers</button>
             <button id="refreshAnalogStatusBtn" type="button">Refresh Analog Status</button>
           </div>
-          <div class="details-grid analog-worker-grid">
-            <article><span>Receiver</span><strong id="analog2mSerial">00000440</strong></article>
-            <article><span>Channel</span><strong id="analog2mChannel">146.520000 MHz</strong></article>
-            <article><span>RMS</span><strong id="analog2mRms">-</strong></article>
-            <article><span>Audio Owner</span><strong id="audioArbiterSource">-</strong></article>
+          <div class="analog-worker-cards">
+            <article class="analog-band-card">
+              <div class="receiver-card-top"><strong>Analog 2 m</strong><span id="analog2mBadge" class="pill warn">Stopped</span></div>
+              <div class="analog-band-actions"><button id="startAnalog2mBtn" type="button" class="primary">Start 2 m</button><button id="stopAnalog2mBtn" type="button">Stop 2 m</button></div>
+              <div class="details-grid analog-worker-grid">
+                <article><span>Receiver</span><strong id="analog2mSerial">00000440</strong></article>
+                <article><span>Channel</span><strong id="analog2mChannel">146.520000 MHz</strong></article>
+                <article><span>RMS</span><strong id="analog2mRms">-</strong></article>
+                <article><span>Frames</span><strong id="analog2mFrames">-</strong></article>
+              </div>
+              <pre id="analog2mStatusText">2 m worker status not loaded.</pre>
+            </article>
+            <article class="analog-band-card">
+              <div class="receiver-card-top"><strong>Analog 70 cm</strong><span id="analog70cmBadge" class="pill warn">Stopped</span></div>
+              <div class="analog-band-actions"><button id="startAnalog70cmBtn" type="button" class="primary">Start 70 cm</button><button id="stopAnalog70cmBtn" type="button">Stop 70 cm</button></div>
+              <div class="details-grid analog-worker-grid">
+                <article><span>Receiver</span><strong id="analog70cmSerial">00000144</strong></article>
+                <article><span>Channel</span><strong id="analog70cmChannel">446.000000 MHz</strong></article>
+                <article><span>RMS</span><strong id="analog70cmRms">-</strong></article>
+                <article><span>Frames</span><strong id="analog70cmFrames">-</strong></article>
+              </div>
+              <pre id="analog70cmStatusText">70 cm worker status not loaded.</pre>
+            </article>
           </div>
-          <pre id="analog2mStatusText">Analog worker status not loaded.</pre>
+          <div class="details-grid analog-arbiter-grid">
+            <article><span>Audio Owner</span><strong id="audioArbiterSource">none</strong></article>
+            <article><span>Source Switches</span><strong id="audioArbiterSwitches">0</strong></article>
+            <article><span>Queued Frames</span><strong id="audioArbiterQueued">0</strong></article>
+            <article><span>Release Hold</span><strong id="audioArbiterRelease">-</strong></article>
+          </div>
         </section>
 
         <section class="rr-panel" data-v05d-section="profiles">
@@ -180,6 +203,6 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=0.6b-analog-arbiter"></script>
+  <script src="/app.js?v=0.6c-dual-analog"></script>
 </body>
 </html>

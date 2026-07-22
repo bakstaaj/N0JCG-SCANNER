@@ -430,3 +430,14 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     grid-template-columns: 1fr;
   }
 }
+
+
+/* PHASE4_DUAL_ANALOG_WORKERS_V0_6C */
+.analog-worker-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:12px; }
+.analog-band-card { min-width:0; padding:12px; border:1px solid var(--line); border-radius:18px; background:var(--panel-2); }
+.analog-band-actions { display:grid; grid-template-columns:repeat(2,minmax(120px,1fr)); gap:8px; margin:10px 0; }
+.analog-band-actions button { min-height:46px; }
+.analog-band-card .analog-worker-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.analog-band-card pre { max-height:150px; margin-top:10px; }
+.analog-arbiter-grid { margin-top:8px; }
+@media (max-width:820px) { .analog-worker-cards { grid-template-columns:1fr; } }

@@ -1195,6 +1195,19 @@ class Handler(SimpleHTTPRequestHandler):
                     HTTPStatus.ACCEPTED,
                 )
                 return
+            # PHASE4_DUAL_ANALOG_WORKERS_V0_6C
+            if path == "/api/analog/70cm/start":
+                self._send_json(
+                    MANAGER.analog_action("analog_70cm", "start"),
+                    HTTPStatus.ACCEPTED,
+                )
+                return
+            if path == "/api/analog/70cm/stop":
+                self._send_json(
+                    MANAGER.analog_action("analog_70cm", "stop"),
+                    HTTPStatus.ACCEPTED,
+                )
+                return
             if path in ("/api/audio/start", "/api/audio/stop"):
                 self._send_json(MANAGER.audio_status(self.headers.get("Host", "")), HTTPStatus.ACCEPTED)
                 return
