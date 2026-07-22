@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=0.6c-dual-analog">
+  <link rel="stylesheet" href="/app.css?v=0.6d-channel-editor">
 </head>
 <body>
   <div class="app-shell">
@@ -130,6 +130,49 @@
           </div>
         </section>
 
+        <!-- PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D -->
+        <section class="rr-panel analog-config-editor" data-v06-section="analog-config">
+          <div class="section-row">
+            <div>
+              <strong>Analog Channel Editor</strong>
+              <p>Edit channel lists and scanning behavior. Saving restarts only analog workers that are already running; P25 is not interrupted.</p>
+            </div>
+            <span id="analogConfigBadge" class="pill warn">Not loaded</span>
+          </div>
+
+          <div class="analog-config-band">
+            <div class="receiver-card-top">
+              <strong>2 m Channels</strong>
+              <button id="addAnalog2mChannelBtn" type="button">Add 2 m Channel</button>
+            </div>
+            <div class="analog-worker-settings">
+              <label>Default Gain dB<input id="analog2mDefaultGain" type="number" min="0" max="49.6" step="0.1"></label>
+              <label>PPM<input id="analog2mPpm" type="number" min="-200" max="200" step="1"></label>
+              <label>Scan Dwell Seconds<input id="analog2mDwell" type="number" min="0.15" max="20" step="0.05"></label>
+            </div>
+            <div id="analog2mChannelEditor" class="analog-channel-editor"></div>
+          </div>
+
+          <div class="analog-config-band">
+            <div class="receiver-card-top">
+              <strong>70 cm Channels</strong>
+              <button id="addAnalog70cmChannelBtn" type="button">Add 70 cm Channel</button>
+            </div>
+            <div class="analog-worker-settings">
+              <label>Default Gain dB<input id="analog70cmDefaultGain" type="number" min="0" max="49.6" step="0.1"></label>
+              <label>PPM<input id="analog70cmPpm" type="number" min="-200" max="200" step="1"></label>
+              <label>Scan Dwell Seconds<input id="analog70cmDwell" type="number" min="0.15" max="20" step="0.05"></label>
+            </div>
+            <div id="analog70cmChannelEditor" class="analog-channel-editor"></div>
+          </div>
+
+          <div class="wizard-actions compact-actions analog-config-actions">
+            <button id="saveAnalogConfigBtn" type="button" class="primary">Save and Apply Analog Configuration</button>
+            <button id="reloadAnalogConfigBtn" type="button">Discard Changes / Reload</button>
+          </div>
+          <pre id="analogConfigStatusText">Analog configuration has not been loaded.</pre>
+        </section>
+
         <section class="rr-panel" data-v05d-section="profiles">
           <div class="section-row"><div><strong>1. Saved Profiles</strong><p>Reload a known-good profile or save the current active setup for future use.</p></div><span id="profileStatusBadge" class="pill warn">Profiles</span></div>
           <div class="wizard-grid">
@@ -203,6 +246,6 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=0.6c-dual-analog"></script>
+  <script src="/app.js?v=0.6d-channel-editor"></script>
 </body>
 </html>

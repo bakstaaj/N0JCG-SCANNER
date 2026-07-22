@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "audio_udp_host": "127.0.0.1",
   "workers": {
     "analog_2m": {
@@ -17,11 +17,22 @@
       "squelch_rms": 1800,
       "channels": [
         {
+          "id": "analog_2m-1",
           "enabled": true,
+          "name": "2 m simplex calling (test channel)",
           "frequency_hz": 146520000,
-          "label": "2 m simplex calling (test channel)"
+          "mode": "nfm",
+          "priority": 0,
+          "gain_db": 40.2,
+          "squelch_rms": 1800,
+          "hold_seconds": 0.9,
+          "resume_delay_seconds": 1.2,
+          "ctcss_hz": null,
+          "dcs_code": "",
+          "recording_enabled": false
         }
-      ]
+      ],
+      "resume_delay_seconds": 1.2
     },
     "analog_70cm": {
       "enabled": false,
@@ -38,11 +49,22 @@
       "squelch_rms": 1800,
       "channels": [
         {
+          "id": "analog_70cm-1",
           "enabled": true,
+          "name": "70 cm simplex calling (reserved)",
           "frequency_hz": 446000000,
-          "label": "70 cm simplex calling (reserved)"
+          "mode": "nfm",
+          "priority": 0,
+          "gain_db": 40.2,
+          "squelch_rms": 1800,
+          "hold_seconds": 0.9,
+          "resume_delay_seconds": 1.2,
+          "ctcss_hz": null,
+          "dcs_code": "",
+          "recording_enabled": false
         }
-      ]
+      ],
+      "resume_delay_seconds": 1.2
     }
   }
 }

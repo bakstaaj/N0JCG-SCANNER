@@ -441,3 +441,91 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
 .analog-band-card pre { max-height:150px; margin-top:10px; }
 .analog-arbiter-grid { margin-top:8px; }
 @media (max-width:820px) { .analog-worker-cards { grid-template-columns:1fr; } }
+
+
+/* PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D */
+.analog-config-editor {
+  overflow: visible;
+}
+.analog-config-band {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel-2);
+}
+.analog-config-band > .receiver-card-top > button {
+  min-height: 44px;
+}
+.analog-worker-settings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+.analog-worker-settings input {
+  min-height: 46px;
+}
+.analog-channel-editor {
+  display: grid;
+  gap: 8px;
+}
+.analog-channel-row {
+  display: grid;
+  grid-template-columns:
+    58px minmax(170px, 1.5fr) 118px 88px 82px 92px 110px
+    82px 82px 96px 86px 68px 48px;
+  gap: 6px;
+  align-items: end;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #07131f;
+  overflow-x: auto;
+}
+.analog-channel-field {
+  min-width: 0;
+  gap: 3px;
+  font-size: 10px;
+}
+.analog-channel-field span {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.analog-channel-field input,
+.analog-channel-field select {
+  min-height: 40px;
+  padding: 6px;
+  border-radius: 9px;
+}
+.analog-channel-field input[type="checkbox"] {
+  width: 30px;
+  min-height: 30px;
+  margin: 5px auto;
+}
+.analog-channel-remove {
+  width: 44px;
+  min-height: 40px;
+  padding: 0;
+  font-size: 22px;
+}
+.analog-config-actions {
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  margin-top: 12px;
+}
+#analogConfigStatusText {
+  max-height: 150px;
+  margin-top: 10px;
+}
+@media (max-width: 900px) {
+  .analog-worker-settings,
+  .analog-config-actions {
+    grid-template-columns: 1fr;
+  }
+  .analog-channel-row {
+    grid-template-columns: repeat(2, minmax(130px, 1fr));
+  }
+  .analog-channel-remove {
+    width: 100%;
+  }
+}

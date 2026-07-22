@@ -48,6 +48,7 @@ let rrSites = [];
 let browserAudioLastEvent = 'Ready';
 let latestReceiverInventory = null; // PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
 let latestAnalogStatus = null; // PHASE4_DUAL_ANALOG_WORKERS_V0_6C
+let latestAnalogConfig = null; // PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
 function analogWorkerRecord(payload, role) {
   return (Array.isArray(payload?.workers) ? payload.workers : []).find((item) => item?.role === role) || null;
 }
@@ -124,6 +125,230 @@ async function analogAllAction(action) {
   }
   await refreshAnalogStatus();
   if (errors.length) setText('analog70cmStatusText', `Combined ${action} issue: ${errors.join(' | ')}`);
+}
+
+// PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
+const ANALOG_EDITOR_META = {
+  analog_2m: {
+    prefix: 'analog2m',
+    container: 'analog2mChannelEditor',
+    defaultFrequencyMhz: 146.52,
+    defaultName: 'New 2 m Channel',
+  },
+  analog_70cm: {
+    prefix: 'analog70cm',
+    container: 'analog70cmChannelEditor',
+    defaultFrequencyMhz: 446.0,
+    defaultName: 'New 70 cm Channel',
+  },
+};
+
+function analogEditorNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function analogEditorInput(label, type, value, options = {}) {
+  const wrapper = document.createElement('label');
+  wrapper.className = 'analog-channel-field';
+  const caption = document.createElement('span');
+  caption.textContent = label;
+  let input;
+  if (type === 'select') {
+    input = document.createElement('select');
+    (options.choices || []).forEach(([choiceValue, choiceLabel]) => {
+      const option = document.createElement('option');
+      option.value = choiceValue;
+      option.textContent = choiceLabel;
+      input.append(option);
+    });
+    input.value = value;
+  } else {
+    input = document.createElement('input');
+    input.type = type;
+    if (type === 'checkbox') {
+      input.checked = Boolean(value);
+    } else {
+      input.value = value ?? '';
+    }
+    Object.entries(options.attributes || {}).forEach(([name, attributeValue]) => {
+      input.setAttribute(name, String(attributeValue));
+    });
+  }
+  input.dataset.field = options.field || '';
+  wrapper.append(caption, input);
+  return wrapper;
+}
+
+function makeAnalogChannelRow(role, channel = {}) {
+  const meta = ANALOG_EDITOR_META[role];
+  const row = document.createElement('div');
+  row.className = 'analog-channel-row';
+  row.dataset.role = role;
+  row.dataset.channelId = channel.id || '';
+
+  row.append(
+    analogEditorInput('On', 'checkbox', channel.enabled !== false, { field: 'enabled' }),
+    analogEditorInput('Name', 'text', channel.name || meta.defaultName, { field: 'name' }),
+    analogEditorInput(
+      'MHz',
+      'number',
+      channel.frequency_hz ? Number(channel.frequency_hz) / 1e6 : meta.defaultFrequencyMhz,
+      { field: 'frequency_mhz', attributes: { min: 24, max: 1766, step: 0.000001 } }
+    ),
+    analogEditorInput('Mode', 'select', channel.mode || 'nfm', {
+      field: 'mode',
+      choices: [['nfm', 'NFM'], ['fm', 'FM'], ['am', 'AM']],
+    }),
+    analogEditorInput('Priority', 'number', channel.priority ?? 0, {
+      field: 'priority',
+      attributes: { min: 0, max: 100, step: 1 },
+    }),
+    analogEditorInput('Gain dB', 'number', channel.gain_db ?? 40.2, {
+      field: 'gain_db',
+      attributes: { min: 0, max: 49.6, step: 0.1 },
+    }),
+    analogEditorInput('Squelch RMS', 'number', channel.squelch_rms ?? 1800, {
+      field: 'squelch_rms',
+      attributes: { min: 0, max: 32767, step: 25 },
+    }),
+    analogEditorInput('Hold s', 'number', channel.hold_seconds ?? 0.9, {
+      field: 'hold_seconds',
+      attributes: { min: 0.1, max: 30, step: 0.1 },
+    }),
+    analogEditorInput('Reply s', 'number', channel.resume_delay_seconds ?? 1.2, {
+      field: 'resume_delay_seconds',
+      attributes: { min: 0, max: 30, step: 0.1 },
+    }),
+    analogEditorInput('CTCSS Hz', 'number', channel.ctcss_hz ?? '', {
+      field: 'ctcss_hz',
+      attributes: { min: 50, max: 300, step: 0.1, placeholder: 'optional' },
+    }),
+    analogEditorInput('DCS', 'text', channel.dcs_code || '', {
+      field: 'dcs_code',
+      attributes: { maxlength: 8, placeholder: 'optional' },
+    }),
+    analogEditorInput('Record', 'checkbox', channel.recording_enabled === true, {
+      field: 'recording_enabled',
+    })
+  );
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'danger-lite analog-channel-remove';
+  remove.textContent = '×';
+  remove.title = 'Remove channel';
+  remove.addEventListener('click', () => row.remove());
+  row.append(remove);
+  return row;
+}
+
+function renderAnalogConfigEditor(payload) {
+  latestAnalogConfig = structuredClone(payload?.config || payload || {});
+  const workers = latestAnalogConfig?.workers || {};
+  Object.entries(ANALOG_EDITOR_META).forEach(([role, meta]) => {
+    const worker = workers[role] || {};
+    const prefix = meta.prefix;
+    const gain = field(`${prefix}DefaultGain`);
+    const ppm = field(`${prefix}Ppm`);
+    const dwell = field(`${prefix}Dwell`);
+    if (gain) gain.value = worker.gain_db ?? 40.2;
+    if (ppm) ppm.value = worker.ppm ?? 0;
+    if (dwell) dwell.value = worker.dwell_seconds ?? 1.0;
+    const container = field(meta.container);
+    if (container) {
+      container.innerHTML = '';
+      (Array.isArray(worker.channels) ? worker.channels : []).forEach((channel) => {
+        container.append(makeAnalogChannelRow(role, channel));
+      });
+    }
+  });
+  setBadge('analogConfigBadge', 'Loaded', 'ok');
+  setText(
+    'analogConfigStatusText',
+    `Loaded schema ${latestAnalogConfig?.schema_version || '-'} from ${payload?.config_path || 'runtime config'}`
+  );
+}
+
+function collectAnalogChannelRow(row) {
+  const value = (name) => row.querySelector(`[data-field="${name}"]`);
+  const ctcssText = value('ctcss_hz')?.value?.trim() || '';
+  return {
+    id: row.dataset.channelId || '',
+    enabled: Boolean(value('enabled')?.checked),
+    name: value('name')?.value?.trim() || 'Unnamed Channel',
+    frequency_hz: Math.round(analogEditorNumber(value('frequency_mhz')?.value, 0) * 1e6),
+    mode: value('mode')?.value || 'nfm',
+    priority: Math.round(analogEditorNumber(value('priority')?.value, 0)),
+    gain_db: analogEditorNumber(value('gain_db')?.value, 40.2),
+    squelch_rms: Math.round(analogEditorNumber(value('squelch_rms')?.value, 1800)),
+    hold_seconds: analogEditorNumber(value('hold_seconds')?.value, 0.9),
+    resume_delay_seconds: analogEditorNumber(value('resume_delay_seconds')?.value, 1.2),
+    ctcss_hz: ctcssText ? analogEditorNumber(ctcssText, null) : null,
+    dcs_code: value('dcs_code')?.value?.trim().toUpperCase() || '',
+    recording_enabled: Boolean(value('recording_enabled')?.checked),
+  };
+}
+
+function collectAnalogConfigEditor() {
+  const config = structuredClone(latestAnalogConfig || {});
+  config.schema_version = 2;
+  config.audio_udp_host = config.audio_udp_host || '127.0.0.1';
+  config.workers = config.workers || {};
+
+  Object.entries(ANALOG_EDITOR_META).forEach(([role, meta]) => {
+    const prefix = meta.prefix;
+    const worker = config.workers[role] || {};
+    worker.gain_db = analogEditorNumber(field(`${prefix}DefaultGain`)?.value, 40.2);
+    worker.ppm = Math.round(analogEditorNumber(field(`${prefix}Ppm`)?.value, 0));
+    worker.dwell_seconds = analogEditorNumber(field(`${prefix}Dwell`)?.value, 1.0);
+    worker.channels = Array.from(field(meta.container)?.querySelectorAll('.analog-channel-row') || [])
+      .map(collectAnalogChannelRow);
+    config.workers[role] = worker;
+  });
+  return config;
+}
+
+async function loadAnalogConfigEditor() {
+  try {
+    const payload = await fetchJson('/api/analog/config');
+    renderAnalogConfigEditor(payload);
+  } catch (error) {
+    setBadge('analogConfigBadge', 'Load failed', 'bad');
+    setText('analogConfigStatusText', `Analog configuration load failed: ${error.message}`);
+  }
+}
+
+async function saveAnalogConfigEditor() {
+  setBadge('analogConfigBadge', 'Saving', 'warn');
+  try {
+    const config = collectAnalogConfigEditor();
+    const result = await postJson('/api/analog/config/save', {
+      config,
+      restart_running: true,
+    });
+    renderAnalogConfigEditor({
+      config: result.config,
+      config_path: result.config_path,
+    });
+    const restarted = Array.isArray(result.restarted_roles)
+      ? result.restarted_roles.join(', ')
+      : '';
+    setBadge('analogConfigBadge', 'Saved', 'ok');
+    setText(
+      'analogConfigStatusText',
+      `Saved: ${result.config_path}\nBackup: ${result.backup_path || 'none'}\nRestarted active workers: ${restarted || 'none'}`
+    );
+    await refreshAnalogStatus();
+  } catch (error) {
+    setBadge('analogConfigBadge', 'Save failed', 'bad');
+    setText('analogConfigStatusText', `Analog configuration save failed: ${error.message}`);
+  }
+}
+
+function addAnalogEditorChannel(role) {
+  const meta = ANALOG_EDITOR_META[role];
+  field(meta.container)?.append(makeAnalogChannelRow(role));
 }
 
 async function refreshConfig() {
@@ -586,6 +811,10 @@ function attachEventHandlers() {
   field('startAllAnalogBtn')?.addEventListener('click', () => analogAllAction('start'));
   field('stopAllAnalogBtn')?.addEventListener('click', () => analogAllAction('stop'));
   field('refreshAnalogStatusBtn')?.addEventListener('click', refreshAnalogStatus);
+  field('addAnalog2mChannelBtn')?.addEventListener('click', () => addAnalogEditorChannel('analog_2m'));
+  field('addAnalog70cmChannelBtn')?.addEventListener('click', () => addAnalogEditorChannel('analog_70cm'));
+  field('saveAnalogConfigBtn')?.addEventListener('click', saveAnalogConfigEditor);
+  field('reloadAnalogConfigBtn')?.addEventListener('click', loadAnalogConfigEditor);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
   field('loadProfileBtn')?.addEventListener('click', loadSelectedProfile);
   field('saveProfileBtn')?.addEventListener('click', saveCurrentProfile);
@@ -608,6 +837,7 @@ p25RemoveDashboardAutostartTuningRemnants();
   refreshRadioReferenceStatus();
   refreshReceiverInventory();
   refreshAnalogStatus();
+  loadAnalogConfigEditor();
   refreshStatus();
   refreshConfig();
   setInterval(refreshStatus, 3000);

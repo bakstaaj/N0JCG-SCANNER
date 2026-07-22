@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import array
+import copy
 import json
 import math
 import os
+import re
 import select
 import signal
 import socket
@@ -23,6 +25,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "runtime" / "settings" / "analog_receivers.json"
 DEFAULT_TEMPLATE_PATH = PROJECT_ROOT / "config" / "analog_receivers.example.json"
 DEFAULT_STATUS_DIR = PROJECT_ROOT / "runtime" / "status"
+EXPECTED_ANALOG_SERIALS = {
+    "analog_2m": "00000440",
+    "analog_70cm": "00000144",
+}
+EXPECTED_AUDIO_PORTS = {
+    "analog_2m": 23458,
+    "analog_70cm": 23459,
+}
+ALLOWED_MODES = {"nfm", "fm", "am"}
 
 
 class AnalogWorkerError(RuntimeError):
@@ -32,69 +43,186 @@ class AnalogWorkerError(RuntimeError):
 def atomic_json_write(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=False) + "\n",
+        encoding="utf-8",
+    )
     temporary.replace(path)
 
 
-def ensure_analog_config(
-    config_path: Path = DEFAULT_CONFIG_PATH,
-    template_path: Path = DEFAULT_TEMPLATE_PATH,
+def channel_id(role: str, index: int, raw_name: Any) -> str:
+    supplied = str(raw_name or "").strip()
+    if supplied:
+        clean = re.sub(r"[^A-Za-z0-9_.-]+", "-", supplied).strip("-._")
+        if clean:
+            return clean[:80]
+    return f"{role}-{index + 1}"
+
+
+def normalize_mode(value: Any, fallback: str = "nfm") -> str:
+    mode = str(value or fallback).strip().lower()
+    aliases = {
+        "narrowfm": "nfm",
+        "narrow_fm": "nfm",
+        "fm-n": "nfm",
+        "fm": "fm",
+        "widefm": "fm",
+        "am": "am",
+    }
+    mode = aliases.get(mode, mode)
+    if mode not in ALLOWED_MODES:
+        raise AnalogWorkerError(f"unsupported analog mode: {value!r}")
+    return mode
+
+
+def rtl_fm_mode(mode: str) -> str:
+    normalized = normalize_mode(mode)
+    return "am" if normalized == "am" else "fm"
+
+
+def optional_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    return float(value)
+
+
+def normalize_channel(
+    role: str,
+    index: int,
+    raw: Any,
+    worker_defaults: dict[str, Any],
 ) -> dict[str, Any]:
-    config_path = Path(config_path)
-    if config_path.exists():
-        return {"created": False, "path": str(config_path)}
-    if not template_path.exists():
-        raise AnalogWorkerError(f"analog template missing: {template_path}")
-    payload = json.loads(template_path.read_text(encoding="utf-8"))
-    validate_analog_config(payload)
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return {"created": True, "path": str(config_path), "template": str(template_path)}
+    if not isinstance(raw, dict):
+        raise AnalogWorkerError(f"{role} channel {index + 1} must be an object")
+    frequency_hz = int(raw.get("frequency_hz") or 0)
+    if frequency_hz < 24_000_000 or frequency_hz > 1_766_000_000:
+        raise AnalogWorkerError(
+            f"{role} channel {index + 1} frequency outside RTL-SDR range: {frequency_hz}"
+        )
+    name = str(raw.get("name") or raw.get("label") or frequency_hz).strip()
+    if not name:
+        name = str(frequency_hz)
+    dcs_code = str(raw.get("dcs_code") or "").strip().upper()
+    if dcs_code and not re.fullmatch(r"[0-9A-Z]{1,8}", dcs_code):
+        raise AnalogWorkerError(
+            f"{role} channel {index + 1} has invalid DCS code: {dcs_code!r}"
+        )
+    ctcss_hz = optional_float(raw.get("ctcss_hz"))
+    if ctcss_hz is not None and not 50.0 <= ctcss_hz <= 300.0:
+        raise AnalogWorkerError(
+            f"{role} channel {index + 1} CTCSS must be 50.0 through 300.0 Hz"
+        )
+    return {
+        "id": channel_id(role, index, raw.get("id") or name),
+        "enabled": bool(raw.get("enabled", True)),
+        "name": name[:120],
+        "frequency_hz": frequency_hz,
+        "mode": normalize_mode(
+            raw.get("mode"),
+            fallback=str(worker_defaults.get("modulation") or "nfm"),
+        ),
+        "priority": max(0, min(100, int(raw.get("priority") or 0))),
+        "gain_db": float(raw.get("gain_db", worker_defaults["gain_db"])),
+        "squelch_rms": max(
+            0,
+            int(raw.get("squelch_rms", worker_defaults["squelch_rms"])),
+        ),
+        "hold_seconds": max(
+            0.1,
+            min(
+                30.0,
+                float(raw.get("hold_seconds", worker_defaults["hang_seconds"])),
+            ),
+        ),
+        "resume_delay_seconds": max(
+            0.0,
+            min(
+                30.0,
+                float(
+                    raw.get(
+                        "resume_delay_seconds",
+                        worker_defaults["resume_delay_seconds"],
+                    )
+                ),
+            ),
+        ),
+        "ctcss_hz": ctcss_hz,
+        "dcs_code": dcs_code,
+        "recording_enabled": bool(raw.get("recording_enabled", False)),
+    }
 
 
 def validate_worker(role: str, item: Any) -> dict[str, Any]:
     if not isinstance(item, dict):
         raise AnalogWorkerError(f"worker {role!r} must be an object")
     serial = str(item.get("rtl_serial") or "").strip()
+    expected_serial = EXPECTED_ANALOG_SERIALS.get(role)
+    if expected_serial and serial != expected_serial:
+        raise AnalogWorkerError(
+            f"worker {role!r} must remain bound to RTL serial {expected_serial}; "
+            f"received {serial!r}"
+        )
     if len(serial) != 8 or not serial.isdigit():
         raise AnalogWorkerError(f"worker {role!r} has invalid rtl_serial {serial!r}")
+
     audio_rate = int(item.get("audio_rate_hz") or 8000)
     frame_bytes = int(item.get("frame_bytes") or 320)
     if audio_rate != 8000:
         raise AnalogWorkerError(f"worker {role!r} must use 8000 Hz browser audio")
     if frame_bytes != 320:
         raise AnalogWorkerError(f"worker {role!r} must use 320-byte PCM frames")
-    channels = []
-    for raw in item.get("channels", []):
-        if not isinstance(raw, dict) or not bool(raw.get("enabled", True)):
-            continue
-        frequency_hz = int(raw.get("frequency_hz") or 0)
-        if frequency_hz < 24_000_000 or frequency_hz > 1_766_000_000:
-            raise AnalogWorkerError(
-                f"worker {role!r} channel frequency outside RTL-SDR range: {frequency_hz}"
-            )
-        channels.append(
-            {
-                "frequency_hz": frequency_hz,
-                "label": str(raw.get("label") or frequency_hz),
-            }
+
+    audio_port = int(
+        item.get("audio_udp_port")
+        or EXPECTED_AUDIO_PORTS.get(role, 23458)
+    )
+    expected_port = EXPECTED_AUDIO_PORTS.get(role)
+    if expected_port and audio_port != expected_port:
+        raise AnalogWorkerError(
+            f"worker {role!r} must use audio UDP port {expected_port}"
         )
+
+    defaults = {
+        "gain_db": float(item.get("gain_db", 40.2)),
+        "squelch_rms": max(0, int(item.get("squelch_rms") or 1800)),
+        "hang_seconds": max(0.1, float(item.get("hang_seconds") or 0.9)),
+        "resume_delay_seconds": max(
+            0.0,
+            float(item.get("resume_delay_seconds") or 1.2),
+        ),
+        "modulation": normalize_mode(item.get("modulation"), "nfm"),
+    }
+    channels = [
+        normalize_channel(role, index, raw, defaults)
+        for index, raw in enumerate(item.get("channels", []))
+    ]
     if not channels:
+        raise AnalogWorkerError(f"worker {role!r} has no channels")
+    if not any(channel["enabled"] for channel in channels):
         raise AnalogWorkerError(f"worker {role!r} has no enabled channels")
+
+    channel_ids = [channel["id"] for channel in channels]
+    if len(channel_ids) != len(set(channel_ids)):
+        raise AnalogWorkerError(f"worker {role!r} contains duplicate channel IDs")
+
     return {
         "role": role,
         "enabled": bool(item.get("enabled", False)),
         "rtl_serial": serial,
-        "modulation": str(item.get("modulation") or "fm"),
-        "gain_db": float(item.get("gain_db", 40.2)),
+        "modulation": defaults["modulation"],
+        "gain_db": defaults["gain_db"],
         "ppm": int(item.get("ppm") or 0),
         "sample_rate_hz": int(item.get("sample_rate_hz") or 24000),
         "audio_rate_hz": audio_rate,
-        "audio_udp_port": int(item.get("audio_udp_port") or 23458),
+        "audio_udp_port": audio_port,
         "frame_bytes": frame_bytes,
-        "dwell_seconds": max(0.5, float(item.get("dwell_seconds") or 2.0)),
-        "hang_seconds": max(0.1, float(item.get("hang_seconds") or 0.9)),
-        "squelch_rms": max(0, int(item.get("squelch_rms") or 1800)),
+        "dwell_seconds": max(
+            0.15,
+            min(20.0, float(item.get("dwell_seconds") or 1.0)),
+        ),
+        "hang_seconds": defaults["hang_seconds"],
+        "resume_delay_seconds": defaults["resume_delay_seconds"],
+        "squelch_rms": defaults["squelch_rms"],
         "channels": channels,
     }
 
@@ -109,8 +237,9 @@ def validate_analog_config(payload: Any) -> dict[str, Any]:
         role: validate_worker(role, item)
         for role, item in workers.items()
     }
-    if "analog_2m" not in normalized or "analog_70cm" not in normalized:
-        raise AnalogWorkerError("analog_2m and analog_70cm workers are required")
+    for required in EXPECTED_ANALOG_SERIALS:
+        if required not in normalized:
+            raise AnalogWorkerError(f"required analog worker missing: {required}")
     serials = [item["rtl_serial"] for item in normalized.values()]
     if len(serials) != len(set(serials)):
         raise AnalogWorkerError("analog workers cannot share an RTL serial")
@@ -118,19 +247,82 @@ def validate_analog_config(payload: Any) -> dict[str, Any]:
     if len(ports) != len(set(ports)):
         raise AnalogWorkerError("analog workers cannot share an audio UDP port")
     return {
-        "schema_version": int(payload.get("schema_version") or 1),
-        "audio_udp_host": str(payload.get("audio_udp_host") or "127.0.0.1"),
+        "schema_version": 2,
+        "audio_udp_host": str(
+            payload.get("audio_udp_host") or "127.0.0.1"
+        ),
         "workers": normalized,
     }
 
 
-def load_analog_config(config_path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
+def ensure_analog_config(
+    config_path: Path = DEFAULT_CONFIG_PATH,
+    template_path: Path = DEFAULT_TEMPLATE_PATH,
+) -> dict[str, Any]:
+    config_path = Path(config_path)
+    if config_path.exists():
+        return {"created": False, "path": str(config_path)}
+    if not template_path.exists():
+        raise AnalogWorkerError(f"analog template missing: {template_path}")
+    payload = json.loads(template_path.read_text(encoding="utf-8"))
+    normalized = validate_analog_config(payload)
+    atomic_json_write(config_path, normalized)
+    return {
+        "created": True,
+        "path": str(config_path),
+        "template": str(template_path),
+    }
+
+
+def load_raw_analog_config(
+    config_path: Path = DEFAULT_CONFIG_PATH,
+) -> dict[str, Any]:
     ensure_analog_config(config_path=config_path)
     try:
         payload = json.loads(Path(config_path).read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise AnalogWorkerError(f"analog config JSON invalid: {exc}") from exc
-    return validate_analog_config(payload)
+    if not isinstance(payload, dict):
+        raise AnalogWorkerError("analog config must be an object")
+    return payload
+
+
+def load_analog_config(
+    config_path: Path = DEFAULT_CONFIG_PATH,
+) -> dict[str, Any]:
+    return validate_analog_config(load_raw_analog_config(config_path))
+
+
+def write_analog_config(
+    payload: dict[str, Any],
+    config_path: Path = DEFAULT_CONFIG_PATH,
+    backup: bool = True,
+) -> dict[str, Any]:
+    normalized = validate_analog_config(payload)
+    path = Path(config_path)
+    backup_path: Path | None = None
+    if backup and path.exists():
+        backup_dir = path.parent / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        backup_path = backup_dir / f"analog_receivers_{stamp}.json"
+        backup_path.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    atomic_json_write(path, normalized)
+    return {
+        "ok": True,
+        "config_path": str(path),
+        "backup_path": str(backup_path) if backup_path else None,
+        "config": normalized,
+    }
+
+
+def migrate_analog_config_file(
+    config_path: Path = DEFAULT_CONFIG_PATH,
+) -> dict[str, Any]:
+    raw = load_raw_analog_config(config_path)
+    result = write_analog_config(raw, config_path=config_path, backup=True)
+    result["migrated"] = True
+    return result
 
 
 def pcm_rms(frame: bytes) -> int:
@@ -171,15 +363,20 @@ class AnalogWorker:
         self.frames_forwarded = 0
         self.bytes_received = 0
         self.channels_visited = 0
+        self.scan_cycle_count = 0
+        self.activity_events = 0
         self.last_rms = 0
         self.peak_rms = 0
         self.current_channel: dict[str, Any] | None = None
+        self.last_active_channel: dict[str, Any] | None = None
         self.current_process: subprocess.Popen[bytes] | None = None
         self.stderr_lines: deque[str] = deque(maxlen=30)
         self.last_error = ""
         self.last_activity_utc: float | None = None
         self.smoke_deadline = (
-            self.started_utc + self.smoke_seconds if self.smoke_seconds > 0 else None
+            self.started_utc + self.smoke_seconds
+            if self.smoke_seconds > 0
+            else None
         )
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -196,9 +393,14 @@ class AnalogWorker:
             "role": self.role,
             "state": state,
             "worker_pid": os.getpid(),
-            "rtl_process_pid": process.pid if process is not None and process.poll() is None else None,
+            "rtl_process_pid": (
+                process.pid
+                if process is not None and process.poll() is None
+                else None
+            ),
             "rtl_serial": self.config["rtl_serial"],
             "current_channel": self.current_channel,
+            "last_active_channel": self.last_active_channel,
             "audio_udp_host": self.udp_host,
             "audio_udp_port": self.config["audio_udp_port"],
             "no_forward": self.no_forward,
@@ -207,9 +409,10 @@ class AnalogWorker:
             "frames_forwarded": self.frames_forwarded,
             "bytes_received": self.bytes_received,
             "channels_visited": self.channels_visited,
+            "scan_cycle_count": self.scan_cycle_count,
+            "activity_events": self.activity_events,
             "last_rms": self.last_rms,
             "peak_rms": self.peak_rms,
-            "squelch_rms": self.config["squelch_rms"],
             "last_activity_utc": self.last_activity_utc,
             "last_error": self.last_error,
             "stderr_tail": list(self.stderr_lines),
@@ -220,6 +423,15 @@ class AnalogWorker:
     def write_status(self, state: str = "running") -> None:
         atomic_json_write(self.status_path, self.status_payload(state=state))
 
+    def enabled_channels(self) -> list[dict[str, Any]]:
+        indexed = [
+            (index, copy.deepcopy(channel))
+            for index, channel in enumerate(self.config["channels"])
+            if channel["enabled"]
+        ]
+        indexed.sort(key=lambda item: (-item[1]["priority"], item[0]))
+        return [channel for _index, channel in indexed]
+
     def rtl_command(self, channel: dict[str, Any]) -> list[str]:
         return [
             "rtl_fm",
@@ -228,13 +440,13 @@ class AnalogWorker:
             "-f",
             str(channel["frequency_hz"]),
             "-M",
-            self.config["modulation"],
+            rtl_fm_mode(channel["mode"]),
             "-s",
             str(self.config["sample_rate_hz"]),
             "-r",
             str(self.config["audio_rate_hz"]),
             "-g",
-            str(self.config["gain_db"]),
+            str(channel["gain_db"]),
             "-p",
             str(self.config["ppm"]),
             "-l",
@@ -247,26 +459,33 @@ class AnalogWorker:
             line = process.stderr.readline()
             if not line:
                 return
-            self.stderr_lines.append(line.decode("utf-8", errors="replace").rstrip())
+            self.stderr_lines.append(
+                line.decode("utf-8", errors="replace").rstrip()
+            )
 
     def run_channel(self, channel: dict[str, Any]) -> None:
-        self.current_channel = dict(channel)
+        self.current_channel = copy.deepcopy(channel)
         self.channels_visited += 1
-        command = self.rtl_command(channel)
         process = subprocess.Popen(
-            command,
+            self.rtl_command(channel),
             cwd=str(PROJECT_ROOT),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             bufsize=0,
         )
         self.current_process = process
-        threading.Thread(target=self.stderr_reader, args=(process,), daemon=True).start()
+        threading.Thread(
+            target=self.stderr_reader,
+            args=(process,),
+            daemon=True,
+        ).start()
         assert process.stdout is not None
         fd = process.stdout.fileno()
         buffer = bytearray()
         channel_started = time.time()
         last_active = 0.0
+        activity_seen = False
+        last_state_write = 0.0
         self.write_status("tuning")
 
         while self.keep_running and process.poll() is None:
@@ -274,7 +493,7 @@ class AnalogWorker:
             if self.smoke_deadline is not None and now >= self.smoke_deadline:
                 self.keep_running = False
                 break
-            ready, _, _ = select.select([fd], [], [], 0.25)
+            ready, _, _ = select.select([fd], [], [], 0.20)
             if ready:
                 chunk = os.read(fd, 4096)
                 if not chunk:
@@ -289,25 +508,45 @@ class AnalogWorker:
                     rms = pcm_rms(frame)
                     self.last_rms = rms
                     self.peak_rms = max(self.peak_rms, rms)
-                    if rms >= self.config["squelch_rms"]:
+                    if rms >= channel["squelch_rms"]:
+                        if not activity_seen:
+                            self.activity_events += 1
+                        activity_seen = True
                         last_active = time.time()
                         self.last_activity_utc = last_active
+                        self.last_active_channel = copy.deepcopy(channel)
                         if not self.no_forward:
                             self.udp_socket.sendto(
                                 frame,
-                                (self.udp_host, self.config["audio_udp_port"]),
+                                (
+                                    self.udp_host,
+                                    self.config["audio_udp_port"],
+                                ),
                             )
                             self.frames_forwarded += 1
+
             now = time.time()
-            active_hold = last_active > 0 and now - last_active <= self.config["hang_seconds"]
-            if (
-                self.smoke_deadline is None
-                and not active_hold
-                and now - channel_started >= self.config["dwell_seconds"]
-            ):
+            state = "scanning"
+            should_advance = False
+            if activity_seen:
+                age = now - last_active
+                if age <= channel["hold_seconds"]:
+                    state = "active"
+                elif age <= (
+                    channel["hold_seconds"]
+                    + channel["resume_delay_seconds"]
+                ):
+                    state = "reply_delay"
+                else:
+                    should_advance = True
+            elif now - channel_started >= self.config["dwell_seconds"]:
+                should_advance = True
+
+            if now - last_state_write >= 0.5:
+                self.write_status(state)
+                last_state_write = now
+            if self.smoke_deadline is None and should_advance:
                 break
-            if self.frames_received % 20 == 0:
-                self.write_status("active" if active_hold else "scanning")
 
         if process.poll() is None:
             process.terminate()
@@ -327,13 +566,16 @@ class AnalogWorker:
         signal.signal(signal.SIGTERM, self.request_stop)
         signal.signal(signal.SIGINT, self.request_stop)
         self.write_status("starting")
-        channels = list(self.config["channels"])
-        index = 0
         try:
             while self.keep_running:
-                channel = channels[index % len(channels)]
-                index += 1
-                self.run_channel(channel)
+                channels = self.enabled_channels()
+                for channel in channels:
+                    if not self.keep_running:
+                        break
+                    self.run_channel(channel)
+                    if self.smoke_deadline is not None:
+                        break
+                self.scan_cycle_count += 1
                 if self.smoke_deadline is not None:
                     break
         finally:
@@ -342,7 +584,10 @@ class AnalogWorker:
 
         if self.smoke_seconds > 0:
             if self.bytes_received <= 0 or self.frames_received <= 0:
-                self.last_error = self.last_error or "hardware smoke received no PCM data"
+                self.last_error = (
+                    self.last_error
+                    or "hardware smoke received no PCM data"
+                )
                 self.write_status("smoke_failed")
                 return 1
             self.last_error = ""
@@ -358,35 +603,67 @@ def self_test() -> int:
     tone = array.array("h", [0, 1000, -1000, 2000, -2000])
     if sys.byteorder != "little":
         tone.byteswap()
-    if pcm_rms(tone.tobytes()) <= 0:
-        print("FAIL: PCM RMS self-test")
+    checks = [
+        pcm_rms(tone.tobytes()) > 0,
+        normalized["schema_version"] == 2,
+        normalized["workers"]["analog_2m"]["rtl_serial"] == "00000440",
+        normalized["workers"]["analog_70cm"]["rtl_serial"] == "00000144",
+        normalized["workers"]["analog_2m"]["channels"][0]["mode"] == "nfm",
+        rtl_fm_mode("nfm") == "fm",
+        rtl_fm_mode("am") == "am",
+    ]
+    if not all(checks):
+        print(json.dumps(normalized, indent=2))
+        print("FINAL: FAIL")
         return 1
-    if normalized["workers"]["analog_2m"]["rtl_serial"] != "00000440":
-        print("FAIL: analog_2m serial self-test")
+    bad = copy.deepcopy(payload)
+    bad["workers"]["analog_2m"]["rtl_serial"] = "00000001"
+    try:
+        validate_analog_config(bad)
+    except AnalogWorkerError:
+        pass
+    else:
+        print("FAIL: protected analog serial was accepted")
         return 1
-    print("PASS: analog worker self-test")
+    print("PASS: analog worker/configuration self-test")
     print("FINAL: PASS")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="PI-SCANNER analog receiver worker")
+    parser = argparse.ArgumentParser(
+        description="PI-SCANNER analog receiver worker"
+    )
     parser.add_argument("--role", default="analog_2m")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--status-path", default="")
     parser.add_argument("--smoke-seconds", type=float, default=0.0)
     parser.add_argument("--no-forward", action="store_true")
     parser.add_argument("--ensure-config", action="store_true")
+    parser.add_argument("--migrate-config", action="store_true")
+    parser.add_argument("--print-config", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args(argv)
 
+    config_path = Path(args.config)
     if args.self_test:
         return self_test()
     if args.ensure_config:
-        print(json.dumps(ensure_analog_config(Path(args.config)), indent=2))
+        print(json.dumps(ensure_analog_config(config_path), indent=2))
+        return 0
+    if args.migrate_config:
+        print(
+            json.dumps(
+                migrate_analog_config_file(config_path),
+                indent=2,
+            )
+        )
+        return 0
+    if args.print_config:
+        print(json.dumps(load_analog_config(config_path), indent=2))
         return 0
 
-    config = load_analog_config(Path(args.config))
+    config = load_analog_config(config_path)
     status_path = (
         Path(args.status_path)
         if args.status_path

@@ -1,4 +1,4 @@
-# PI-SCANNER analog service status and control helpers.
+# PI-SCANNER analog service status, configuration, and control helpers.
 
 from __future__ import annotations
 
@@ -10,11 +10,15 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from .analog_worker import DEFAULT_CONFIG_PATH, load_analog_config
+from .analog_worker import (
+    AnalogWorkerError,
+    DEFAULT_CONFIG_PATH,
+    load_analog_config,
+    write_analog_config,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATUS_DIR = PROJECT_ROOT / "runtime" / "status"
-# PHASE4_DUAL_ANALOG_WORKERS_V0_6C
 UNIT_MAP = {
     "analog_2m": "pi-scanner-analog-2m.service",
     "analog_70cm": "pi-scanner-analog-70cm.service",
@@ -53,7 +57,10 @@ def unit_state(unit: str) -> dict[str, Any]:
     return {
         "unit": unit,
         "active": active.stdout.strip() == "active",
-        "active_state": active.stdout.strip() or properties.get("ActiveState", "unknown"),
+        "active_state": (
+            active.stdout.strip()
+            or properties.get("ActiveState", "unknown")
+        ),
         "enabled": enabled.stdout.strip() == "enabled",
         "enabled_state": enabled.stdout.strip() or "unknown",
         "main_pid": int(properties.get("MainPID") or 0) or None,
@@ -69,17 +76,49 @@ def read_worker_status(role: str) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
-        return {"state": "status_error", "status_path": str(path), "error": str(exc)}
+        return {
+            "state": "status_error",
+            "status_path": str(path),
+            "error": str(exc),
+        }
     payload["status_path"] = str(path)
     return payload
 
 
 def audio_arbiter_status() -> dict[str, Any]:
     try:
-        with urllib.request.urlopen(AUDIO_STATUS_URL, timeout=1.0) as response:
-            return json.loads(response.read(512 * 1024).decode("utf-8"))
-    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
-        return {"ok": False, "error": str(exc), "url": AUDIO_STATUS_URL}
+        with urllib.request.urlopen(
+            AUDIO_STATUS_URL,
+            timeout=1.0,
+        ) as response:
+            return json.loads(
+                response.read(512 * 1024).decode("utf-8")
+            )
+    except (
+        OSError,
+        urllib.error.URLError,
+        json.JSONDecodeError,
+    ) as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+            "url": AUDIO_STATUS_URL,
+        }
+
+
+def analog_config_payload() -> dict[str, Any]:
+    config = load_analog_config(DEFAULT_CONFIG_PATH)
+    return {
+        "ok": True,
+        "schema_version": config["schema_version"],
+        "config_path": str(DEFAULT_CONFIG_PATH),
+        "config": config,
+        "running_roles": [
+            role
+            for role, unit in UNIT_MAP.items()
+            if unit_state(unit)["active"]
+        ],
+    }
 
 
 def analog_status_payload() -> dict[str, Any]:
@@ -115,20 +154,78 @@ def analog_status_payload() -> dict[str, Any]:
     }
 
 
-def analog_service_action(role: str, action: str) -> dict[str, Any]:
+def analog_service_action(
+    role: str,
+    action: str,
+) -> dict[str, Any]:
     if role not in UNIT_MAP:
-        raise AnalogRuntimeError(f"analog role is not controllable in this phase: {role}")
+        raise AnalogRuntimeError(
+            f"analog role is not controllable: {role}"
+        )
     if action not in ("start", "stop", "restart"):
-        raise AnalogRuntimeError(f"unsupported analog action: {action}")
+        raise AnalogRuntimeError(
+            f"unsupported analog action: {action}"
+        )
     unit = UNIT_MAP[role]
     result = _run_systemctl(action, unit)
     if result.returncode != 0:
         raise AnalogRuntimeError(
             f"systemctl {action} {unit} failed: "
-            + (result.stderr.strip() or result.stdout.strip() or f"rc={result.returncode}")
+            + (
+                result.stderr.strip()
+                or result.stdout.strip()
+                or f"rc={result.returncode}"
+            )
         )
     time.sleep(0.35)
     payload = analog_status_payload()
     payload["action"] = action
     payload["role"] = role
     return payload
+
+
+def save_analog_config(request: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(request, dict):
+        raise AnalogWorkerError(
+            "analog config save request must be an object"
+        )
+    payload = request.get("config", request)
+    if not isinstance(payload, dict):
+        raise AnalogWorkerError(
+            "analog config save payload must be an object"
+        )
+    restart_running = bool(request.get("restart_running", True))
+    running_before = [
+        role
+        for role, unit in UNIT_MAP.items()
+        if unit_state(unit)["active"]
+    ]
+    result = write_analog_config(
+        payload,
+        config_path=DEFAULT_CONFIG_PATH,
+        backup=True,
+    )
+    restarted_roles: list[str] = []
+    if restart_running:
+        for role in running_before:
+            unit = UNIT_MAP[role]
+            restarted = _run_systemctl("restart", unit)
+            if restarted.returncode != 0:
+                raise AnalogRuntimeError(
+                    f"saved config but failed to restart {unit}: "
+                    + (
+                        restarted.stderr.strip()
+                        or restarted.stdout.strip()
+                        or f"rc={restarted.returncode}"
+                    )
+                )
+            restarted_roles.append(role)
+    time.sleep(0.35)
+    return {
+        "ok": True,
+        **result,
+        "restart_running": restart_running,
+        "running_roles_before": running_before,
+        "restarted_roles": restarted_roles,
+        "status": analog_status_payload(),
+    }

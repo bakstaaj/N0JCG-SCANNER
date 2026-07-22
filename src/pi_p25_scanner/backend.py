@@ -48,7 +48,14 @@ if __package__ in (None, ""):
     from pi_p25_scanner.runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from pi_p25_scanner.runtime_activity import RuntimeActivityTracker
     from pi_p25_scanner.receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
-    from pi_p25_scanner.analog_runtime import analog_service_action, analog_status_payload  # PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
+    from pi_p25_scanner.analog_runtime import (
+        AnalogRuntimeError,
+        AnalogWorkerError,
+        analog_config_payload,
+        analog_service_action,
+        analog_status_payload,
+        save_analog_config,
+    )  # PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
     try:
         from pi_p25_scanner.radioreference_import import (
             RadioReferenceError,
@@ -87,7 +94,14 @@ else:
     from .runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from .runtime_activity import RuntimeActivityTracker
     from .receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
-    from .analog_runtime import analog_service_action, analog_status_payload  # PHASE3_ANALOG_WORKER_AUDIO_ARBITER_V0_6B
+    from .analog_runtime import (
+        AnalogRuntimeError,
+        AnalogWorkerError,
+        analog_config_payload,
+        analog_service_action,
+        analog_status_payload,
+        save_analog_config,
+    )  # PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
     try:
         from .radioreference_import import (
             RadioReferenceError,
@@ -467,7 +481,7 @@ class ScannerManager:
                 self.status.ok = True
                 if self.status.scanner_state == "config_error":
                     self.status.scanner_state = "stopped"
-            except ConfigError as exc:
+            except (ConfigError, AnalogWorkerError, AnalogRuntimeError) as exc:
                 self.talkgroup_labels = {}
                 self.blocked_talkgroup_ids = set()
                 self.status.talkgroup_catalog = {"count": 0, "labels": {}}
@@ -486,6 +500,13 @@ class ScannerManager:
 
     def analog_action(self, role: str, action: str) -> dict[str, Any]:
         return analog_service_action(role, action)
+
+    # PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
+    def analog_config_payload(self) -> dict[str, Any]:
+        return analog_config_payload()
+
+    def save_analog_config(self, request: dict[str, Any]) -> dict[str, Any]:
+        return save_analog_config(request)
 
     def config_payload(self) -> dict[str, Any]:
         payload, path = read_active_config_payload()
@@ -1147,6 +1168,10 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/analog/status":
                 self._send_json(MANAGER.analog_status_payload())
                 return
+            # PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
+            if path == "/api/analog/config":
+                self._send_json(MANAGER.analog_config_payload())
+                return
             if path == "/api/config/named":
                 self._send_json(MANAGER.named_configs_payload())
                 return
@@ -1208,6 +1233,13 @@ class Handler(SimpleHTTPRequestHandler):
                     HTTPStatus.ACCEPTED,
                 )
                 return
+            # PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
+            if path == "/api/analog/config/save":
+                self._send_json(
+                    MANAGER.save_analog_config(self._read_json()),
+                    HTTPStatus.ACCEPTED,
+                )
+                return
             if path in ("/api/audio/start", "/api/audio/stop"):
                 self._send_json(MANAGER.audio_status(self.headers.get("Host", "")), HTTPStatus.ACCEPTED)
                 return
@@ -1256,7 +1288,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json(result, HTTPStatus.ACCEPTED)
                 return
             self._send_json({"ok": False, "error": "unknown endpoint"}, HTTPStatus.NOT_FOUND)
-        except ConfigError as exc:
+        except (ConfigError, AnalogWorkerError, AnalogRuntimeError) as exc:
             self._handle_exception(exc, HTTPStatus.BAD_REQUEST)
         except Exception as exc:
             self._handle_exception(exc, HTTPStatus.INTERNAL_SERVER_ERROR)
