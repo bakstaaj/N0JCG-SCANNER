@@ -52,6 +52,20 @@ let latestReceiverInventory = null; // PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
 const STATUS_REFRESH_INTERVAL_MS = 500;
 let statusRefreshInFlight = false;
 
+// PHASE18B_FAST_ACTIVITY_AND_BUILD_MARKER
+const FAST_ACTIVITY_REFRESH_INTERVAL_MS = 250;
+const PI_P25_UI_BUILD_ID = '18B';
+let fastActivityRefreshInFlight = false;
+let statusRenderSequence = 0;
+let activityRenderSequence = 0;
+
+function updateUiHeartbeat() {
+  setText(
+    'lastUpdated',
+    `Last update: ${new Date().toLocaleTimeString()} · ${PI_P25_UI_BUILD_ID} · S#${statusRenderSequence} · A#${activityRenderSequence}`
+  );
+}
+
 const CATEGORY_DEFAULTS = [
   'Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Utilities', 'Transportation',
   'Interop', 'Emergency Management', 'Corrections', 'Schools', 'Federal', 'Other',
@@ -189,7 +203,8 @@ function renderDashboard(status) {
   setText('validatedCommand', formatList(process.command));
   setText('lastEvent', status?.last_event || '-');
   setText('logTail', formatList(status?.log_tail));
-  setText('lastUpdated', `Last update: ${new Date().toLocaleTimeString()}`);
+  statusRenderSequence += 1;
+  updateUiHeartbeat();
   setBadge('stateBadge', running ? 'ON AIR' : (status?.scanner_state || '-'), running ? 'ok' : (status?.ok ? 'warn' : 'bad'));
   setBadge('connectionStatus', 'Connected', 'ok');
   renderActivitySummary(status?.activity_summary || {});
@@ -209,6 +224,36 @@ async function refreshStatus() {
     setText('lastEvent', `Status error: ${error.message}`);
   } finally {
     statusRefreshInFlight = false;
+  }
+}
+
+async function refreshFastActivity() {
+  if (fastActivityRefreshInFlight) return;
+  fastActivityRefreshInFlight = true;
+  try {
+    const activity = await fetchJson('/api/activity');
+    latestStatus = { ...(latestStatus || {}), ...(activity || {}) };
+    const talkgroup = bestTalkgroup(latestStatus);
+
+    setText(
+      'dashboardSummary',
+      talkgroup.has_talkgroup
+        ? talkgroup.short_label
+        : (latestStatus?.decoder_process?.running
+            ? 'Scanning for voice activity'
+            : 'Waiting for activity')
+    );
+    setText('activeTgid', talkgroup.tgid_text);
+    setText('activeTalkgroupLabel', talkgroup.label);
+    setText('voiceFrequency', formatHz(talkgroup.voice_frequency_hz));
+    if (activity?.p25_phase) setText('p25Phase', activity.p25_phase);
+
+    activityRenderSequence += 1;
+    updateUiHeartbeat();
+  } catch (error) {
+    setText('lastEvent', `Activity status error: ${error.message}`);
+  } finally {
+    fastActivityRefreshInFlight = false;
   }
 }
 
@@ -767,8 +812,10 @@ p25RemoveDashboardAutostartTuningRemnants();
   refreshRadioReferenceStatus();
   refreshReceiverInventory();
   refreshStatus();
+  refreshFastActivity();
   refreshConfig();
   setInterval(refreshStatus, STATUS_REFRESH_INTERVAL_MS);
+  setInterval(refreshFastActivity, FAST_ACTIVITY_REFRESH_INTERVAL_MS);
   setInterval(refreshReceiverInventory, 15000);
 }
 

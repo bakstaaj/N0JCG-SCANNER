@@ -502,6 +502,8 @@ def main(argv: list[str] | None = None) -> int:
     atomic_write_json(config_output, config)
 
     command = [
+        sys.executable,
+        "-u",
         str(multi_rx_app),
         "-c",
         str(config_output),
@@ -542,7 +544,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     os.chdir(multi_rx_app.parent)
-    os.execvpe(command[0], command, os.environ.copy())
+    exec_env = os.environ.copy()
+    exec_env["PYTHONUNBUFFERED"] = "1"
+    exec_env.setdefault("PYTHONIOENCODING", "utf-8")
+    os.execvpe(command[0], command, exec_env)
     return 127
 
 
