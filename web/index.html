@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=0.6d-channel-editor">
+  <link rel="stylesheet" href="/app.css?v=0.6e-activity-history">
 </head>
 <body>
   <div class="app-shell">
@@ -130,6 +130,62 @@
           </div>
         </section>
 
+        <!-- PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E -->
+        <section class="rr-panel analog-activity-panel" data-v06-section="analog-activity">
+          <div class="section-row">
+            <div>
+              <strong>Analog Activity</strong>
+              <p>Shows the transmission currently holding each receiver and the most recent completed analog transmissions.</p>
+            </div>
+            <span id="analogActivityBadge" class="pill warn">No history</span>
+          </div>
+          <div class="details-grid analog-current-grid">
+            <article>
+              <span>2 m Current</span>
+              <strong id="analog2mCurrentActivity">Idle</strong>
+              <small id="analog2mCurrentDetail">No active transmission</small>
+            </article>
+            <article>
+              <span>70 cm Current</span>
+              <strong id="analog70cmCurrentActivity">Idle</strong>
+              <small id="analog70cmCurrentDetail">No active transmission</small>
+            </article>
+            <article>
+              <span>Recent Events</span>
+              <strong id="analogActivityCount">0</strong>
+              <small>Newest first</small>
+            </article>
+            <article>
+              <span>Total Airtime</span>
+              <strong id="analogActivityDuration">0.0 s</strong>
+              <small>Visible history window</small>
+            </article>
+          </div>
+          <div class="wizard-actions compact-actions analog-activity-actions">
+            <button id="refreshAnalogActivityBtn" type="button">Refresh Activity</button>
+            <button id="clearAnalogActivityBtn" type="button">Clear Analog History</button>
+          </div>
+          <div class="analog-activity-table-wrap">
+            <table class="analog-activity-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Band</th>
+                  <th>Channel</th>
+                  <th>Frequency</th>
+                  <th>Mode</th>
+                  <th>Duration</th>
+                  <th>Peak RMS</th>
+                </tr>
+              </thead>
+              <tbody id="analogActivityTableBody">
+                <tr><td colspan="7">No analog activity recorded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <pre id="analogActivityStatusText">Analog activity has not been loaded.</pre>
+        </section>
+
         <!-- PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D -->
         <section class="rr-panel analog-config-editor" data-v06-section="analog-config">
           <div class="section-row">
@@ -246,6 +302,6 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=0.6d-channel-editor"></script>
+  <script src="/app.js?v=0.6e-activity-history"></script>
 </body>
 </html>

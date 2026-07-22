@@ -21,6 +21,13 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
+from .analog_activity import (
+    activity_log_path,
+    append_completed_event,
+    complete_activity_event,
+    new_activity_event,
+)  # PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "runtime" / "settings" / "analog_receivers.json"
 DEFAULT_TEMPLATE_PATH = PROJECT_ROOT / "config" / "analog_receivers.example.json"
@@ -373,6 +380,8 @@ class AnalogWorker:
         self.stderr_lines: deque[str] = deque(maxlen=30)
         self.last_error = ""
         self.last_activity_utc: float | None = None
+        self.current_activity: dict[str, Any] | None = None
+        self.activity_history_path = str(activity_log_path(role))
         self.smoke_deadline = (
             self.started_utc + self.smoke_seconds
             if self.smoke_seconds > 0
@@ -414,6 +423,8 @@ class AnalogWorker:
             "last_rms": self.last_rms,
             "peak_rms": self.peak_rms,
             "last_activity_utc": self.last_activity_utc,
+            "current_activity": self.current_activity,
+            "activity_history_path": self.activity_history_path,
             "last_error": self.last_error,
             "stderr_tail": list(self.stderr_lines),
             "started_utc": self.started_utc,
@@ -463,6 +474,40 @@ class AnalogWorker:
                 line.decode("utf-8", errors="replace").rstrip()
             )
 
+    # PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
+    def begin_activity(self, channel: dict[str, Any], rms: int) -> None:
+        if self.smoke_seconds > 0 or self.current_activity is not None:
+            return
+        event = new_activity_event(
+            self.role,
+            self.config["rtl_serial"],
+            channel,
+        )
+        event["peak_rms"] = int(rms)
+        event["active_frames"] = 1
+        self.current_activity = event
+
+    def update_activity(self, rms: int) -> None:
+        if self.current_activity is None:
+            return
+        self.current_activity["peak_rms"] = max(
+            int(self.current_activity.get("peak_rms") or 0),
+            int(rms),
+        )
+        self.current_activity["active_frames"] = (
+            int(self.current_activity.get("active_frames") or 0) + 1
+        )
+
+    def end_activity(self, reason: str) -> None:
+        if self.current_activity is None:
+            return
+        completed = complete_activity_event(
+            self.current_activity,
+            end_reason=reason,
+        )
+        append_completed_event(completed)
+        self.current_activity = None
+
     def run_channel(self, channel: dict[str, Any]) -> None:
         self.current_channel = copy.deepcopy(channel)
         self.channels_visited += 1
@@ -511,6 +556,9 @@ class AnalogWorker:
                     if rms >= channel["squelch_rms"]:
                         if not activity_seen:
                             self.activity_events += 1
+                            self.begin_activity(channel, rms)
+                        else:
+                            self.update_activity(rms)
                         activity_seen = True
                         last_active = time.time()
                         self.last_activity_utc = last_active
@@ -546,7 +594,14 @@ class AnalogWorker:
                 self.write_status(state)
                 last_state_write = now
             if self.smoke_deadline is None and should_advance:
+                if activity_seen:
+                    self.end_activity("squelch_closed")
                 break
+
+        if activity_seen:
+            self.end_activity(
+                "worker_stopped" if not self.keep_running else "channel_ended"
+            )
 
         if process.poll() is None:
             process.terminate()
@@ -579,6 +634,7 @@ class AnalogWorker:
                 if self.smoke_deadline is not None:
                     break
         finally:
+            self.end_activity("worker_stopped")
             self.request_stop()
             self.udp_socket.close()
 

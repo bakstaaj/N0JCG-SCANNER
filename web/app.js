@@ -49,6 +49,7 @@ let browserAudioLastEvent = 'Ready';
 let latestReceiverInventory = null; // PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
 let latestAnalogStatus = null; // PHASE4_DUAL_ANALOG_WORKERS_V0_6C
 let latestAnalogConfig = null; // PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
+let latestAnalogActivity = null; // PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
 function analogWorkerRecord(payload, role) {
   return (Array.isArray(payload?.workers) ? payload.workers : []).find((item) => item?.role === role) || null;
 }
@@ -349,6 +350,118 @@ async function saveAnalogConfigEditor() {
 function addAnalogEditorChannel(role) {
   const meta = ANALOG_EDITOR_META[role];
   field(meta.container)?.append(makeAnalogChannelRow(role));
+}
+
+// PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
+function analogActivityRoleLabel(role) {
+  return role === 'analog_2m' ? '2 m' : (role === 'analog_70cm' ? '70 cm' : role);
+}
+
+function analogActivityFrequency(hz) {
+  const value = Number(hz);
+  return Number.isFinite(value) && value > 0 ? `${(value / 1e6).toFixed(6)} MHz` : '-';
+}
+
+function analogActivityTime(epochSeconds) {
+  const value = Number(epochSeconds);
+  return Number.isFinite(value) && value > 0
+    ? new Date(value * 1000).toLocaleString()
+    : '-';
+}
+
+function renderCurrentAnalogActivity(payload, role, nameId, detailId) {
+  const current = payload?.current?.[role] || null;
+  if (!current) {
+    setText(nameId, 'Idle');
+    setText(detailId, 'No active transmission');
+    return;
+  }
+  setText(nameId, current.channel_name || current.channel_id || 'Active');
+  const elapsed = Math.max(0, Date.now() / 1000 - Number(current.start_utc || Date.now() / 1000));
+  setText(
+    detailId,
+    `${analogActivityFrequency(current.frequency_hz)} · ${String(current.mode || '').toUpperCase()} · ${elapsed.toFixed(1)} s`
+  );
+}
+
+function renderAnalogActivity(payload) {
+  latestAnalogActivity = payload;
+  const events = Array.isArray(payload?.events) ? payload.events : [];
+  renderCurrentAnalogActivity(payload, 'analog_2m', 'analog2mCurrentActivity', 'analog2mCurrentDetail');
+  renderCurrentAnalogActivity(payload, 'analog_70cm', 'analog70cmCurrentActivity', 'analog70cmCurrentDetail');
+
+  const totalDuration = events.reduce(
+    (sum, event) => sum + Number(event?.duration_seconds || 0),
+    0
+  );
+  setText('analogActivityCount', events.length);
+  setText('analogActivityDuration', `${totalDuration.toFixed(1)} s`);
+  setBadge(
+    'analogActivityBadge',
+    events.length ? `${events.length} recent` : 'No history',
+    events.length ? 'ok' : 'warn'
+  );
+
+  const body = field('analogActivityTableBody');
+  if (body) {
+    body.innerHTML = '';
+    if (!events.length) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 7;
+      cell.textContent = 'No analog activity recorded yet.';
+      row.append(cell);
+      body.append(row);
+    } else {
+      events.forEach((event) => {
+        const row = document.createElement('tr');
+        const values = [
+          analogActivityTime(event.end_utc || event.start_utc),
+          analogActivityRoleLabel(event.role),
+          event.channel_name || event.channel_id || '-',
+          analogActivityFrequency(event.frequency_hz),
+          String(event.mode || '-').toUpperCase(),
+          `${Number(event.duration_seconds || 0).toFixed(2)} s`,
+          String(event.peak_rms ?? '-'),
+        ];
+        values.forEach((value) => {
+          const cell = document.createElement('td');
+          cell.textContent = value;
+          row.append(cell);
+        });
+        body.append(row);
+      });
+    }
+  }
+
+  setText(
+    'analogActivityStatusText',
+    `History directory: ${payload?.activity_dir || '-'}\n` +
+      `2 m events: ${payload?.summary?.analog_2m?.event_count_in_window ?? 0}\n` +
+      `70 cm events: ${payload?.summary?.analog_70cm?.event_count_in_window ?? 0}\n` +
+      `Updated: ${analogActivityTime(payload?.updated_utc)}`
+  );
+}
+
+async function refreshAnalogActivity() {
+  try {
+    const payload = await fetchJson('/api/analog/activity');
+    renderAnalogActivity(payload);
+  } catch (error) {
+    setBadge('analogActivityBadge', 'Activity error', 'bad');
+    setText('analogActivityStatusText', `Analog activity failed: ${error.message}`);
+  }
+}
+
+async function clearAnalogActivity() {
+  try {
+    const payload = await postJson('/api/analog/activity/clear', {});
+    renderAnalogActivity(payload.activity || {});
+    setText('analogActivityStatusText', 'Analog activity history cleared.');
+  } catch (error) {
+    setBadge('analogActivityBadge', 'Clear failed', 'bad');
+    setText('analogActivityStatusText', `Clear activity failed: ${error.message}`);
+  }
 }
 
 async function refreshConfig() {
@@ -815,6 +928,8 @@ function attachEventHandlers() {
   field('addAnalog70cmChannelBtn')?.addEventListener('click', () => addAnalogEditorChannel('analog_70cm'));
   field('saveAnalogConfigBtn')?.addEventListener('click', saveAnalogConfigEditor);
   field('reloadAnalogConfigBtn')?.addEventListener('click', loadAnalogConfigEditor);
+  field('refreshAnalogActivityBtn')?.addEventListener('click', refreshAnalogActivity);
+  field('clearAnalogActivityBtn')?.addEventListener('click', clearAnalogActivity);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
   field('loadProfileBtn')?.addEventListener('click', loadSelectedProfile);
   field('saveProfileBtn')?.addEventListener('click', saveCurrentProfile);
@@ -838,11 +953,13 @@ p25RemoveDashboardAutostartTuningRemnants();
   refreshReceiverInventory();
   refreshAnalogStatus();
   loadAnalogConfigEditor();
+  refreshAnalogActivity();
   refreshStatus();
   refreshConfig();
   setInterval(refreshStatus, 3000);
   setInterval(refreshReceiverInventory, 15000);
   setInterval(refreshAnalogStatus, 3000);
+  setInterval(refreshAnalogActivity, 2000);
 }
 
 if (document.readyState === 'loading') {

@@ -529,3 +529,52 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     width: 100%;
   }
 }
+
+
+/* PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E */
+.analog-current-grid article small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.analog-activity-actions {
+  grid-template-columns: repeat(2, minmax(170px, 1fr));
+  margin: 10px 0;
+}
+.analog-activity-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #07131f;
+}
+.analog-activity-table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+}
+.analog-activity-table th,
+.analog-activity-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-size: 12px;
+}
+.analog-activity-table th {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.analog-activity-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+#analogActivityStatusText {
+  max-height: 110px;
+  margin-top: 10px;
+}
+@media (max-width: 700px) {
+  .analog-activity-actions {
+    grid-template-columns: 1fr;
+  }
+}

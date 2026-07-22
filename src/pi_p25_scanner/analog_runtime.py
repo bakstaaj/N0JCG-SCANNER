@@ -16,6 +16,10 @@ from .analog_worker import (
     load_analog_config,
     write_analog_config,
 )
+from .analog_activity import (
+    activity_payload,
+    clear_activity_history,
+)  # PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATUS_DIR = PROJECT_ROOT / "runtime" / "status"
@@ -104,6 +108,20 @@ def audio_arbiter_status() -> dict[str, Any]:
             "error": str(exc),
             "url": AUDIO_STATUS_URL,
         }
+
+
+# PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
+def analog_activity_payload(limit: int = 100) -> dict[str, Any]:
+    return activity_payload(limit=limit)
+
+
+def clear_analog_activity(request: dict[str, Any]) -> dict[str, Any]:
+    role = str(request.get("role") or "").strip() or None
+    if role not in (None, "analog_2m", "analog_70cm"):
+        raise AnalogRuntimeError(f"unsupported activity role: {role}")
+    result = clear_activity_history(role=role)
+    result["activity"] = activity_payload(limit=100)
+    return result
 
 
 def analog_config_payload() -> dict[str, Any]:

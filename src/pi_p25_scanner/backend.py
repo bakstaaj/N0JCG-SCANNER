@@ -52,6 +52,8 @@ if __package__ in (None, ""):
         AnalogRuntimeError,
         AnalogWorkerError,
         analog_config_payload,
+        analog_activity_payload,
+        clear_analog_activity,
         analog_service_action,
         analog_status_payload,
         save_analog_config,
@@ -98,6 +100,8 @@ else:
         AnalogRuntimeError,
         AnalogWorkerError,
         analog_config_payload,
+        analog_activity_payload,
+        clear_analog_activity,
         analog_service_action,
         analog_status_payload,
         save_analog_config,
@@ -504,6 +508,13 @@ class ScannerManager:
     # PHASE5_ANALOG_CHANNEL_EDITOR_V0_6D
     def analog_config_payload(self) -> dict[str, Any]:
         return analog_config_payload()
+
+    # PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
+    def analog_activity_payload(self) -> dict[str, Any]:
+        return analog_activity_payload(limit=100)
+
+    def clear_analog_activity(self, request: dict[str, Any]) -> dict[str, Any]:
+        return clear_analog_activity(request)
 
     def save_analog_config(self, request: dict[str, Any]) -> dict[str, Any]:
         return save_analog_config(request)
@@ -1172,6 +1183,10 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/analog/config":
                 self._send_json(MANAGER.analog_config_payload())
                 return
+            # PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
+            if path == "/api/analog/activity":
+                self._send_json(MANAGER.analog_activity_payload())
+                return
             if path == "/api/config/named":
                 self._send_json(MANAGER.named_configs_payload())
                 return
@@ -1237,6 +1252,13 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/analog/config/save":
                 self._send_json(
                     MANAGER.save_analog_config(self._read_json()),
+                    HTTPStatus.ACCEPTED,
+                )
+                return
+            # PHASE6_ANALOG_ACTIVITY_HISTORY_V0_6E
+            if path == "/api/analog/activity/clear":
+                self._send_json(
+                    MANAGER.clear_analog_activity(self._read_json()),
                     HTTPStatus.ACCEPTED,
                 )
                 return
