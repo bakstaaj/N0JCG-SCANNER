@@ -48,23 +48,12 @@ let rrSites = [];
 let browserAudioLastEvent = 'Ready';
 let latestReceiverInventory = null; // PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
 
-// PHASE18A_REALTIME_TALKGROUP_STATUS
-const STATUS_REFRESH_INTERVAL_MS = 500;
+// PHASE18E_BALANCED_UI_POLLING
+const STATUS_REFRESH_INTERVAL_MS = 1000;
+const FAST_ACTIVITY_REFRESH_INTERVAL_MS = 1000;
+const FAST_ACTIVITY_STAGGER_MS = 500;
 let statusRefreshInFlight = false;
-
-// PHASE18B_FAST_ACTIVITY_AND_BUILD_MARKER
-const FAST_ACTIVITY_REFRESH_INTERVAL_MS = 250;
-const PI_P25_UI_BUILD_ID = '18C';
 let fastActivityRefreshInFlight = false;
-let statusRenderSequence = 0;
-let activityRenderSequence = 0;
-
-function updateUiHeartbeat() {
-  setText(
-    'lastUpdated',
-    `Last update: ${new Date().toLocaleTimeString()} · ${PI_P25_UI_BUILD_ID} · S#${statusRenderSequence} · A#${activityRenderSequence}`
-  );
-}
 
 const CATEGORY_DEFAULTS = [
   'Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Utilities', 'Transportation',
@@ -193,8 +182,10 @@ function renderDashboard(status) {
   setText('validatedCommand', formatList(process.command));
   setText('lastEvent', status?.last_event || '-');
   setText('logTail', formatList(status?.log_tail));
-  statusRenderSequence += 1;
-  updateUiHeartbeat();
+  setText(
+    'lastUpdated',
+    `Last update: ${new Date().toLocaleTimeString()}`
+  );
   setBadge('stateBadge', running ? 'ON AIR' : (status?.scanner_state || '-'), running ? 'ok' : (status?.ok ? 'warn' : 'bad'));
   setBadge('connectionStatus', 'Connected', 'ok');
   renderActivitySummary(status?.activity_summary || {});
@@ -250,13 +241,6 @@ function renderFastActivity(activity) {
   setText('voiceFrequency', formatHz(voiceFrequency));
   setText('p25Phase', activity?.p25_phase || '-');
 
-  activityRenderSequence += 1;
-  const badge = field('activityLiveBadge');
-  if (badge) {
-    badge.textContent = `${PI_P25_UI_BUILD_ID} LIVE · A#${activityRenderSequence} · ${displayTgid ? `TG${displayTgid}` : 'SCAN'}`;
-    badge.className = 'pill ok';
-  }
-  updateUiHeartbeat();
 }
 
 async function refreshFastActivity() {
@@ -268,11 +252,6 @@ async function refreshFastActivity() {
     );
     renderFastActivity(activity);
   } catch (error) {
-    const badge = field('activityLiveBadge');
-    if (badge) {
-      badge.textContent = `${PI_P25_UI_BUILD_ID} ERROR`;
-      badge.className = 'pill bad';
-    }
     setText('lastEvent', `Activity status error: ${error.message}`);
   } finally {
     fastActivityRefreshInFlight = false;
@@ -834,10 +813,15 @@ p25RemoveDashboardAutostartTuningRemnants();
   refreshRadioReferenceStatus();
   refreshReceiverInventory();
   refreshStatus();
-  refreshFastActivity();
   refreshConfig();
   setInterval(refreshStatus, STATUS_REFRESH_INTERVAL_MS);
-  setInterval(refreshFastActivity, FAST_ACTIVITY_REFRESH_INTERVAL_MS);
+  window.setTimeout(() => {
+    refreshFastActivity();
+    setInterval(
+      refreshFastActivity,
+      FAST_ACTIVITY_REFRESH_INTERVAL_MS
+    );
+  }, FAST_ACTIVITY_STAGGER_MS);
   setInterval(refreshReceiverInventory, 15000);
 }
 
