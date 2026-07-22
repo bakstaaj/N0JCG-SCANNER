@@ -501,10 +501,35 @@ def main(argv: list[str] | None = None) -> int:
     )
     atomic_write_json(config_output, config)
 
+    sticky_launcher = (
+        Path(__file__).resolve().parent
+        / "p25_multi_rx_sticky_launcher.py"
+    )
+    if not sticky_launcher.is_file():
+        raise RuntimeError(
+            f"sticky control launcher missing: {sticky_launcher}"
+        )
+
+    sticky_retries = int(
+        os.environ.get(
+            "P25_CC_TIMEOUT_RETRIES",
+            "10",
+        )
+    )
+    if not 4 <= sticky_retries <= 30:
+        raise RuntimeError(
+            "P25_CC_TIMEOUT_RETRIES must be 4..30"
+        )
+
     command = [
         sys.executable,
         "-u",
+        str(sticky_launcher),
+        "--cc-timeout-retries",
+        str(sticky_retries),
+        "--app",
         str(multi_rx_app),
+        "--",
         "-c",
         str(config_output),
         "-v",
@@ -513,6 +538,10 @@ def main(argv: list[str] | None = None) -> int:
     state = {
         "ok": True,
         "mode": "multi_rx",
+        "control_channel_policy": "sticky_consecutive_timeouts",
+        "cc_timeout_retries": sticky_retries,
+        "sticky_control_launcher": str(sticky_launcher),
+        "multi_rx_app": str(multi_rx_app),
         "generated_utc": time.time(),
         "project_root": str(project_root),
         "marker": str(marker_path),
