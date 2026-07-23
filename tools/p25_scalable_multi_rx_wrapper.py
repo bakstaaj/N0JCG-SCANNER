@@ -103,6 +103,20 @@ def normalize_demod(value: str) -> str:
     return "cqpsk"
 
 
+def normalize_gain_setting(value: str, fallback: str) -> str:
+    text = str(value or fallback).strip()
+    if ":" not in text:
+        text = f"LNA:{text}"
+    name, raw = text.split(":", 1)
+    try:
+        number = float(raw)
+    except ValueError as exc:
+        raise MultiRxConfigError(f"invalid gain setting: {text!r}") from exc
+    if not 0 <= number <= 60:
+        raise MultiRxConfigError(f"gain outside 0..60 dB: {text!r}")
+    return f"{name.strip() or 'LNA'}:{number:g}"
+
+
 def load_json_object(path: Path, label: str) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -227,7 +241,8 @@ def build_multi_rx_config(
     voice_serials: list[str],
     sample_rate: int,
     ppm: float,
-    gain: str,
+    control_gain: str,
+    voice_gain: str,
     demod_type: str,
     terminal_type: str,
     crypt_behavior: int,
@@ -250,6 +265,7 @@ def build_multi_rx_config(
 
     for index, serial in enumerate(ordered_serials):
         role = "control" if index == 0 else "voice"
+        receiver_gain = control_gain if role == "control" else voice_gain
         device_name = f"rtl_{serial}"
         audio_port = serial_audio_port(serial, audio_base_port, audio_port_count)
         devices.append(
@@ -257,7 +273,7 @@ def build_multi_rx_config(
                 "args": f"rtl={serial}",
                 "frequency": initial_frequency,
                 "gain_mode": False,
-                "gains": gain,
+                "gains": receiver_gain,
                 "name": device_name,
                 "offset": 0,
                 "ppm": ppm,
@@ -294,6 +310,7 @@ def build_multi_rx_config(
                 "role": role,
                 "device": device_name,
                 "audio_port": audio_port,
+                "gain": receiver_gain,
             }
         )
 
@@ -451,6 +468,16 @@ def main(argv: list[str] | None = None) -> int:
             "P25_RUNTIME_LOG_BACKUPS must be 1..20"
         )
 
+    legacy_gain = normalize_gain_setting(str(args.gain), "LNA:40")
+    control_gain = normalize_gain_setting(
+        os.environ.get("P25_CONTROL_GAIN", "") or marker.get("P25_CONTROL_GAIN", ""),
+        legacy_gain,
+    )
+    voice_gain = normalize_gain_setting(
+        os.environ.get("P25_VOICE_GAIN", "") or marker.get("P25_VOICE_GAIN", ""),
+        legacy_gain,
+    )
+
     excluded_control_channels_hz = parse_frequency_hz_list(
         os.environ.get("P25_CONTROL_CHANNEL_EXCLUDE_HZ", "")
         or marker.get("P25_CONTROL_CHANNEL_EXCLUDE_HZ", "")
@@ -576,7 +603,8 @@ def main(argv: list[str] | None = None) -> int:
         voice_serials=voice_serials,
         sample_rate=int(args.sample_rate),
         ppm=float(args.ppm),
-        gain=str(args.gain),
+        control_gain=control_gain,
+        voice_gain=voice_gain,
         demod_type=demod_type,
         terminal_type=terminal_type,
         crypt_behavior=int(args.crypt_behavior),
@@ -667,6 +695,8 @@ def main(argv: list[str] | None = None) -> int:
         "demod_type": demod_type,
         "sample_rate": int(args.sample_rate),
         "gain": str(args.gain),
+        "control_gain": control_gain,
+        "voice_gain": voice_gain,
         "ppm": float(args.ppm),
         "audio_base_port": audio_base_port,
         "audio_port_count": audio_port_count,

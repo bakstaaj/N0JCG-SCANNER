@@ -31,6 +31,11 @@ _LABEL_PATTERNS = [
     re.compile(r"\btalkgroup\s+\d+\s+(?P<label>[A-Za-z][^,;]+)", re.IGNORECASE),
 ]
 
+_VOICE_UPDATE_SLOT_PATTERN = re.compile(
+    r"(?:\]\s+)?voice\s+update\s*:.*?\bslot\((?P<slot>[^)]*)\)",
+    re.IGNORECASE,
+)
+
 
 @dataclass(slots=True)
 class RuntimeStatusUpdate:
@@ -136,6 +141,15 @@ class RuntimeStatusParser:
         if label:
             update.talkgroup_label = label
 
+        slot_match = _VOICE_UPDATE_SLOT_PATTERN.search(text)
+        if slot_match:
+            slot = slot_match.group("slot").strip().lower()
+            if slot in {"", "-", "none"}:
+                update.p25_phase = "Phase I"
+                update.parser_notes.append("phase_i_from_voice_slot")
+            elif slot in {"0", "1"}:
+                update.p25_phase = "Phase II"
+                update.parser_notes.append("phase_ii_from_voice_slot")
         if "phase ii" in lower or "phase 2" in lower or "tdma" in lower or "p25p2" in lower:
             update.p25_phase = "Phase II"
         elif "phase i" in lower or "phase 1" in lower or "fdma" in lower:
@@ -274,4 +288,6 @@ class RuntimeStatusParser:
 
     @staticmethod
     def _looks_like_voice_channel(lower: str) -> bool:
+        if re.search(r"\bnew\s+freq(?:uency)?\s*=", lower):
+            return True
         return any(token in lower for token in ("voice", "grant", "call", "vc ", "voice channel"))
