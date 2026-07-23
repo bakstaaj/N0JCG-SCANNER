@@ -24,6 +24,8 @@ from pathlib import Path
 from typing import Any
 
 PCM_FRAME_BYTES = 320
+OP25_AUDIO_DRAIN = 0x0000
+OP25_AUDIO_DROP = 0x0001
 
 
 def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -58,6 +60,10 @@ class SourceStats:
     active_audio_frames: int = 0
     rejected_audio_frames: int = 0
     flag_packets: int = 0
+    drain_flags: int = 0
+    drop_flags: int = 0
+    unknown_flags: int = 0
+    boundary_resets: int = 0
     ignored_packets: int = 0
     forwarded_frames: int = 0
     warmup_suppressed_frames: int = 0
@@ -88,6 +94,8 @@ class SourceArbiter:
         self.last_switch_utc: float | None = None
         self.selected_warmup_remaining = 0
         self.warmup_events = 0
+        self.boundary_events = 0
+        self.timeout_release_events = 0
         self.sources: dict[int, SourceStats] = {}
 
     def source(self, port: int) -> SourceStats:
@@ -95,17 +103,52 @@ class SourceArbiter:
             self.sources[port] = SourceStats(port=port)
         return self.sources[port]
 
+    def clear_selection(self) -> None:
+        self.selected_port = None
+        self.selected_since_utc = None
+        self.selected_warmup_remaining = 0
+
+    def end_selection(
+        self,
+        port: int,
+        *,
+        boundary: bool = False,
+        timeout: bool = False,
+    ) -> bool:
+        if self.selected_port != port:
+            return False
+        stats = self.source(port)
+        if boundary:
+            stats.boundary_resets += 1
+            self.boundary_events += 1
+        if timeout:
+            self.timeout_release_events += 1
+        self.clear_selection()
+        return True
+
     def tick(self, now: float) -> None:
         if self.selected_port is None:
             return
         selected = self.source(self.selected_port)
+        # Hold a selected receiver through quiet speech and silence as long as
+        # OP25 continues delivering PCM. DRAIN/DROP flags are the normal call
+        # boundary; this timer is only a lost-packet safety fallback.
         if (
-            selected.last_non_silent_utc is None
-            or now - selected.last_non_silent_utc > self.release_seconds
+            selected.last_audio_utc is None
+            or now - selected.last_audio_utc > self.release_seconds
         ):
-            self.selected_port = None
-            self.selected_since_utc = None
-            self.selected_warmup_remaining = 0
+            self.end_selection(self.selected_port, timeout=True)
+
+    def process_flag(self, port: int, flag: int, now: float) -> None:
+        stats = self.source(port)
+        if flag == OP25_AUDIO_DRAIN:
+            stats.drain_flags += 1
+            self.end_selection(port, boundary=True)
+        elif flag == OP25_AUDIO_DROP:
+            stats.drop_flags += 1
+            self.end_selection(port, boundary=True)
+        else:
+            stats.unknown_flags += 1
 
     def begin_selection(self, port: int, now: float) -> None:
         self.selected_port = port
@@ -248,6 +291,10 @@ class AudioPool:
                 self.arbiter.selected_warmup_remaining
             ),
             "warmup_events": self.arbiter.warmup_events,
+            "boundary_events": self.arbiter.boundary_events,
+            "timeout_release_events": (
+                self.arbiter.timeout_release_events
+            ),
             "selected_port": self.arbiter.selected_port,
             "selected_since_utc": self.arbiter.selected_since_utc,
             "last_switch_utc": self.arbiter.last_switch_utc,
@@ -293,6 +340,8 @@ class AudioPool:
 
         if len(payload) == 2:
             stats.flag_packets += 1
+            flag = struct.unpack("<H", payload)[0]
+            self.arbiter.process_flag(port, flag, now)
             return
 
         stats.ignored_packets += 1
@@ -341,13 +390,34 @@ def self_test() -> int:
     assert arbiter.process_audio(23503, active, start + 0.1) is False
     assert arbiter.process_audio(23502, silence, start + 0.5) is True
     arbiter.tick(start + 1.2)
+    assert arbiter.selected_port == 23502
+    assert arbiter.timeout_release_events == 0
+
+    arbiter.process_flag(23502, OP25_AUDIO_DRAIN, start + 1.21)
     assert arbiter.selected_port is None
+    assert arbiter.source(23502).drain_flags == 1
+    assert arbiter.source(23502).boundary_resets == 1
+    assert arbiter.boundary_events == 1
+
     assert arbiter.process_audio(23503, active, start + 1.3) is False
     assert arbiter.selected_port == 23503
     assert arbiter.process_audio(23503, active, start + 1.35) is False
     assert arbiter.process_audio(23503, active, start + 1.4) is True
     assert arbiter.source(23503).warmup_suppressed_frames == 2
     assert arbiter.warmup_events == 2
+
+    arbiter.process_flag(23503, OP25_AUDIO_DROP, start + 1.41)
+    assert arbiter.selected_port is None
+    assert arbiter.source(23503).drop_flags == 1
+    assert arbiter.boundary_events == 2
+
+    assert arbiter.process_audio(23503, active, start + 1.5) is False
+    arbiter.tick(start + 4.1)
+    assert arbiter.selected_port is None
+    assert arbiter.timeout_release_events == 1
+
+    arbiter.process_flag(23503, 0x1234, start + 4.2)
+    assert arbiter.source(23503).unknown_flags == 1
     print("AUDIO_POOL_SELF_TEST=PASS")
     return 0
 
