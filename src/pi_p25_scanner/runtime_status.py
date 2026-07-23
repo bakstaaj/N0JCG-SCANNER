@@ -42,6 +42,7 @@ class RuntimeStatusUpdate:
     tgid: int | None = None
     talkgroup_label: str = ""
     p25_phase: str = ""
+    voice_call: bool = False
     encrypted: bool | None = None
     muted: bool | None = None
     control_channel_state: str = ""
@@ -56,6 +57,7 @@ class RuntimeStatusUpdate:
                 self.tgid is not None,
                 self.talkgroup_label,
                 self.p25_phase,
+                self.voice_call,
                 self.encrypted is not None,
                 self.muted is not None,
                 self.control_channel_state,
@@ -71,6 +73,7 @@ class RuntimeStatusUpdate:
             "tgid": self.tgid,
             "talkgroup_label": self.talkgroup_label,
             "p25_phase": self.p25_phase,
+            "voice_call": self.voice_call,
             "encrypted": self.encrypted,
             "muted": self.muted,
             "control_channel_state": self.control_channel_state,
@@ -102,6 +105,15 @@ class RuntimeStatusParser:
         )):
             update.control_channel_state = "locked"
             update.parser_notes.append("control_channel_activity")
+
+        # A call starts when OP25 assigns a voice receiver. Repeated
+        # set-tgid metadata and individual voice frames are not new calls.
+        if (
+            re.search(r"\]\s+voice update\s*:", lower)
+            or lower.startswith("voice update:")
+        ):
+            update.voice_call = True
+            update.parser_notes.append("voice_call_assignment")
 
         parsed_tgid = self._parse_tgid(text)
         if parsed_tgid is not None and self._looks_like_configured_talkgroup(lower):

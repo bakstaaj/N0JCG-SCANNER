@@ -31,6 +31,7 @@ class RuntimeActivityTracker:
     control_frequency_updates: int = 0
     voice_frequency_updates: int = 0
     talkgroup_updates: int = 0
+    voice_call_events: int = 0
     encrypted_events: int = 0
     muted_events: int = 0
     clear_voice_events: int = 0
@@ -46,6 +47,7 @@ class RuntimeActivityTracker:
         self.control_frequency_updates = 0
         self.voice_frequency_updates = 0
         self.talkgroup_updates = 0
+        self.voice_call_events = 0
         self.encrypted_events = 0
         self.muted_events = 0
         self.clear_voice_events = 0
@@ -70,6 +72,7 @@ class RuntimeActivityTracker:
             "tgid": update.tgid,
             "talkgroup_label": update.talkgroup_label,
             "p25_phase": update.p25_phase,
+            "voice_call": update.voice_call,
             "encrypted": update.encrypted,
             "muted": update.muted,
             "parser_notes": list(update.parser_notes),
@@ -82,6 +85,8 @@ class RuntimeActivityTracker:
         if update.tgid is not None:
             self.talkgroup_updates += 1
             self.unique_tgids.add(update.tgid)
+        if update.voice_call:
+            self.voice_call_events += 1
         if update.encrypted is True:
             self.encrypted_events += 1
         if update.encrypted is False:
@@ -102,6 +107,7 @@ class RuntimeActivityTracker:
             "control_frequency_updates": self.control_frequency_updates,
             "voice_frequency_updates": self.voice_frequency_updates,
             "talkgroup_updates": self.talkgroup_updates,
+            "voice_call_events": self.voice_call_events,
             "encrypted_events": self.encrypted_events,
             "muted_events": self.muted_events,
             "clear_voice_events": self.clear_voice_events,

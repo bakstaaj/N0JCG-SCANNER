@@ -152,9 +152,9 @@ function formatActivityEvent(event) {
 
 function renderActivitySummary(activity) {
   setText('activityUniqueTgids', activity?.unique_tgid_count ?? 0);
+  setText('activityVoiceCalls', activity?.voice_call_events ?? 0);
   setText('activityClearEvents', activity?.clear_voice_events ?? 0);
   setText('activityEncryptedEvents', activity?.encrypted_events ?? 0);
-  setText('activityMutedEvents', activity?.muted_events ?? 0);
   const recent = Array.isArray(activity?.recent_events) ? activity.recent_events : [];
   setText('activityRecentEvents', recent.length ? recent.slice(-10).map(formatActivityEvent).join('\n') : 'No parsed activity yet.');
 }
