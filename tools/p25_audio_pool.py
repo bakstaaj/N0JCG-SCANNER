@@ -55,9 +55,15 @@ class SourceStats:
     port: int
     packets: int = 0
     audio_frames: int = 0
+    active_audio_frames: int = 0
+    rejected_audio_frames: int = 0
     flag_packets: int = 0
     ignored_packets: int = 0
     forwarded_frames: int = 0
+    rms_samples: int = 0
+    rms_sum: int = 0
+    minimum_nonzero_rms: int | None = None
+    last_forwarded_rms: int = 0
     bytes_received: int = 0
     last_packet_utc: float | None = None
     last_audio_utc: float | None = None
@@ -98,9 +104,22 @@ class SourceArbiter:
         stats.last_audio_utc = now
         stats.last_rms = rms
         stats.peak_rms = max(stats.peak_rms, rms)
+        stats.rms_samples += 1
+        stats.rms_sum += rms
+        if rms > 0:
+            if stats.minimum_nonzero_rms is None:
+                stats.minimum_nonzero_rms = rms
+            else:
+                stats.minimum_nonzero_rms = min(
+                    stats.minimum_nonzero_rms,
+                    rms,
+                )
         active = rms >= self.min_rms
         if active:
+            stats.active_audio_frames += 1
             stats.last_non_silent_utc = now
+        else:
+            stats.rejected_audio_frames += 1
 
         self.tick(now)
 
@@ -233,6 +252,7 @@ class AudioPool:
                 try:
                     self.output_socket.sendto(payload, (self.output_host, self.output_port))
                     stats.forwarded_frames += 1
+                    stats.last_forwarded_rms = stats.last_rms
                     self.forwarded_frames += 1
                 except OSError:
                     self.output_errors += 1
@@ -266,12 +286,20 @@ class AudioPool:
 
 
 def self_test() -> int:
-    arbiter = SourceArbiter(min_rms=100, release_seconds=1.0)
-    active = struct.pack("<160h", *([1200] * 160))
+    arbiter = SourceArbiter(min_rms=25, release_seconds=1.0)
+    active = struct.pack("<160h", *([56] * 160))
+    below = struct.pack("<160h", *([24] * 160))
+    threshold = struct.pack("<160h", *([25] * 160))
     silence = b"\x00" * PCM_FRAME_BYTES
     start = 1000.0
 
-    assert arbiter.process_audio(23502, active, start) is True
+    assert arbiter.process_audio(23502, below, start) is False
+    assert arbiter.selected_port is None
+    assert arbiter.process_audio(23502, threshold, start + 0.05) is True
+    assert arbiter.selected_port == 23502
+    arbiter.selected_port = None
+    arbiter.selected_since_utc = None
+    assert arbiter.process_audio(23502, active, start + 0.1) is True
     assert arbiter.selected_port == 23502
     assert arbiter.process_audio(23503, active, start + 0.1) is False
     assert arbiter.process_audio(23502, silence, start + 0.5) is True
@@ -294,7 +322,7 @@ def main() -> int:
         "--state",
         default="/home/pi/PI-P25-SCANNER/runtime/op25/audio_pool_state.json",
     )
-    parser.add_argument("--min-rms", type=int, default=100)
+    parser.add_argument("--min-rms", type=int, default=25)
     parser.add_argument("--release-seconds", type=float, default=1.0)
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
