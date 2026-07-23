@@ -162,6 +162,47 @@ def serial_audio_port(serial: str, base_port: int, port_count: int) -> int:
     return base_port + index
 
 
+def parse_frequency_hz_list(value: str) -> set[int]:
+    # Parse comma, space, or semicolon separated Hz/MHz frequencies.
+    parsed: set[int] = set()
+    for token in re.split(r"[\s,;]+", str(value or "").strip()):
+        if not token:
+            continue
+        try:
+            number = float(token)
+        except ValueError as exc:
+            raise MultiRxConfigError(
+                f"invalid excluded control frequency: {token!r}"
+            ) from exc
+        hz = int(round(number * 1_000_000 if number < 10000 else number))
+        if hz <= 0:
+            raise MultiRxConfigError(
+                f"invalid excluded control frequency: {token!r}"
+            )
+        parsed.add(hz)
+    return parsed
+
+
+def filter_manifest_control_channels(
+    manifest: dict[str, Any],
+    excluded_hz: set[int],
+) -> tuple[dict[str, Any], list[int], list[int]]:
+    # Copy a manifest and remove excluded control-channel frequencies.
+    filtered = json.loads(json.dumps(manifest))
+    system = select_system(filtered)
+    configured = [int(value) for value in system["control_channels_hz"]]
+    effective = [value for value in configured if value not in excluded_hz]
+    if not effective:
+        raise MultiRxConfigError(
+            "control-channel exclusion removed every configured channel"
+        )
+    system["control_channels_hz"] = effective
+    system["control_channels_mhz"] = [
+        f"{value / 1_000_000:.6f}" for value in effective
+    ]
+    return filtered, configured, effective
+
+
 def select_system(manifest: dict[str, Any]) -> dict[str, Any]:
     systems = manifest.get("systems")
     if not isinstance(systems, list) or not systems:
@@ -378,6 +419,10 @@ def main(argv: list[str] | None = None) -> int:
         else project_root / "runtime" / "settings" / "op25_validated_rx_command.env"
     )
     marker = read_env_marker(marker_path)
+    excluded_control_channels_hz = parse_frequency_hz_list(
+        os.environ.get("P25_CONTROL_CHANNEL_EXCLUDE_HZ", "")
+        or marker.get("P25_CONTROL_CHANNEL_EXCLUDE_HZ", "")
+    )
 
     receiver_roles_path = Path(
         args.receiver_roles
@@ -475,6 +520,14 @@ def main(argv: list[str] | None = None) -> int:
         return 127
 
     manifest = load_json_object(manifest_path, "OP25 manifest")
+    (
+        manifest,
+        configured_control_channels_hz,
+        effective_control_channels_hz,
+    ) = filter_manifest_control_channels(
+        manifest,
+        excluded_control_channels_hz,
+    )
     system = select_system(manifest)
     demod_type = normalize_demod(
         args.demod_type
@@ -547,6 +600,15 @@ def main(argv: list[str] | None = None) -> int:
         "marker": str(marker_path),
         "manifest": str(manifest_path),
         "manifest_sha256": sha256_file(manifest_path),
+        "excluded_control_channels_hz": sorted(
+            excluded_control_channels_hz
+        ),
+        "configured_control_channels_hz": (
+            configured_control_channels_hz
+        ),
+        "effective_control_channels_hz": (
+            effective_control_channels_hz
+        ),
         "config": str(config_output),
         "config_sha256": sha256_file(config_output),
         "control_only_whitelist": str(control_only_whitelist),
