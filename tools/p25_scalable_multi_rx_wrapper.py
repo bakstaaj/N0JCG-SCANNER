@@ -243,7 +243,8 @@ def build_multi_rx_config(
     ppm: float,
     control_gain: str,
     voice_gain: str,
-    demod_type: str,
+    control_demod_type: str,
+    voice_demod_type: str,
     terminal_type: str,
     crypt_behavior: int,
     audio_base_port: int,
@@ -266,6 +267,11 @@ def build_multi_rx_config(
     for index, serial in enumerate(ordered_serials):
         role = "control" if index == 0 else "voice"
         receiver_gain = control_gain if role == "control" else voice_gain
+        receiver_demod_type = (
+            control_demod_type
+            if role == "control"
+            else voice_demod_type
+        )
         device_name = f"rtl_{serial}"
         audio_port = serial_audio_port(serial, audio_base_port, audio_port_count)
         devices.append(
@@ -287,7 +293,7 @@ def build_multi_rx_config(
                 "name": f"P25 {role.title()} {serial}",
                 "device": device_name,
                 "trunking_sysname": system_name,
-                "demod_type": demod_type,
+                "demod_type": receiver_demod_type,
                 "destination": f"udp://127.0.0.1:{audio_port}",
                 "meta_stream_name": "",
                 "excess_bw": 0.2,
@@ -311,6 +317,7 @@ def build_multi_rx_config(
                 "device": device_name,
                 "audio_port": audio_port,
                 "gain": receiver_gain,
+                "demod_type": receiver_demod_type,
             }
         )
 
@@ -588,10 +595,20 @@ def main(argv: list[str] | None = None) -> int:
         excluded_control_channels_hz,
     )
     system = select_system(manifest)
-    demod_type = normalize_demod(
+    legacy_demod_type = normalize_demod(
         args.demod_type
         or marker.get("P25_VALIDATED_RX_DEMOD_TYPE", "")
         or str(system.get("modulation") or "")
+    )
+    control_demod_type = normalize_demod(
+        os.environ.get("P25_CONTROL_DEMOD_TYPE", "")
+        or marker.get("P25_CONTROL_DEMOD_TYPE", "")
+        or legacy_demod_type
+    )
+    voice_demod_type = normalize_demod(
+        os.environ.get("P25_VOICE_DEMOD_TYPE", "")
+        or marker.get("P25_VOICE_DEMOD_TYPE", "")
+        or legacy_demod_type
     )
     terminal_type = args.terminal or "http:127.0.0.1:18091"
     control_only_whitelist = config_output.parent / "multi_rx_control_only_whitelist.tsv"
@@ -605,7 +622,8 @@ def main(argv: list[str] | None = None) -> int:
         ppm=float(args.ppm),
         control_gain=control_gain,
         voice_gain=voice_gain,
-        demod_type=demod_type,
+        control_demod_type=control_demod_type,
+        voice_demod_type=voice_demod_type,
         terminal_type=terminal_type,
         crypt_behavior=int(args.crypt_behavior),
         audio_base_port=audio_base_port,
@@ -692,7 +710,9 @@ def main(argv: list[str] | None = None) -> int:
         "receiver_count": len(receiver_rows),
         "receivers": receiver_rows,
         "serial_regex": serial_regex,
-        "demod_type": demod_type,
+        "demod_type": legacy_demod_type,
+        "control_demod_type": control_demod_type,
+        "voice_demod_type": voice_demod_type,
         "sample_rate": int(args.sample_rate),
         "gain": str(args.gain),
         "control_gain": control_gain,
