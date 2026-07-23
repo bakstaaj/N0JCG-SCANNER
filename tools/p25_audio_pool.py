@@ -60,6 +60,7 @@ class SourceStats:
     flag_packets: int = 0
     ignored_packets: int = 0
     forwarded_frames: int = 0
+    warmup_suppressed_frames: int = 0
     rms_samples: int = 0
     rms_sum: int = 0
     minimum_nonzero_rms: int | None = None
@@ -73,12 +74,20 @@ class SourceStats:
 
 
 class SourceArbiter:
-    def __init__(self, min_rms: int, release_seconds: float) -> None:
+    def __init__(
+        self,
+        min_rms: int,
+        release_seconds: float,
+        warmup_frames: int,
+    ) -> None:
         self.min_rms = min_rms
         self.release_seconds = release_seconds
+        self.warmup_frames = warmup_frames
         self.selected_port: int | None = None
         self.selected_since_utc: float | None = None
         self.last_switch_utc: float | None = None
+        self.selected_warmup_remaining = 0
+        self.warmup_events = 0
         self.sources: dict[int, SourceStats] = {}
 
     def source(self, port: int) -> SourceStats:
@@ -96,6 +105,21 @@ class SourceArbiter:
         ):
             self.selected_port = None
             self.selected_since_utc = None
+            self.selected_warmup_remaining = 0
+
+    def begin_selection(self, port: int, now: float) -> None:
+        self.selected_port = port
+        self.selected_since_utc = now
+        self.last_switch_utc = now
+        self.selected_warmup_remaining = self.warmup_frames
+        self.warmup_events += 1
+
+    def apply_warmup(self, stats: SourceStats) -> bool:
+        if self.selected_warmup_remaining <= 0:
+            return False
+        self.selected_warmup_remaining -= 1
+        stats.warmup_suppressed_frames += 1
+        return True
 
     def process_audio(self, port: int, payload: bytes, now: float) -> bool:
         stats = self.source(port)
@@ -126,17 +150,18 @@ class SourceArbiter:
         if self.selected_port is None:
             if not active:
                 return False
-            self.selected_port = port
-            self.selected_since_utc = now
-            self.last_switch_utc = now
-            return True
+            self.begin_selection(port, now)
+            return not self.apply_warmup(stats)
 
         if self.selected_port == port:
             selected_active = (
                 stats.last_non_silent_utc is not None
                 and now - stats.last_non_silent_utc <= self.release_seconds
             )
-            return active or selected_active
+            should_forward = active or selected_active
+            if should_forward and self.apply_warmup(stats):
+                return False
+            return should_forward
 
         if not active:
             return False
@@ -147,10 +172,8 @@ class SourceArbiter:
             or now - selected.last_non_silent_utc > self.release_seconds
         )
         if selected_stale:
-            self.selected_port = port
-            self.selected_since_utc = now
-            self.last_switch_utc = now
-            return True
+            self.begin_selection(port, now)
+            return not self.apply_warmup(stats)
         return False
 
 
@@ -166,6 +189,7 @@ class AudioPool:
         state_path: Path,
         min_rms: int,
         release_seconds: float,
+        warmup_frames: int,
     ) -> None:
         self.listen_host = listen_host
         self.base_port = base_port
@@ -173,7 +197,11 @@ class AudioPool:
         self.output_host = output_host
         self.output_port = output_port
         self.state_path = state_path
-        self.arbiter = SourceArbiter(min_rms=min_rms, release_seconds=release_seconds)
+        self.arbiter = SourceArbiter(
+            min_rms=min_rms,
+            release_seconds=release_seconds,
+            warmup_frames=warmup_frames,
+        )
         self.sockets: dict[socket.socket, int] = {}
         self.output_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.running = True
@@ -215,6 +243,11 @@ class AudioPool:
             "output_port": self.output_port,
             "min_rms": self.arbiter.min_rms,
             "release_seconds": self.arbiter.release_seconds,
+            "warmup_frames": self.arbiter.warmup_frames,
+            "selected_warmup_remaining": (
+                self.arbiter.selected_warmup_remaining
+            ),
+            "warmup_events": self.arbiter.warmup_events,
             "selected_port": self.arbiter.selected_port,
             "selected_since_utc": self.arbiter.selected_since_utc,
             "last_switch_utc": self.arbiter.last_switch_utc,
@@ -286,7 +319,11 @@ class AudioPool:
 
 
 def self_test() -> int:
-    arbiter = SourceArbiter(min_rms=25, release_seconds=1.0)
+    arbiter = SourceArbiter(
+        min_rms=25,
+        release_seconds=1.0,
+        warmup_frames=2,
+    )
     active = struct.pack("<160h", *([56] * 160))
     below = struct.pack("<160h", *([24] * 160))
     threshold = struct.pack("<160h", *([25] * 160))
@@ -295,18 +332,22 @@ def self_test() -> int:
 
     assert arbiter.process_audio(23502, below, start) is False
     assert arbiter.selected_port is None
-    assert arbiter.process_audio(23502, threshold, start + 0.05) is True
+    assert arbiter.process_audio(23502, threshold, start + 0.05) is False
     assert arbiter.selected_port == 23502
-    arbiter.selected_port = None
-    arbiter.selected_since_utc = None
-    assert arbiter.process_audio(23502, active, start + 0.1) is True
+    assert arbiter.process_audio(23502, active, start + 0.1) is False
+    assert arbiter.process_audio(23502, active, start + 0.15) is True
+    assert arbiter.source(23502).warmup_suppressed_frames == 2
     assert arbiter.selected_port == 23502
     assert arbiter.process_audio(23503, active, start + 0.1) is False
     assert arbiter.process_audio(23502, silence, start + 0.5) is True
     arbiter.tick(start + 1.2)
     assert arbiter.selected_port is None
-    assert arbiter.process_audio(23503, active, start + 1.3) is True
+    assert arbiter.process_audio(23503, active, start + 1.3) is False
     assert arbiter.selected_port == 23503
+    assert arbiter.process_audio(23503, active, start + 1.35) is False
+    assert arbiter.process_audio(23503, active, start + 1.4) is True
+    assert arbiter.source(23503).warmup_suppressed_frames == 2
+    assert arbiter.warmup_events == 2
     print("AUDIO_POOL_SELF_TEST=PASS")
     return 0
 
@@ -324,6 +365,7 @@ def main() -> int:
     )
     parser.add_argument("--min-rms", type=int, default=25)
     parser.add_argument("--release-seconds", type=float, default=1.0)
+    parser.add_argument("--warmup-frames", type=int, default=8)
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
 
@@ -333,6 +375,8 @@ def main() -> int:
         parser.error("--port-count must be 1..100")
     if not 1 <= args.output_port <= 65535:
         parser.error("--output-port must be 1..65535")
+    if args.warmup_frames < 0 or args.warmup_frames > 50:
+        parser.error("--warmup-frames must be 0..50")
 
     pool = AudioPool(
         listen_host=args.listen_host,
@@ -343,6 +387,7 @@ def main() -> int:
         state_path=Path(args.state),
         min_rms=max(0, args.min_rms),
         release_seconds=max(0.1, args.release_seconds),
+        warmup_frames=args.warmup_frames,
     )
     return pool.run()
 
