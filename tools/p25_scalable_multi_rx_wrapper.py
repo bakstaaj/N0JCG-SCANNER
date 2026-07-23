@@ -419,6 +419,38 @@ def main(argv: list[str] | None = None) -> int:
         else project_root / "runtime" / "settings" / "op25_validated_rx_command.env"
     )
     marker = read_env_marker(marker_path)
+    runtime_log_path = Path(
+        os.environ.get("P25_RUNTIME_LOG", "")
+        or marker.get("P25_RUNTIME_LOG", "")
+        or project_root / "runtime" / "logs" / "op25-runtime.log"
+    )
+    runtime_log_max_bytes = int(
+        os.environ.get("P25_RUNTIME_LOG_MAX_BYTES", "")
+        or marker.get("P25_RUNTIME_LOG_MAX_BYTES", "")
+        or "8388608"
+    )
+    runtime_log_backups = int(
+        os.environ.get("P25_RUNTIME_LOG_BACKUPS", "")
+        or marker.get("P25_RUNTIME_LOG_BACKUPS", "")
+        or "5"
+    )
+    rotating_logger = (
+        Path(__file__).resolve().parent
+        / "p25_rotating_log_exec.py"
+    )
+    if not rotating_logger.is_file():
+        raise MultiRxConfigError(
+            f"rotating OP25 logger missing: {rotating_logger}"
+        )
+    if not 1_048_576 <= runtime_log_max_bytes <= 67_108_864:
+        raise MultiRxConfigError(
+            "P25_RUNTIME_LOG_MAX_BYTES must be 1048576..67108864"
+        )
+    if not 1 <= runtime_log_backups <= 20:
+        raise MultiRxConfigError(
+            "P25_RUNTIME_LOG_BACKUPS must be 1..20"
+        )
+
     excluded_control_channels_hz = parse_frequency_hz_list(
         os.environ.get("P25_CONTROL_CHANNEL_EXCLUDE_HZ", "")
         or marker.get("P25_CONTROL_CHANNEL_EXCLUDE_HZ", "")
@@ -574,7 +606,7 @@ def main(argv: list[str] | None = None) -> int:
             "P25_CC_TIMEOUT_RETRIES must be 4..30"
         )
 
-    command = [
+    op25_command = [
         sys.executable,
         "-u",
         str(sticky_launcher),
@@ -587,6 +619,19 @@ def main(argv: list[str] | None = None) -> int:
         str(config_output),
         "-v",
         str(max(5, int(args.verbosity or 0))),
+    ]
+    command = [
+        sys.executable,
+        "-u",
+        str(rotating_logger),
+        "--log",
+        str(runtime_log_path),
+        "--max-bytes",
+        str(runtime_log_max_bytes),
+        "--backups",
+        str(runtime_log_backups),
+        "--",
+        *op25_command,
     ]
     state = {
         "ok": True,
@@ -625,6 +670,11 @@ def main(argv: list[str] | None = None) -> int:
         "ppm": float(args.ppm),
         "audio_base_port": audio_base_port,
         "audio_port_count": audio_port_count,
+        "runtime_log": str(runtime_log_path),
+        "runtime_log_max_bytes": runtime_log_max_bytes,
+        "runtime_log_backups": runtime_log_backups,
+        "rotating_logger": str(rotating_logger),
+        "op25_command": op25_command,
         "command": command,
         "ignored_rx_options": unknown,
     }
