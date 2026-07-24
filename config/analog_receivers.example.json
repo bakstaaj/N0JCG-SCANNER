@@ -551,7 +551,13 @@
       "activity_window_frames": 5,
       "adaptive_squelch_multiplier": 1.45,
       "adaptive_squelch_offset": 175,
-      "pcm_watchdog_seconds": 3.0
+      "pcm_watchdog_seconds": 3.0,
+      "search_mode": "fast_spectrum",
+      "spectrum_bin_hz": 12500,
+      "spectrum_margin_db": 6.0,
+      "spectrum_candidate_limit": 12,
+      "spectrum_timeout_seconds": 25.0,
+      "receiver_release_seconds": 1.25
     },
     "analog_70cm": {
       "enabled": true,
@@ -693,7 +699,13 @@
       "activity_window_frames": 5,
       "adaptive_squelch_multiplier": 1.45,
       "adaptive_squelch_offset": 175,
-      "pcm_watchdog_seconds": 3.0
+      "pcm_watchdog_seconds": 3.0,
+      "search_mode": "fast_spectrum",
+      "spectrum_bin_hz": 12500,
+      "spectrum_margin_db": 6.0,
+      "spectrum_candidate_limit": 12,
+      "spectrum_timeout_seconds": 25.0,
+      "receiver_release_seconds": 1.25
     }
   },
   "last_import": {

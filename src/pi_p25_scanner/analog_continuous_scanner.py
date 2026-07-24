@@ -6,13 +6,16 @@ from __future__ import annotations
 import argparse
 import array
 import collections
+import csv
 import json
 import math
 import os
 import select
 import signal
 import socket
+import statistics
 import subprocess
+import tempfile
 import sys
 import time
 from pathlib import Path
@@ -135,6 +138,47 @@ def rtl_fm_command(
     return command
 
 
+def parse_rtl_power_csv(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8", errors="replace", newline="") as handle:
+        for raw in csv.reader(handle):
+            if len(raw) < 7:
+                continue
+            try:
+                low_hz = float(raw[2])
+                high_hz = float(raw[3])
+                step_hz = float(raw[4])
+                sample_count = int(float(raw[5]))
+                powers = [float(value) for value in raw[6:] if str(value).strip()]
+            except (TypeError, ValueError):
+                continue
+            if not powers or step_hz <= 0:
+                continue
+            rows.append({
+                "low_hz": low_hz,
+                "high_hz": high_hz,
+                "step_hz": step_hz,
+                "sample_count": sample_count,
+                "powers_db": powers,
+                "noise_floor_db": float(statistics.median(powers)),
+            })
+    return rows
+
+
+def spectrum_power_at(
+    rows: list[dict[str, Any]],
+    frequency_hz: int,
+) -> tuple[float, float] | None:
+    target = float(frequency_hz)
+    for row in rows:
+        if row["low_hz"] <= target <= row["high_hz"] + row["step_hz"]:
+            index = int(round((target - row["low_hz"]) / row["step_hz"]))
+            powers = row["powers_db"]
+            if 0 <= index < len(powers):
+                return float(powers[index]), float(row["noise_floor_db"])
+    return None
+
+
 class ContinuousScanner:
     def __init__(
         self,
@@ -161,6 +205,10 @@ class ContinuousScanner:
         self.lock_count = 0
         self.watchdog_timeouts = 0
         self.child_restarts = 0
+        self.spectrum_sweeps = 0
+        self.spectrum_failures = 0
+        self.spectrum_candidates_total = 0
+        self.last_spectrum: dict[str, Any] | None = None
         self.frames_received = 0
         self.bytes_received = 0
         self.frames_forwarded = 0
@@ -207,6 +255,11 @@ class ContinuousScanner:
             "lock_count": self.lock_count,
             "watchdog_timeouts": self.watchdog_timeouts,
             "child_restarts": self.child_restarts,
+            "search_mode": str(self.worker.get("search_mode") or "linear"),
+            "spectrum_sweeps": self.spectrum_sweeps,
+            "spectrum_failures": self.spectrum_failures,
+            "spectrum_candidates_total": self.spectrum_candidates_total,
+            "last_spectrum": self.last_spectrum,
             "frames_received": self.frames_received,
             "bytes_received": self.bytes_received,
             "frames_forwarded": self.frames_forwarded,
@@ -383,9 +436,231 @@ class ContinuousScanner:
             self.stop_process()
             time.sleep(0.12)
 
+    def acquire_spectrum_candidates(self) -> list[dict[str, Any]]:
+        channels = self.worker["channels"]
+        frequencies = sorted({
+            int(channel["frequency_hz"])
+            for channel in channels
+            if int(channel.get("frequency_hz") or 0) > 0
+        })
+        if not frequencies:
+            raise ScannerError(f"{self.role} has no spectrum frequencies")
+
+        bin_hz = int(self.worker.get("spectrum_bin_hz") or 12500)
+        low_hz = min(frequencies)
+        high_hz = max(frequencies)
+        if low_hz == high_hz:
+            low_hz -= bin_hz
+            high_hz += bin_hz
+
+        gain = float(self.worker.get("gain_db") or 49.6)
+        margin_required = float(
+            self.worker.get("spectrum_margin_db") or 8.0
+        )
+        candidate_limit = max(
+            1,
+            int(self.worker.get("spectrum_candidate_limit") or 12),
+        )
+        timeout_seconds = float(
+            self.worker.get("spectrum_timeout_seconds") or 25.0
+        )
+        blocked = {
+            int(value)
+            for value in self.worker.get("blocked_frequencies_hz", [])
+            if str(value).strip()
+        }
+
+        self.status(
+            "spectrum_scanning",
+            spectrum_low_hz=low_hz,
+            spectrum_high_hz=high_hz,
+            spectrum_bin_hz=bin_hz,
+        )
+        started = time.monotonic()
+
+        with tempfile.TemporaryDirectory(
+            prefix=f"pi-scanner-{self.role}-spectrum-"
+        ) as temporary:
+            output = Path(temporary) / "rtl_power.csv"
+            command = [
+                "rtl_power",
+                "-d", self.serial,
+                "-f", f"{low_hz}:{high_hz}:{bin_hz}",
+                "-i", "1",
+                "-1",
+                "-g", str(gain),
+                str(output),
+            ]
+            try:
+                result = subprocess.run(
+                    command,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    timeout=timeout_seconds,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                self.spectrum_failures += 1
+                raise ScannerError(
+                    f"rtl_power timed out after {timeout_seconds:.1f}s"
+                ) from exc
+
+            stderr_text = result.stderr.decode(
+                "utf-8",
+                errors="replace",
+            )[-2000:]
+            if result.returncode != 0:
+                self.spectrum_failures += 1
+                raise ScannerError(
+                    f"rtl_power failed rc={result.returncode}: "
+                    f"{stderr_text[-1000:]}"
+                )
+
+            rows = parse_rtl_power_csv(output)
+
+        duration = time.monotonic() - started
+        if not rows:
+            self.spectrum_failures += 1
+            raise ScannerError("rtl_power returned no parseable spectrum rows")
+
+        candidates: list[dict[str, Any]] = []
+        by_frequency = {
+            int(channel["frequency_hz"]): channel
+            for channel in channels
+        }
+        noise_floors = [
+            float(row["noise_floor_db"])
+            for row in rows
+        ]
+
+        for frequency_hz in frequencies:
+            if frequency_hz in blocked:
+                continue
+            measurement = spectrum_power_at(rows, frequency_hz)
+            if measurement is None:
+                continue
+            power_db, noise_floor_db = measurement
+            margin_db = power_db - noise_floor_db
+            if margin_db < margin_required:
+                continue
+            channel = dict(by_frequency[frequency_hz])
+            channel["spectrum_power_db"] = round(power_db, 2)
+            channel["spectrum_noise_floor_db"] = round(
+                noise_floor_db,
+                2,
+            )
+            channel["spectrum_margin_db"] = round(margin_db, 2)
+            candidates.append(channel)
+
+        candidates.sort(
+            key=lambda item: (
+                float(item.get("spectrum_margin_db") or -999.0),
+                int(item.get("priority") or 0),
+            ),
+            reverse=True,
+        )
+        selected = candidates[:candidate_limit]
+        self.spectrum_sweeps += 1
+        self.spectrum_candidates_total += len(selected)
+        self.last_spectrum = {
+            "low_hz": low_hz,
+            "high_hz": high_hz,
+            "bin_hz": bin_hz,
+            "duration_seconds": round(duration, 3),
+            "row_count": len(rows),
+            "evaluated_channel_count": len(frequencies),
+            "candidate_count": len(candidates),
+            "selected_candidate_count": len(selected),
+            "margin_threshold_db": margin_required,
+            "candidate_limit": candidate_limit,
+            "median_noise_floor_db": round(
+                float(statistics.median(noise_floors)),
+                2,
+            ),
+            "top_candidates": [
+                {
+                    "name": item.get("name"),
+                    "frequency_hz": int(item["frequency_hz"]),
+                    "margin_db": item.get("spectrum_margin_db"),
+                    "power_db": item.get("spectrum_power_db"),
+                    "noise_floor_db": item.get(
+                        "spectrum_noise_floor_db"
+                    ),
+                }
+                for item in selected
+            ],
+            "completed_epoch": time.time(),
+        }
+        self.status(
+            "spectrum_candidates",
+            spectrum_low_hz=low_hz,
+            spectrum_high_hz=high_hz,
+            spectrum_candidate_count=len(selected),
+        )
+        return selected
+
+    def run_fast_spectrum(
+        self,
+        started: float,
+        max_seconds: float | None,
+    ) -> int:
+        release_seconds = float(
+            self.worker.get("receiver_release_seconds") or 1.25
+        )
+        while not self.stop_requested:
+            if (
+                max_seconds is not None
+                and time.monotonic() - started >= max_seconds
+            ):
+                self.status("smoke_passed")
+                return 0
+            try:
+                candidates = self.acquire_spectrum_candidates()
+            except ScannerError as exc:
+                self.status("spectrum_error", error=str(exc))
+                time.sleep(1.25)
+                continue
+
+            if not candidates:
+                self.scan_cycles += 1
+                self.status("spectrum_scanning")
+                time.sleep(0.25)
+                continue
+
+            for candidate in candidates:
+                if self.stop_requested:
+                    break
+                before_locks = self.lock_count
+                time.sleep(release_seconds)
+                try:
+                    self.scan_channel(candidate)
+                except ScannerError as exc:
+                    self.child_restarts += 1
+                    self.status(
+                        "candidate_error",
+                        candidate,
+                        error=str(exc),
+                    )
+                    time.sleep(0.75)
+                    continue
+                if self.lock_count > before_locks:
+                    break
+
+            self.scan_cycles += 1
+            self.status("spectrum_scanning")
+
+        self.status("stopped")
+        return 0
+
     def run(self, max_seconds: float | None = None) -> int:
         started = time.monotonic()
         self.status("starting")
+        search_mode = str(
+            self.worker.get("search_mode") or "linear"
+        ).strip().lower()
+        if search_mode == "fast_spectrum":
+            return self.run_fast_spectrum(started, max_seconds)
+
         while not self.stop_requested:
             for channel in self.worker["channels"]:
                 if self.stop_requested:
@@ -421,6 +696,17 @@ def self_test(role: str, config: Path, template: Path) -> int:
     missing = [token for token in required if token not in command]
     if missing:
         raise ScannerError(f"command missing required tokens: {missing}")
+    with tempfile.TemporaryDirectory() as temporary:
+        sample = Path(temporary) / "spectrum.csv"
+        sample.write_text(
+            "2026-07-24,00:00:00,146000000,146050000,12500,1,"
+            "-50,-49,-40,-51,-50\n",
+            encoding="utf-8",
+        )
+        rows = parse_rtl_power_csv(sample)
+        measurement = spectrum_power_at(rows, 146025000)
+        if measurement is None or measurement[0] != -40.0:
+            raise ScannerError("spectrum parser self-test failed")
     synthetic = array.array("h", [0, 1000, -1000, 2000, -2000] * 64)
     if sys.byteorder != "little":
         synthetic.byteswap()
