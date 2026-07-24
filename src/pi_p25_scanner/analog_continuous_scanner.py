@@ -491,28 +491,55 @@ class ContinuousScanner:
                 "-g", str(gain),
                 str(output),
             ]
-            try:
-                result = subprocess.run(
-                    command,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.PIPE,
-                    timeout=timeout_seconds,
-                    check=False,
-                )
-            except subprocess.TimeoutExpired as exc:
-                self.spectrum_failures += 1
-                raise ScannerError(
-                    f"rtl_power timed out after {timeout_seconds:.1f}s"
-                ) from exc
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+            )
+            deadline = time.monotonic() + timeout_seconds
+            heartbeat_at = time.monotonic()
+            while process.poll() is None:
+                now = time.monotonic()
+                if now >= heartbeat_at:
+                    self.status(
+                        "spectrum_scanning",
+                        spectrum_low_hz=low_hz,
+                        spectrum_high_hz=high_hz,
+                        spectrum_bin_hz=bin_hz,
+                        spectrum_elapsed_seconds=round(
+                            now - started,
+                            1,
+                        ),
+                    )
+                    heartbeat_at = now + 1.0
+                if now >= deadline:
+                    self.spectrum_failures += 1
+                    try:
+                        os.killpg(process.pid, signal.SIGINT)
+                        process.wait(timeout=2.0)
+                    except (ProcessLookupError, subprocess.TimeoutExpired):
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                    raise ScannerError(
+                        f"rtl_power timed out after "
+                        f"{timeout_seconds:.1f}s"
+                    )
+                time.sleep(0.2)
 
-            stderr_text = result.stderr.decode(
+            stderr_bytes = b""
+            if process.stderr is not None:
+                stderr_bytes = process.stderr.read()
+            stderr_text = stderr_bytes.decode(
                 "utf-8",
                 errors="replace",
             )[-2000:]
-            if result.returncode != 0:
+            if process.returncode != 0:
                 self.spectrum_failures += 1
                 raise ScannerError(
-                    f"rtl_power failed rc={result.returncode}: "
+                    f"rtl_power failed rc={process.returncode}: "
                     f"{stderr_text[-1000:]}"
                 )
 
