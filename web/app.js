@@ -835,6 +835,34 @@ async function importAnalogCsv() {
   }
 }
 
+
+// ANALOG_DASHBOARD_STATUS_V1
+let latestAnalogStatus = null;
+let analogStatusRefreshInFlight = false;
+let selectedAnalogRole = null;
+function analogRoleUi(role) { return role === 'analog_2m' ? { prefix: 'analogVhf', label: 'VHF', port: 8073 } : { prefix: 'analogUhf', label: 'UHF', port: 8074 }; }
+function analogStateKind(s) { if (!s?.ok) return 'bad'; return s.state === 'locked' ? 'ok' : 'warn'; }
+function renderAnalogRole(role, s) {
+  const ui = analogRoleUi(role); const c = s?.current_channel || {}; const last = s?.last_lock || {};
+  setBadge(`${ui.prefix}Badge`, String(s?.state || 'offline').toUpperCase(), analogStateKind(s));
+  setText(`${ui.prefix}Channel`, c.name || (s?.ok ? 'Scanning configured channels' : 'Scanner unavailable'));
+  setText(`${ui.prefix}Frequency`, formatHz(c.frequency_hz));
+  setText(`${ui.prefix}Tunes`, s?.channel_tunes ?? 0); setText(`${ui.prefix}Cycles`, s?.scan_cycles ?? 0); setText(`${ui.prefix}Locks`, s?.lock_count ?? 0);
+  setText(`${ui.prefix}LastLock`, last.name || (last.frequency_hz ? formatHz(last.frequency_hz) : 'None'));
+  const b = field(`${ui.prefix}ListenBtn`); if (b) { const selected = selectedAnalogRole === role; b.textContent = selected ? `Listening to ${ui.label}` : `Listen to ${ui.label}`; b.classList.toggle('active-listen', selected); b.disabled = !s?.ok; }
+}
+function renderAnalogStatus(payload) {
+  latestAnalogStatus = payload; const roles = payload?.roles || {}; renderAnalogRole('analog_2m', roles.analog_2m || {}); renderAnalogRole('analog_70cm', roles.analog_70cm || {});
+  const healthy = ['analog_2m','analog_70cm'].filter((r) => roles[r]?.ok).length; const locks = ['analog_2m','analog_70cm'].reduce((n,r) => n + Number(roles[r]?.lock_count || 0), 0);
+  setBadge('analogScannerSummaryBadge', `${healthy}/2 ACTIVE · ${locks} LOCKS`, healthy === 2 ? 'ok' : (healthy ? 'warn' : 'bad'));
+}
+async function refreshAnalogStatus() { if (analogStatusRefreshInFlight) return; analogStatusRefreshInFlight = true; try { renderAnalogStatus(await fetchJson(`/api/analog/status?_=${Date.now()}`)); } catch (error) { setBadge('analogScannerSummaryBadge', 'Status error', 'bad'); setText('analogAudioMessage', `Analog status error: ${error.message}`); } finally { analogStatusRefreshInFlight = false; } }
+async function listenToAnalogRole(role) {
+  const s = latestAnalogStatus?.roles?.[role]; const ui = analogRoleUi(role); if (!s?.ok) { setText('analogAudioMessage', `${ui.label} scanner is not ready.`); return; }
+  const audio = field('analogAudioPlayer'); if (!audio) return; selectedAnalogRole = role; audio.pause(); audio.src = `${s.audio_url || `http://${window.location.hostname}:${ui.port}/audio.wav`}?_=${Date.now()}`; audio.load(); renderAnalogStatus(latestAnalogStatus);
+  try { await audio.play(); setText('analogAudioMessage', `Listening to ${ui.label}. Audio opens when the scanner locks on activity.`); } catch (error) { setText('analogAudioMessage', `${ui.label} selected. Press Play if blocked: ${error.message}`); }
+}
+
 function attachEventHandlers() {
   field('menuBtn')?.addEventListener('click', openDrawer);
   field('closeDrawerBtn')?.addEventListener('click', closeDrawer);
@@ -842,6 +870,8 @@ function attachEventHandlers() {
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => showScreen(button.dataset.screen)));
   field('startBtn')?.addEventListener('click', (event) => { if (p25AllowManualStart(event)) startScannerAndAudio(); });
   field('stopBtn')?.addEventListener('click', stopScanner);
+  field('analogVhfListenBtn')?.addEventListener('click', () => listenToAnalogRole('analog_2m'));
+  field('analogUhfListenBtn')?.addEventListener('click', () => listenToAnalogRole('analog_70cm'));
   field('refreshReceiverInventoryBtn')?.addEventListener('click', refreshReceiverInventory);
   field('importAnalogCsvBtn')?.addEventListener('click', importAnalogCsv);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
@@ -866,6 +896,7 @@ p25RemoveDashboardAutostartTuningRemnants();
   refreshRadioReferenceStatus();
   refreshReceiverInventory();
   refreshAnalogChannels();
+  refreshAnalogStatus();
   refreshStatus();
   refreshConfig();
   setInterval(refreshStatus, STATUS_REFRESH_INTERVAL_MS);
@@ -877,6 +908,7 @@ p25RemoveDashboardAutostartTuningRemnants();
     );
   }, FAST_ACTIVITY_STAGGER_MS);
   setInterval(refreshReceiverInventory, 15000);
+  setInterval(refreshAnalogStatus, 1000);
 }
 
 if (document.readyState === 'loading') {

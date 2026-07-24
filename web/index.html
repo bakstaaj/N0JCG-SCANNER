@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=0.6a-receiver-inventory">
+  <link rel="stylesheet" href="/app.css?v=analog-dashboard-v1">
 </head>
 <body>
   <div class="app-shell">
@@ -54,6 +54,15 @@
             <div><span>Phase</span><strong id="p25Phase">-</strong></div>
             <div><span>Audio</span><strong id="browserAudioLastEvent">Ready</strong></div>
           </div>
+        </section>
+        <section class="analog-scanner-panel" aria-label="analog scanners">
+          <div class="analog-scanner-heading"><div><span class="label">Continuous Analog Scanners</span><strong>VHF and UHF Activity</strong></div><span id="analogScannerSummaryBadge" class="pill warn">Loading</span></div>
+          <div id="analogScannerGrid" class="analog-scanner-grid">
+            <article class="analog-scanner-card"><div class="analog-scanner-topline"><div><span class="label">VHF Scanner</span><strong id="analogVhfChannel">Loading...</strong></div><span id="analogVhfBadge" class="pill warn">Loading</span></div><div class="analog-scanner-frequency" id="analogVhfFrequency">-</div><div class="analog-scanner-metrics"><div><span>Tunes</span><strong id="analogVhfTunes">-</strong></div><div><span>Cycles</span><strong id="analogVhfCycles">-</strong></div><div><span>Locks</span><strong id="analogVhfLocks">-</strong></div><div><span>Last Lock</span><strong id="analogVhfLastLock">None</strong></div></div><button id="analogVhfListenBtn" class="analog-listen-button" type="button">Listen to VHF</button></article>
+            <article class="analog-scanner-card"><div class="analog-scanner-topline"><div><span class="label">UHF Scanner</span><strong id="analogUhfChannel">Loading...</strong></div><span id="analogUhfBadge" class="pill warn">Loading</span></div><div class="analog-scanner-frequency" id="analogUhfFrequency">-</div><div class="analog-scanner-metrics"><div><span>Tunes</span><strong id="analogUhfTunes">-</strong></div><div><span>Cycles</span><strong id="analogUhfCycles">-</strong></div><div><span>Locks</span><strong id="analogUhfLocks">-</strong></div><div><span>Last Lock</span><strong id="analogUhfLastLock">None</strong></div></div><button id="analogUhfListenBtn" class="analog-listen-button" type="button">Listen to UHF</button></article>
+          </div>
+          <audio id="analogAudioPlayer" class="audio-player analog-audio-player" controls preload="none"></audio>
+          <div id="analogAudioMessage" class="analog-audio-message">Choose VHF or UHF to listen. Only one analog stream plays at a time.</div>
         </section>
         <section class="stats-grid" aria-label="statistics">
           <article><span>State</span><strong id="scannerState">-</strong></article>
@@ -177,6 +186,6 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=analog-csv-channel-import-v1"></script>
+  <script src="/app.js?v=analog-dashboard-v1"></script>
 </body>
 </html>

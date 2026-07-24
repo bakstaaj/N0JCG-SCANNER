@@ -1085,6 +1085,68 @@ def _v04h5_activity_payload(self: Any) -> dict[str, Any]:
 ScannerManager.activity_payload = _v04h5_activity_payload
 # END V0.4H5_BLOCKED_TGID_AUDIO_GATE
 
+
+# ANALOG_DASHBOARD_STATUS_V1
+_ANALOG_DASHBOARD_ROOT = Path(os.environ.get("PI_SCANNER_ANALOG_ROOT", "/home/pi/PI-SCANNER"))
+_ANALOG_DASHBOARD_ROLES = {
+    "analog_2m": {"label": "VHF", "status_file": "analog_2m.json", "audio_port": 8073, "expected_serial": "00000440"},
+    "analog_70cm": {"label": "UHF", "status_file": "analog_70cm.json", "audio_port": 8074, "expected_serial": "00000144"},
+}
+
+
+def _analog_dashboard_status_payload(host_header: str = "") -> dict[str, Any]:
+    hostname = str(host_header or "").split(":", 1)[0].strip() or "127.0.0.1"
+    status_dir = _ANALOG_DASHBOARD_ROOT / "runtime" / "status"
+    now = time.time()
+    roles: dict[str, Any] = {}
+    all_ok = True
+    for role, metadata in _ANALOG_DASHBOARD_ROLES.items():
+        path = status_dir / metadata["status_file"]
+        payload: dict[str, Any] = {}
+        error = ""
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("status root is not an object")
+        except Exception as exc:
+            error = str(exc)
+            all_ok = False
+        age_seconds = None
+        try:
+            age_seconds = max(0.0, now - path.stat().st_mtime)
+        except OSError:
+            pass
+        state = str(payload.get("state") or ("offline" if error else "unknown"))
+        serial = str(payload.get("rtl_serial") or "")
+        fresh = age_seconds is not None and age_seconds <= 15.0
+        role_ok = not error and fresh and serial == metadata["expected_serial"] and state not in {"error", "stopped", "offline"}
+        all_ok = all_ok and role_ok
+        roles[role] = {
+            "ok": role_ok,
+            "role": role,
+            "label": metadata["label"],
+            "state": state,
+            "rtl_serial": serial or metadata["expected_serial"],
+            "status_age_seconds": round(age_seconds, 1) if age_seconds is not None else None,
+            "channel_count": payload.get("channel_count"),
+            "channel_tunes": payload.get("channel_tunes"),
+            "scan_cycles": payload.get("scan_cycles"),
+            "lock_count": payload.get("lock_count"),
+            "frames_received": payload.get("frames_received"),
+            "bytes_received": payload.get("bytes_received"),
+            "frames_forwarded": payload.get("frames_forwarded"),
+            "current_channel": payload.get("current_channel"),
+            "last_lock": payload.get("last_lock"),
+            "rms": payload.get("rms"),
+            "baseline_rms": payload.get("baseline_rms"),
+            "threshold_rms": payload.get("threshold_rms"),
+            "rf_input_sample_rate_hz": payload.get("rf_input_sample_rate_hz"),
+            "audio_sample_rate_hz": payload.get("audio_sample_rate_hz"),
+            "audio_url": f"http://{hostname}:{metadata['audio_port']}/audio.wav",
+            "error": error or None,
+        }
+    return {"ok": all_ok, "analog_root": str(_ANALOG_DASHBOARD_ROOT), "updated_epoch": now, "roles": roles}
+
 MANAGER = ScannerManager()
 
 
@@ -1135,6 +1197,10 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send_json(MANAGER.receiver_inventory_payload())
                 return
             # ANALOG_CSV_CHANNEL_IMPORT_V1
+            # ANALOG_DASHBOARD_STATUS_V1
+            if path == "/api/analog/status":
+                self._send_json(_analog_dashboard_status_payload(self.headers.get("Host", "")))
+                return
             if path == "/api/analog/channels":
                 from pi_p25_scanner.analog_channels import channels_payload
                 self._send_json(channels_payload())
