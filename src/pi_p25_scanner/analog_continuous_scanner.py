@@ -26,7 +26,7 @@ ROLE_DEFAULTS = {
         "serial": "00000440",
         "udp_port": 23458,
         "status_name": "analog_2m.json",
-        "expected_channels": 31,
+        "expected_channels": 32,
     },
     "analog_70cm": {
         "serial": "00000144",
