@@ -1,0 +1,19 @@
+[Unit]
+Description=PI-SCANNER Isolated VHF Browser Audio
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/PI-SCANNER
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /home/pi/PI-SCANNER/tools/pi_scanner_vhf_audio_bridge.py --host 0.0.0.0 --port 8073 --udp-host 127.0.0.1 --udp-port 23458
+Restart=always
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
