@@ -411,3 +411,26 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     grid-template-columns: 1fr;
   }
 }
+
+/* ANALOG_CSV_CHANNEL_IMPORT_V1 */
+.analog-csv-upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  align-items: center;
+  margin: 0.75rem 0;
+}
+.analog-csv-upload-row input[type="file"] {
+  flex: 1 1 18rem;
+  min-width: 14rem;
+}
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid currentColor;
+  border-radius: 0.45rem;
+  text-decoration: none;
+}

@@ -783,6 +783,58 @@ async function autoCalibratePpm() {
   }
 }
 
+
+// ANALOG_CSV_CHANNEL_IMPORT_V1
+async function refreshAnalogChannels() {
+  try {
+    const result = await fetchJson('/api/analog/channels');
+    const counts = result?.channel_counts || {};
+    const twoMeter = Number(counts.analog_2m || 0);
+    const seventyCm = Number(counts.analog_70cm || 0);
+    setBadge('analogCsvStatusBadge', `${twoMeter} 2 m / ${seventyCm} 70 cm`,
+      (twoMeter + seventyCm) > 0 ? 'ok' : 'warn');
+    setText('analogCsvStatusText', safeJson({
+      channel_counts: result.channel_counts,
+      enabled_counts: result.enabled_counts,
+      serial_bindings: result.serial_bindings,
+      last_import: result.last_import
+    }));
+  } catch (error) {
+    setBadge('analogCsvStatusBadge', 'Load failed', 'bad');
+    setText('analogCsvStatusText', `Analog channel status failed: ${error.message}`);
+  }
+}
+
+async function importAnalogCsv() {
+  const file = field('analogCsvFile')?.files?.[0];
+  if (!file) {
+    setBadge('analogCsvStatusBadge', 'Choose CSV', 'warn');
+    setText('analogCsvStatusText', 'Choose a CSV file before importing.');
+    return;
+  }
+  setBadge('analogCsvStatusBadge', 'Importing', 'warn');
+  try {
+    const result = await postJson('/api/analog/channels/import', {
+      filename: file.name,
+      csv_text: await file.text(),
+      replace_mode: 'roles_in_file'
+    });
+    setBadge('analogCsvStatusBadge', 'Imported', 'ok');
+    setText('analogCsvStatusText', safeJson({
+      filename: result.filename,
+      imported_rows: result.imported_rows,
+      roles_present: result.roles_present,
+      channel_counts: result.channel_counts,
+      warnings: result.warnings,
+      backup_path: result.backup_path
+    }));
+    await refreshAnalogChannels();
+  } catch (error) {
+    setBadge('analogCsvStatusBadge', 'Import failed', 'bad');
+    setText('analogCsvStatusText', `CSV import failed: ${error.message}`);
+  }
+}
+
 function attachEventHandlers() {
   field('menuBtn')?.addEventListener('click', openDrawer);
   field('closeDrawerBtn')?.addEventListener('click', closeDrawer);
@@ -791,6 +843,7 @@ function attachEventHandlers() {
   field('startBtn')?.addEventListener('click', (event) => { if (p25AllowManualStart(event)) startScannerAndAudio(); });
   field('stopBtn')?.addEventListener('click', stopScanner);
   field('refreshReceiverInventoryBtn')?.addEventListener('click', refreshReceiverInventory);
+  field('importAnalogCsvBtn')?.addEventListener('click', importAnalogCsv);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
   field('loadProfileBtn')?.addEventListener('click', loadSelectedProfile);
   field('saveProfileBtn')?.addEventListener('click', saveCurrentProfile);
@@ -812,6 +865,7 @@ p25RemoveDashboardAutostartTuningRemnants();
   refreshProfiles();
   refreshRadioReferenceStatus();
   refreshReceiverInventory();
+  refreshAnalogChannels();
   refreshStatus();
   refreshConfig();
   setInterval(refreshStatus, STATUS_REFRESH_INTERVAL_MS);

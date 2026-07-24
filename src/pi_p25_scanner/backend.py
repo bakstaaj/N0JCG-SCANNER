@@ -1134,6 +1134,11 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/receivers/inventory":
                 self._send_json(MANAGER.receiver_inventory_payload())
                 return
+            # ANALOG_CSV_CHANNEL_IMPORT_V1
+            if path == "/api/analog/channels":
+                from pi_p25_scanner.analog_channels import channels_payload
+                self._send_json(channels_payload())
+                return
             if path == "/api/config/named":
                 self._send_json(MANAGER.named_configs_payload())
                 return
@@ -1168,6 +1173,15 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/scanner/stop":
                 payload, status = MANAGER.stop()
                 self._send_json(payload, status)
+                return
+            # ANALOG_CSV_CHANNEL_IMPORT_V1
+            if path == "/api/analog/channels/import":
+                from pi_p25_scanner.analog_channels import AnalogChannelError, import_csv_request
+                try:
+                    result = import_csv_request(self._read_json())
+                except AnalogChannelError as exc:
+                    raise ConfigError(str(exc)) from exc
+                self._send_json(result, HTTPStatus.ACCEPTED)
                 return
             if path in ("/api/audio/start", "/api/audio/stop"):
                 self._send_json(MANAGER.audio_status(self.headers.get("Host", "")), HTTPStatus.ACCEPTED)

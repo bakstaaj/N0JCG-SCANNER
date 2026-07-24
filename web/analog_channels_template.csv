@@ -1,0 +1,5 @@
+receiver,name,frequency_mhz,mode,ctcss_hz,dcs_code,enabled,priority
+2m,2 m National Simplex,146.520000,FM,,,true,0
+2m,Example 2 m Repeater,146.940000,FM,100.0,,true,0
+70cm,70 cm National Simplex,446.000000,FM,,,true,0
+70cm,Example 70 cm Repeater,449.500000,FM,100.0,,true,0
