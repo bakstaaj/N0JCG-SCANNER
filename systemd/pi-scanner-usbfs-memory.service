@@ -1,0 +1,12 @@
+[Unit]
+Description=Set USBFS memory ceiling for concurrent PI-SCANNER RTL-SDR receivers
+After=systemd-modules-load.service
+Before=pi-scanner-vhf-worker.service pi-scanner-uhf-worker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'test -w /sys/module/usbcore/parameters/usbfs_memory_mb && echo 0 > /sys/module/usbcore/parameters/usbfs_memory_mb'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
