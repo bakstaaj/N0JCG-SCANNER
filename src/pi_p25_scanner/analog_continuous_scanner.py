@@ -73,10 +73,14 @@ def atomic_json(path: Path, payload: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
-def load_config(path: Path, role: str) -> tuple[dict[str, Any], Path]:
-    source = path if path.exists() else TEMPLATE_CONFIG
+def load_config(
+    path: Path,
+    role: str,
+    template_path: Path = TEMPLATE_CONFIG,
+) -> tuple[dict[str, Any], Path]:
+    source = path if path.exists() else template_path
     if not source.exists():
-        raise ScannerError(f"configuration missing: {path} and {TEMPLATE_CONFIG}")
+        raise ScannerError(f"configuration missing: {path} and {template_path}")
     payload = json.loads(source.read_text(encoding="utf-8"))
     worker = payload["workers"][role]
     expected = ROLE_DEFAULTS[role]
@@ -369,8 +373,8 @@ class ContinuousScanner:
         return 0
 
 
-def self_test(role: str, config: Path) -> int:
-    worker, source = load_config(config, role)
+def self_test(role: str, config: Path, template: Path) -> int:
+    worker, source = load_config(config, role, template)
     defaults = ROLE_DEFAULTS[role]
     channels = worker["channels"]
     if len(channels) != defaults["expected_channels"]:
@@ -400,6 +404,12 @@ def main(default_role: str | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--role", choices=sorted(ROLE_DEFAULTS), default=default_role)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument(
+        "--template",
+        type=Path,
+        default=TEMPLATE_CONFIG,
+        help="Fallback configuration template used when --config is absent.",
+    )
     parser.add_argument("--status-path", type=Path)
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--smoke-seconds", type=float)
@@ -413,8 +423,10 @@ def main(default_role: str | None = None) -> int:
         DEFAULT_STATUS_DIR / ROLE_DEFAULTS[role]["status_name"]
     )
     if args.self_test:
-        return self_test(role, args.config)
+        return self_test(role, args.config, args.template)
 
+    if not args.config.exists() and args.template.exists():
+        args.config = args.template
     scanner = ContinuousScanner(role, args.config, status_path, args.no_forward)
     signal.signal(signal.SIGTERM, scanner.request_stop)
     signal.signal(signal.SIGINT, scanner.request_stop)

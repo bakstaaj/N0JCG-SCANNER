@@ -10,7 +10,7 @@ Group=pi
 WorkingDirectory=/home/pi/PI-SCANNER
 Environment=PYTHONPATH=/home/pi/PI-SCANNER/src
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 -m pi_p25_scanner.analog_vhf_worker --config /home/pi/PI-SCANNER/runtime/settings/analog_receivers.json --template /home/pi/PI-SCANNER/config/analog_receivers.example.json --status-path /home/pi/PI-SCANNER/runtime/status/analog_2m.json
+ExecStart=/usr/bin/python3 -m pi_p25_scanner.analog_vhf_worker --config /home/pi/PI-SCANNER/runtime/settings/analog_receivers.json --status-path /home/pi/PI-SCANNER/runtime/status/analog_2m.json
 Restart=on-failure
 RestartSec=2
 KillSignal=SIGINT
