@@ -1174,3 +1174,84 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   window.piP25SelectedRadioReferenceCounty = selectedCounty;
 })();
 // END V0.5AH RR SITE COUNTY FILTER
+
+/* PI_SCANNER_SPECTRUM_TELEMETRY_V1 */
+(() => {
+  "use strict";
+  const ID = "analog-spectrum-telemetry";
+  const fmt = (v, d=1) => Number.isFinite(Number(v)) ? Number(v).toFixed(d) : "—";
+  const mhz = (v) => Number.isFinite(Number(v)) ? `${(Number(v)/1e6).toFixed(4)} MHz` : "—";
+  const label = (v) => String(v || "offline").replaceAll("_"," ").replace(/\b\w/g, c => c.toUpperCase());
+
+  function role(payload, key) {
+    return payload?.[key] || payload?.workers?.[key] || payload?.analog?.[key] || {};
+  }
+
+  function topCandidate(status) {
+    const list = status?.last_spectrum?.top_candidates;
+    return Array.isArray(list) && list.length ? list[0] : {};
+  }
+
+  function segment(status) {
+    const current = Number(status.spectrum_segment_index);
+    const total = Number(status.spectrum_segment_count || status?.last_spectrum?.segment_count);
+    if (Number.isFinite(current) && Number.isFinite(total) && total > 0) return `${current} of ${total}`;
+    if (Number.isFinite(total) && total > 0) return `${total} total`;
+    return "—";
+  }
+
+  function card(title, status) {
+    const spectrum = status.last_spectrum || {};
+    const candidate = topCandidate(status);
+    const count = status.spectrum_candidate_count ?? spectrum.selected_candidate_count ?? 0;
+    const frequency = status.current_channel?.frequency_hz ?? candidate.frequency_hz;
+    const margin = status.current_channel?.spectrum_margin_db ?? candidate.margin_db;
+    const noise = status.current_channel?.spectrum_noise_floor_db ?? candidate.noise_floor_db;
+    const duration = status.spectrum_elapsed_seconds ?? spectrum.duration_seconds;
+    const state = String(status.state || "offline");
+    const good = !["offline","error","stopped"].includes(state);
+
+    return `<article class="spectrum-telemetry-card">
+      <div class="spectrum-telemetry-heading"><strong>${title}</strong><span class="spectrum-state ${good ? "is-active" : "is-error"}">${label(state)}</span></div>
+      <div class="spectrum-telemetry-grid">
+        <span>Segment</span><b>${segment(status)}</b>
+        <span>Sweep</span><b>${fmt(duration)} s</b>
+        <span>Candidates</span><b>${count}</b>
+        <span>Strongest</span><b>${mhz(frequency)}</b>
+        <span>Margin</span><b>${fmt(margin)} dB</b>
+        <span>Noise floor</span><b>${fmt(noise)} dB</b>
+      </div>
+    </article>`;
+  }
+
+  function ensurePanel() {
+    let panel = document.getElementById(ID);
+    if (panel) return panel;
+    panel = document.createElement("section");
+    panel.id = ID;
+    panel.className = "analog-spectrum-telemetry";
+    panel.innerHTML = `<div class="spectrum-telemetry-title"><div><h3>Fast Spectrum Telemetry</h3><p>CSV-constrained RF sweep and candidate status</p></div><span id="spectrum-telemetry-updated">Waiting for data…</span></div><div id="spectrum-telemetry-cards" class="spectrum-telemetry-cards"></div>`;
+    const target = document.querySelector("[data-analog-status], #analog-status, .analog-status, main");
+    target && target !== document.body ? target.insertAdjacentElement("afterend", panel) : document.body.appendChild(panel);
+    return panel;
+  }
+
+  async function refresh() {
+    const panel = ensurePanel();
+    try {
+      const response = await fetch(`/api/analog/status?_=${Date.now()}`, {cache:"no-store"});
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      panel.querySelector("#spectrum-telemetry-cards").innerHTML =
+        card("VHF", role(payload, "analog_2m")) + card("UHF", role(payload, "analog_70cm"));
+      panel.querySelector("#spectrum-telemetry-updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
+      panel.classList.remove("has-error");
+    } catch (error) {
+      panel.classList.add("has-error");
+      panel.querySelector("#spectrum-telemetry-updated").textContent = `Telemetry unavailable: ${error.message}`;
+    }
+  }
+
+  const start = () => { ensurePanel(); refresh(); window.setInterval(refresh, 1500); };
+  document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", start, {once:true}) : start();
+})();
