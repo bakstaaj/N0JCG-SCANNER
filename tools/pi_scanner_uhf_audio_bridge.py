@@ -262,10 +262,11 @@ class AudioHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/api/audio/status":
+        request_path = self.path.split("?", 1)[0]
+        if request_path == "/api/audio/status":
             self._send_json(self.state.snapshot())
             return
-        if self.path == "/test-tone.wav":
+        if request_path == "/test-tone.wav":
             data = generated_tone_wav()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "audio/wav")
@@ -274,7 +275,7 @@ class AudioHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
-        if self.path != "/audio.wav":
+        if request_path != "/audio.wav":
             self._send_json(
                 {"ok": False, "error": "not found"},
                 HTTPStatus.NOT_FOUND,
