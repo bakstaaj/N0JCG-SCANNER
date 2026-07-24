@@ -331,9 +331,30 @@ class ContinuousScanner:
         dwell_seconds = float(self.worker.get("dwell_seconds") or 0.55)
         hold_seconds = float(channel.get("hold_seconds") or 1.0)
         release_seconds = float(channel.get("resume_delay_seconds") or 1.25)
-        configured_squelch = int(channel.get("squelch_rms") or 1800)
+        configured_squelch = int(
+            channel.get("squelch_rms")
+            or self.worker.get("lock_squelch_rms")
+            or 1200
+        )
+        lock_window_frames = max(
+            2,
+            int(self.worker.get("lock_window_frames") or 4),
+        )
+        lock_confirm_frames = max(
+            1,
+            min(
+                lock_window_frames,
+                int(self.worker.get("lock_confirm_frames") or 2),
+            ),
+        )
+        adaptive_multiplier = float(
+            self.worker.get("adaptive_squelch_multiplier") or 1.25
+        )
+        adaptive_offset = int(
+            self.worker.get("adaptive_squelch_offset_rms") or 100
+        )
         prebuffer: Deque[bytes] = collections.deque(maxlen=20)
-        recent: Deque[bool] = collections.deque(maxlen=5)
+        recent: Deque[bool] = collections.deque(maxlen=lock_window_frames)
         baseline_values: list[int] = []
         locked = False
         last_active = 0.0
@@ -364,6 +385,8 @@ class ContinuousScanner:
                             "locked" if locked else "tuning",
                             channel,
                             watchdog_waiting=True,
+                            lock_confirm_frames=lock_confirm_frames,
+                            lock_window_frames=lock_window_frames,
                         )
                         heartbeat_at = now + 1.0
                     if now >= pcm_deadline:
@@ -407,11 +430,11 @@ class ContinuousScanner:
                     baseline = ordered[len(ordered) // 2]
                 else:
                     baseline = 0
-                adaptive = int(baseline * 1.45 + 175)
+                adaptive = int(baseline * adaptive_multiplier + adaptive_offset)
                 threshold = max(configured_squelch, adaptive)
                 active = value >= threshold
                 recent.append(active)
-                confirmed = sum(recent) >= 3
+                confirmed = sum(recent) >= lock_confirm_frames
 
                 if not locked and confirmed:
                     locked = True
@@ -434,6 +457,8 @@ class ContinuousScanner:
                         rms=value,
                         baseline_rms=baseline,
                         threshold_rms=threshold,
+                        lock_confirm_frames=lock_confirm_frames,
+                        lock_window_frames=lock_window_frames,
                     )
 
                 if locked:
