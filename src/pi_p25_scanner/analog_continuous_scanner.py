@@ -138,6 +138,33 @@ def rtl_fm_command(
     return command
 
 
+def build_spectrum_segments(frequencies_hz, max_gap_hz, edge_padding_hz, minimum_span_hz):
+    frequencies = sorted(set(int(v) for v in frequencies_hz))
+    if not frequencies:
+        return []
+    groups = [[frequencies[0]]]
+    for frequency_hz in frequencies[1:]:
+        if frequency_hz - groups[-1][-1] > max_gap_hz:
+            groups.append([frequency_hz])
+        else:
+            groups[-1].append(frequency_hz)
+    segments = []
+    for group in groups:
+        low_hz = min(group) - edge_padding_hz
+        high_hz = max(group) + edge_padding_hz
+        if high_hz - low_hz < minimum_span_hz:
+            midpoint = (low_hz + high_hz) // 2
+            half = minimum_span_hz // 2
+            low_hz = midpoint - half
+            high_hz = midpoint + half
+        segments.append({
+            "low_hz": max(100000, int(low_hz)),
+            "high_hz": int(high_hz),
+            "frequencies_hz": list(group),
+        })
+    return segments
+
+
 def parse_rtl_power_csv(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8", errors="replace", newline="") as handle:
@@ -317,8 +344,9 @@ class ContinuousScanner:
 
         self.channel_tunes += 1
         self.status("tuning", channel, squelch_rms=threshold)
-        self.process = self.open_channel(channel)
-        assert self.process.stdout is not None
+        process = self.open_channel(channel)
+        self.process = process
+        assert process.stdout is not None
 
         try:
             pcm_deadline = time.monotonic() + float(
@@ -328,7 +356,7 @@ class ContinuousScanner:
             while not self.stop_requested:
                 now = time.monotonic()
                 timeout = max(0.0, min(0.5, pcm_deadline - now))
-                ready, _, _ = select.select([self.process.stdout], [], [], timeout)
+                ready, _, _ = select.select([process.stdout], [], [], timeout)
                 if not ready:
                     now = time.monotonic()
                     if now >= heartbeat_at:
@@ -352,7 +380,7 @@ class ContinuousScanner:
                         return
                     continue
 
-                data = os.read(self.process.stdout.fileno(), FRAME_BYTES)
+                data = os.read(process.stdout.fileno(), FRAME_BYTES)
                 if not data:
                     self.child_restarts += 1
                     self.status("retrying", channel, error="rtl_fm stdout closed")
@@ -438,146 +466,136 @@ class ContinuousScanner:
 
     def acquire_spectrum_candidates(self) -> list[dict[str, Any]]:
         channels = self.worker["channels"]
-        frequencies = sorted({
-            int(channel["frequency_hz"])
-            for channel in channels
-            if int(channel.get("frequency_hz") or 0) > 0
-        })
-        if not frequencies:
-            raise ScannerError(f"{self.role} has no spectrum frequencies")
+        frequencies = sorted({int(c["frequency_hz"]) for c in channels})
+        segments = build_spectrum_segments(
+            frequencies,
+            int(self.worker.get("spectrum_segment_max_gap_hz") or 500000),
+            int(self.worker.get("spectrum_edge_padding_hz") or 50000),
+            int(self.worker.get("spectrum_minimum_span_hz") or 250000),
+        )
+        if not segments:
+            raise ScannerError(f"{self.role} produced no spectrum segments")
 
         bin_hz = int(self.worker.get("spectrum_bin_hz") or 12500)
-        low_hz = min(frequencies)
-        high_hz = max(frequencies)
-        if low_hz == high_hz:
-            low_hz -= bin_hz
-            high_hz += bin_hz
-
         gain = float(self.worker.get("gain_db") or 49.6)
-        margin_required = float(
-            self.worker.get("spectrum_margin_db") or 8.0
-        )
-        candidate_limit = max(
-            1,
-            int(self.worker.get("spectrum_candidate_limit") or 12),
-        )
-        timeout_seconds = float(
-            self.worker.get("spectrum_timeout_seconds") or 25.0
-        )
-        blocked = {
-            int(value)
-            for value in self.worker.get("blocked_frequencies_hz", [])
-            if str(value).strip()
-        }
+        margin_required = float(self.worker.get("spectrum_margin_db") or 6.0)
+        candidate_limit = max(1, int(self.worker.get("spectrum_candidate_limit") or 12))
+        timeout_seconds = float(self.worker.get("spectrum_segment_timeout_seconds") or 12.0)
+        release_seconds = float(self.worker.get("receiver_release_seconds") or 1.25)
+        by_frequency = {int(c["frequency_hz"]): c for c in channels}
+        blocked = {int(v) for v in self.worker.get("blocked_frequencies_hz", [])}
+        candidates = []
+        metrics = []
+        sweep_started = time.monotonic()
 
-        self.status(
-            "spectrum_scanning",
-            spectrum_low_hz=low_hz,
-            spectrum_high_hz=high_hz,
-            spectrum_bin_hz=bin_hz,
-        )
-        started = time.monotonic()
-
-        with tempfile.TemporaryDirectory(
-            prefix=f"pi-scanner-{self.role}-spectrum-"
-        ) as temporary:
-            output = Path(temporary) / "rtl_power.csv"
-            command = [
-                "rtl_power",
-                "-d", self.serial,
-                "-f", f"{low_hz}:{high_hz}:{bin_hz}",
-                "-i", "1",
-                "-1",
-                "-g", str(gain),
-                str(output),
-            ]
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                start_new_session=True,
+        for index, segment in enumerate(segments, 1):
+            low_hz = int(segment["low_hz"])
+            high_hz = int(segment["high_hz"])
+            segment_frequencies = list(segment["frequencies_hz"])
+            self.status(
+                "spectrum_scanning",
+                spectrum_segment_index=index,
+                spectrum_segment_count=len(segments),
+                spectrum_low_hz=low_hz,
+                spectrum_high_hz=high_hz,
             )
-            deadline = time.monotonic() + timeout_seconds
-            heartbeat_at = time.monotonic()
-            while process.poll() is None:
-                now = time.monotonic()
-                if now >= heartbeat_at:
-                    self.status(
-                        "spectrum_scanning",
-                        spectrum_low_hz=low_hz,
-                        spectrum_high_hz=high_hz,
-                        spectrum_bin_hz=bin_hz,
-                        spectrum_elapsed_seconds=round(
-                            now - started,
-                            1,
-                        ),
-                    )
-                    heartbeat_at = now + 1.0
-                if now >= deadline:
-                    self.spectrum_failures += 1
-                    try:
-                        os.killpg(process.pid, signal.SIGINT)
-                        process.wait(timeout=2.0)
-                    except (ProcessLookupError, subprocess.TimeoutExpired):
-                        try:
-                            os.killpg(process.pid, signal.SIGKILL)
-                        except ProcessLookupError:
-                            pass
-                    raise ScannerError(
-                        f"rtl_power timed out after "
-                        f"{timeout_seconds:.1f}s"
-                    )
-                time.sleep(0.2)
-
-            stderr_bytes = b""
-            if process.stderr is not None:
-                stderr_bytes = process.stderr.read()
-            stderr_text = stderr_bytes.decode(
-                "utf-8",
-                errors="replace",
-            )[-2000:]
-            if process.returncode != 0:
-                self.spectrum_failures += 1
-                raise ScannerError(
-                    f"rtl_power failed rc={process.returncode}: "
-                    f"{stderr_text[-1000:]}"
+            segment_started = time.monotonic()
+            with tempfile.TemporaryDirectory(prefix=f"pi-scanner-{self.role}-") as temporary:
+                output = Path(temporary) / "rtl_power.csv"
+                command = [
+                    "rtl_power", "-d", self.serial,
+                    "-f", f"{low_hz}:{high_hz}:{bin_hz}",
+                    "-i", "1", "-1", "-g", str(gain), str(output),
+                ]
+                process = subprocess.Popen(
+                    command,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    start_new_session=True,
                 )
+                deadline = time.monotonic() + timeout_seconds
+                heartbeat = 0.0
+                timed_out = False
+                while process.poll() is None:
+                    now = time.monotonic()
+                    if self.stop_requested or now >= deadline:
+                        timed_out = now >= deadline
+                        try:
+                            os.killpg(process.pid, signal.SIGINT)
+                            process.wait(timeout=2.0)
+                        except (ProcessLookupError, subprocess.TimeoutExpired):
+                            try:
+                                os.killpg(process.pid, signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
+                        break
+                    if now >= heartbeat:
+                        self.status(
+                            "spectrum_scanning",
+                            spectrum_segment_index=index,
+                            spectrum_segment_count=len(segments),
+                            spectrum_low_hz=low_hz,
+                            spectrum_high_hz=high_hz,
+                            spectrum_elapsed_seconds=round(now - sweep_started, 1),
+                        )
+                        heartbeat = now + 1.0
+                    time.sleep(0.2)
 
-            rows = parse_rtl_power_csv(output)
+                stderr_text = ""
+                if process.stderr is not None:
+                    stderr_text = process.stderr.read().decode("utf-8", errors="replace")[-1000:]
+                if timed_out or process.returncode not in (0, None):
+                    self.spectrum_failures += 1
+                    metrics.append({
+                        "index": index, "low_hz": low_hz, "high_hz": high_hz,
+                        "channel_count": len(segment_frequencies), "ok": False,
+                        "error": "timeout" if timed_out else stderr_text,
+                        "duration_seconds": round(time.monotonic() - segment_started, 3),
+                    })
+                    time.sleep(release_seconds)
+                    continue
+                rows = parse_rtl_power_csv(output)
 
-        duration = time.monotonic() - started
-        if not rows:
-            self.spectrum_failures += 1
-            raise ScannerError("rtl_power returned no parseable spectrum rows")
-
-        candidates: list[dict[str, Any]] = []
-        by_frequency = {
-            int(channel["frequency_hz"]): channel
-            for channel in channels
-        }
-        noise_floors = [
-            float(row["noise_floor_db"])
-            for row in rows
-        ]
-
-        for frequency_hz in frequencies:
-            if frequency_hz in blocked:
+            if not rows:
+                self.spectrum_failures += 1
+                metrics.append({
+                    "index": index, "low_hz": low_hz, "high_hz": high_hz,
+                    "channel_count": len(segment_frequencies), "ok": False,
+                    "error": "no parseable rows",
+                    "duration_seconds": round(time.monotonic() - segment_started, 3),
+                })
+                time.sleep(release_seconds)
                 continue
-            measurement = spectrum_power_at(rows, frequency_hz)
-            if measurement is None:
-                continue
-            power_db, noise_floor_db = measurement
-            margin_db = power_db - noise_floor_db
-            if margin_db < margin_required:
-                continue
-            channel = dict(by_frequency[frequency_hz])
-            channel["spectrum_power_db"] = round(power_db, 2)
-            channel["spectrum_noise_floor_db"] = round(
-                noise_floor_db,
-                2,
-            )
-            channel["spectrum_margin_db"] = round(margin_db, 2)
-            candidates.append(channel)
+
+            found = 0
+            for frequency_hz in segment_frequencies:
+                if frequency_hz in blocked:
+                    continue
+                measurement = spectrum_power_at(rows, frequency_hz)
+                if measurement is None:
+                    continue
+                power_db, noise_floor_db = measurement
+                margin_db = power_db - noise_floor_db
+                if margin_db < margin_required:
+                    continue
+                channel = dict(by_frequency[frequency_hz])
+                channel["spectrum_power_db"] = round(power_db, 2)
+                channel["spectrum_noise_floor_db"] = round(noise_floor_db, 2)
+                channel["spectrum_margin_db"] = round(margin_db, 2)
+                candidates.append(channel)
+                found += 1
+
+            metrics.append({
+                "index": index, "low_hz": low_hz, "high_hz": high_hz,
+                "channel_count": len(segment_frequencies), "ok": True,
+                "candidate_count": found,
+                "duration_seconds": round(time.monotonic() - segment_started, 3),
+            })
+            time.sleep(release_seconds)
+
+        successful = sum(1 for item in metrics if item.get("ok"))
+        if successful == 0:
+            raise ScannerError(f"all {len(segments)} spectrum segments failed")
 
         candidates.sort(
             key=lambda item: (
@@ -590,38 +608,24 @@ class ContinuousScanner:
         self.spectrum_sweeps += 1
         self.spectrum_candidates_total += len(selected)
         self.last_spectrum = {
-            "low_hz": low_hz,
-            "high_hz": high_hz,
+            "mode": "csv_segmented",
+            "low_hz": min(frequencies),
+            "high_hz": max(frequencies),
             "bin_hz": bin_hz,
-            "duration_seconds": round(duration, 3),
-            "row_count": len(rows),
+            "duration_seconds": round(time.monotonic() - sweep_started, 3),
+            "segment_count": len(segments),
+            "successful_segment_count": successful,
+            "failed_segment_count": len(segments) - successful,
             "evaluated_channel_count": len(frequencies),
             "candidate_count": len(candidates),
             "selected_candidate_count": len(selected),
-            "margin_threshold_db": margin_required,
-            "candidate_limit": candidate_limit,
-            "median_noise_floor_db": round(
-                float(statistics.median(noise_floors)),
-                2,
-            ),
-            "top_candidates": [
-                {
-                    "name": item.get("name"),
-                    "frequency_hz": int(item["frequency_hz"]),
-                    "margin_db": item.get("spectrum_margin_db"),
-                    "power_db": item.get("spectrum_power_db"),
-                    "noise_floor_db": item.get(
-                        "spectrum_noise_floor_db"
-                    ),
-                }
-                for item in selected
-            ],
+            "segments": metrics,
             "completed_epoch": time.time(),
         }
         self.status(
             "spectrum_candidates",
-            spectrum_low_hz=low_hz,
-            spectrum_high_hz=high_hz,
+            spectrum_segment_count=len(segments),
+            spectrum_successful_segments=successful,
             spectrum_candidate_count=len(selected),
         )
         return selected

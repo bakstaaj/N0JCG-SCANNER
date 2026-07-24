@@ -557,7 +557,11 @@
       "spectrum_margin_db": 6.0,
       "spectrum_candidate_limit": 12,
       "spectrum_timeout_seconds": 25.0,
-      "receiver_release_seconds": 1.25
+      "receiver_release_seconds": 1.25,
+      "spectrum_segment_max_gap_hz": 500000,
+      "spectrum_edge_padding_hz": 50000,
+      "spectrum_minimum_span_hz": 250000,
+      "spectrum_segment_timeout_seconds": 12.0
     },
     "analog_70cm": {
       "enabled": true,
@@ -705,7 +709,11 @@
       "spectrum_margin_db": 6.0,
       "spectrum_candidate_limit": 12,
       "spectrum_timeout_seconds": 25.0,
-      "receiver_release_seconds": 1.25
+      "receiver_release_seconds": 1.25,
+      "spectrum_segment_max_gap_hz": 500000,
+      "spectrum_edge_padding_hz": 50000,
+      "spectrum_minimum_span_hz": 250000,
+      "spectrum_segment_timeout_seconds": 12.0
     }
   },
   "last_import": {
