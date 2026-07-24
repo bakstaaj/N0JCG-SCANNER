@@ -480,7 +480,17 @@ class ContinuousScanner:
         gain = float(self.worker.get("gain_db") or 49.6)
         margin_required = float(self.worker.get("spectrum_margin_db") or 6.0)
         candidate_limit = max(1, int(self.worker.get("spectrum_candidate_limit") or 12))
-        timeout_seconds = float(self.worker.get("spectrum_segment_timeout_seconds") or 12.0)
+        capture_seconds = max(
+            1.0,
+            float(self.worker.get("spectrum_capture_seconds") or 2.0),
+        )
+        timeout_seconds = max(
+            capture_seconds + 5.0,
+            float(
+                self.worker.get("spectrum_segment_timeout_seconds")
+                or 8.0
+            ),
+        )
         release_seconds = float(self.worker.get("receiver_release_seconds") or 1.25)
         by_frequency = {int(c["frequency_hz"]): c for c in channels}
         blocked = {int(v) for v in self.worker.get("blocked_frequencies_hz", [])}
@@ -498,6 +508,7 @@ class ContinuousScanner:
                 spectrum_segment_count=len(segments),
                 spectrum_low_hz=low_hz,
                 spectrum_high_hz=high_hz,
+                spectrum_capture_seconds=capture_seconds,
             )
             segment_started = time.monotonic()
             with tempfile.TemporaryDirectory(prefix=f"pi-scanner-{self.role}-") as temporary:
@@ -505,7 +516,9 @@ class ContinuousScanner:
                 command = [
                     "rtl_power", "-d", self.serial,
                     "-f", f"{low_hz}:{high_hz}:{bin_hz}",
-                    "-i", "1", "-1", "-g", str(gain), str(output),
+                    "-i", "1",
+                    "-e", f"{capture_seconds:g}s",
+                    "-g", str(gain), str(output),
                 ]
                 process = subprocess.Popen(
                     command,
@@ -619,6 +632,8 @@ class ContinuousScanner:
             "evaluated_channel_count": len(frequencies),
             "candidate_count": len(candidates),
             "selected_candidate_count": len(selected),
+            "capture_seconds": capture_seconds,
+            "capture_mode": "explicit_duration",
             "segments": metrics,
             "completed_epoch": time.time(),
         }
