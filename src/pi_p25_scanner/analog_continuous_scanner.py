@@ -41,11 +41,14 @@ DEFAULT_CONFIG = ROOT / "runtime/settings/analog_receivers.json"
 TEMPLATE_CONFIG = ROOT / "config/analog_receivers.example.json"
 DEFAULT_STATUS_DIR = ROOT / "runtime/status"
 
-RF_INPUT_RATE = 240000
+DEMOD_RATE = 24000
 AUDIO_RATE = 8000
+DECIMATION = DEMOD_RATE // AUDIO_RATE
 FRAME_MS = 20
-FRAME_SAMPLES = AUDIO_RATE * FRAME_MS // 1000
-FRAME_BYTES = FRAME_SAMPLES * 2
+DEMOD_FRAME_SAMPLES = DEMOD_RATE * FRAME_MS // 1000
+DEMOD_FRAME_BYTES = DEMOD_FRAME_SAMPLES * 2
+AUDIO_FRAME_SAMPLES = AUDIO_RATE * FRAME_MS // 1000
+AUDIO_FRAME_BYTES = AUDIO_FRAME_SAMPLES * 2
 TRANSIENT_PATTERNS = (
     "usb_claim_interface error -6",
     "failed to open rtlsdr device",
@@ -68,6 +71,20 @@ def rms_pcm16(data: bytes) -> int:
     if not samples:
         return 0
     return int(math.sqrt(sum(int(v) * int(v) for v in samples) / len(samples)))
+
+
+def downsample_pcm16_3x(data: bytes) -> bytes:
+    usable = len(data) - (len(data) % 6)
+    samples = array.array("h")
+    samples.frombytes(data[:usable])
+    if sys.byteorder != "little":
+        samples.byteswap()
+    output = array.array("h")
+    for index in range(0, len(samples), 3):
+        output.append(int((int(samples[index]) + int(samples[index + 1]) + int(samples[index + 2])) / 3))
+    if sys.byteorder != "little":
+        output.byteswap()
+    return output.tobytes()
 
 
 def atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -125,12 +142,10 @@ def rtl_fm_command(
         "-d", serial,
         "-f", str(int(channel["frequency_hz"])),
         "-M", mode,
-        "-s", str(int(worker.get("sample_rate_hz") or RF_INPUT_RATE)),
-        "-r", str(int(worker.get("audio_rate_hz") or AUDIO_RATE)),
+        "-s", str(int(worker.get("demod_rate_hz") or DEMOD_RATE)),
         "-g", str(gain),
         "-l", "0",
         "-p", str(ppm),
-        "-E", "offset",
         "-E", "dc",
     ]
     if mode == "fm":
@@ -292,13 +307,13 @@ class ContinuousScanner:
             "frames_forwarded": self.frames_forwarded,
             "audio_udp_host": self.udp_target[0],
             "audio_udp_port": self.udp_target[1],
-            "rf_input_sample_rate_hz": int(
-                self.worker.get("sample_rate_hz") or RF_INPUT_RATE
+            "demod_sample_rate_hz": int(
+                self.worker.get("demod_rate_hz") or DEMOD_RATE
             ),
-            "audio_sample_rate_hz": int(
-                self.worker.get("audio_rate_hz") or AUDIO_RATE
-            ),
-            "frame_bytes": FRAME_BYTES,
+            "audio_sample_rate_hz": AUDIO_RATE,
+            "demod_frame_bytes": DEMOD_FRAME_BYTES,
+            "audio_frame_bytes": AUDIO_FRAME_BYTES,
+            "audio_decimation": DECIMATION,
             "gain_db": float(self.worker.get("gain_db") or 49.6),
             "ppm": int(self.worker.get("ppm") or 0),
             "uptime_seconds": round(time.monotonic() - self.started_monotonic, 1),
@@ -346,12 +361,6 @@ class ContinuousScanner:
                 lock_window_frames,
                 int(self.worker.get("lock_confirm_frames") or 2),
             ),
-        )
-        adaptive_multiplier = float(
-            self.worker.get("adaptive_squelch_multiplier") or 1.25
-        )
-        adaptive_offset = int(
-            self.worker.get("adaptive_squelch_offset_rms") or 100
         )
         prebuffer: Deque[bytes] = collections.deque(maxlen=20)
         recent: Deque[bool] = collections.deque(maxlen=lock_window_frames)
@@ -403,10 +412,20 @@ class ContinuousScanner:
                         return
                     continue
 
-                data = os.read(process.stdout.fileno(), FRAME_BYTES)
-                if not data:
+                demod_data = os.read(process.stdout.fileno(), DEMOD_FRAME_BYTES)
+                if not demod_data:
                     self.child_restarts += 1
                     self.status("retrying", channel, error="rtl_fm stdout closed")
+                    return
+
+                data = downsample_pcm16_3x(demod_data)
+                if len(data) != AUDIO_FRAME_BYTES:
+                    self.child_restarts += 1
+                    self.status(
+                        "retrying",
+                        channel,
+                        error=f"unexpected decimated PCM frame size {len(data)} != {AUDIO_FRAME_BYTES}",
+                    )
                     return
 
                 pcm_deadline = time.monotonic() + float(
@@ -430,7 +449,10 @@ class ContinuousScanner:
                     baseline = ordered[len(ordered) // 2]
                 else:
                     baseline = 0
-                adaptive = int(baseline * adaptive_multiplier + adaptive_offset)
+                threshold_rise = int(
+                    self.worker.get("lock_threshold_above_baseline_rms") or 200
+                )
+                adaptive = baseline + threshold_rise
                 threshold = max(configured_squelch, adaptive)
                 active = value >= threshold
                 recent.append(active)
@@ -761,12 +783,18 @@ def self_test(role: str, config: Path, template: Path) -> int:
         )
     command = rtl_fm_command(defaults["serial"], channels[0], worker)
     required = (
-        "-s", "240000", "-r", "8000", "-g", "49.6",
-        "-p", "0", "offset", "dc", "deemp",
+        "-s", "24000", "-g", "49.6",
+        "-p", "0", "dc", "deemp",
     )
     missing = [token for token in required if token not in command]
     if missing:
         raise ScannerError(f"command missing required tokens: {missing}")
+    forbidden = ("-r", "offset")
+    present_forbidden = [token for token in forbidden if token in command]
+    if present_forbidden:
+        raise ScannerError(
+            f"command contains obsolete tokens: {present_forbidden}"
+        )
     with tempfile.TemporaryDirectory() as temporary:
         sample = Path(temporary) / "spectrum.csv"
         sample.write_text(
@@ -778,6 +806,14 @@ def self_test(role: str, config: Path, template: Path) -> int:
         measurement = spectrum_power_at(rows, 146025000)
         if measurement is None or measurement[0] != -40.0:
             raise ScannerError("spectrum parser self-test failed")
+    demod_samples = array.array("h", range(-240, 240))
+    if sys.byteorder != "little":
+        demod_samples.byteswap()
+    decimated = downsample_pcm16_3x(demod_samples.tobytes())
+    if len(decimated) != AUDIO_FRAME_BYTES:
+        raise ScannerError(
+            "24 kHz to 8 kHz downsampling self-test failed"
+        )
     synthetic = array.array("h", [0, 1000, -1000, 2000, -2000] * 64)
     if sys.byteorder != "little":
         synthetic.byteswap()
