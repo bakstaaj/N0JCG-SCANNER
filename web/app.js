@@ -1184,7 +1184,38 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   const label = (v) => String(v || "offline").replaceAll("_"," ").replace(/\b\w/g, c => c.toUpperCase());
 
   function role(payload, key) {
-    return payload?.[key] || payload?.workers?.[key] || payload?.analog?.[key] || {};
+    const aliases = key === "analog_2m"
+      ? ["analog_2m", "vhf", "VHF", "analog_vhf"]
+      : ["analog_70cm", "uhf", "UHF", "analog_uhf"];
+    const visited = new Set();
+
+    function search(value, depth = 0) {
+      if (!value || typeof value !== "object" || depth > 5) return null;
+      if (visited.has(value)) return null;
+      visited.add(value);
+
+      if (String(value.role || "") === key) return value;
+
+      for (const alias of aliases) {
+        const direct = value[alias];
+        if (direct && typeof direct === "object") {
+          if (
+            String(direct.role || "") === key ||
+            direct.state ||
+            direct.current_channel ||
+            direct.spectrum_sweeps !== undefined
+          ) return direct;
+        }
+      }
+
+      for (const child of Object.values(value)) {
+        const match = search(child, depth + 1);
+        if (match) return match;
+      }
+      return null;
+    }
+
+    return search(payload) || {};
   }
 
   function topCandidate(status) {
