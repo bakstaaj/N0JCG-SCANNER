@@ -14,6 +14,7 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "runtime" / "settings" / "analog_receivers.json"
+DEFAULT_TEMPLATE_PATH = PROJECT_ROOT / "config" / "analog_receivers.example.json"
 MAX_CSV_BYTES = 512 * 1024
 MAX_ROWS = 2000
 
@@ -121,12 +122,16 @@ def default_config() -> dict[str, Any]:
     }
 
 
-def load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
+def load_config(
+    path: Path = DEFAULT_CONFIG_PATH,
+    template_path: Path = DEFAULT_TEMPLATE_PATH,
+) -> dict[str, Any]:
     path = Path(path)
-    if not path.exists():
+    source_path = path if path.exists() else Path(template_path)
+    if not source_path.exists():
         return default_config()
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(source_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise AnalogChannelError(f"invalid analog config JSON: {exc}") from exc
     if not isinstance(data, dict):

@@ -19,3 +19,16 @@ Fixed serial bindings:
 
 - `analog_2m`: `00000440`
 - `analog_70cm`: `00000144`
+
+## Cabin starter list
+
+`config/analog_channels_cabin.csv` is the initial cabin configuration. It
+contains 38 unique channels: 31 VHF channels assigned to `analog_2m` and
+7 UHF channels assigned to `analog_70cm`.
+
+The same list is available from the Radio Setup screen as a downloadable
+starter CSV. The generated receiver template preserves these serial bindings:
+
+- VHF / `analog_2m`: `00000440`
+- UHF / `analog_70cm`: `00000144`
+

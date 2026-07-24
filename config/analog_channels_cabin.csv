@@ -1,0 +1,39 @@
+receiver,name,frequency_mhz,mode,ctcss_hz,dcs_code,enabled,priority
+2m,2 m National Simplex,146.52,FM,,,TRUE,0
+70cm,70 cm National Simplex,446,FM,,,TRUE,0
+70cm,Example 70 cm Repeater,449.5,FM,100,,TRUE,0
+2m,Crpl Crk EMS,154.34,FM,,,TRUE,0
+2m,Crpl Crk Police,154.89,FM,,,TRUE,0
+2m,Crpl Crk Fire,154.965,FM,,,TRUE,0
+2m,Crpl Crk PD *S,156.12,FM,,,TRUE,0
+2m,Florissant Fire,154.19,FM,151.4,,TRUE,0
+2m,NE Teller Fire,154.4,FM,179.9,,TRUE,0
+2m,Mtn Comuni VFD,154.9875,FM,167.9,,TRUE,0
+2m,Four Mile Fire,155.13,FM,107.2,,TRUE,0
+2m,Teller SAR,155.175,FM,179.9,,TRUE,0
+2m,Teller Sheriff 1,155.58,FM,107.2,,TRUE,0
+2m,Teller Shrf Tac,155.64,FM,131.8,,TRUE,0
+2m,Teller Shrf c2c,155.91,FM,131.8,,TRUE,0
+2m,Divide Fire,155.985,FM,131.8,,TRUE,0
+70cm,Teller Roads B,453.1875,FM,131.8,,TRUE,0
+70cm,Teller Roads W,453.5125,FM,,,TRUE,0
+70cm,Teller Roads  V,453.6375,FM,,,TRUE,0
+70cm,Teller Roads C,453.8125,FM,,,TRUE,0
+70cm,SW TellerEMS,464.9125,FM,250.3,,TRUE,0
+2m,Cripple Creek,147.015,FM,107.2,,TRUE,0
+2m,Park Co SO 2,151.025,FM,156.7,,TRUE,0
+2m,Park Co SO 1,151.31,FM,131.8,,TRUE,0
+2m,Fairplay PD Tac,154.025,FM,107.2,,TRUE,0
+2m,LocalGovFairplay,155.07,FM,131.8,,TRUE,0
+2m,EM Badger Mtn,155.4,FM,156.7,,TRUE,0
+2m,Local Gov Badger,155.88,FM,107.2,,TRUE,0
+2m,Park Co SAR,156.18,FM,,,TRUE,0
+2m,Park Co DPW,159.105,FM,156.7,,TRUE,0
+2m,Lake George FPD,151.1525,FM,,,TRUE,0
+2m,Park Co Fire/EMS,154.085,FM,107.2,,TRUE,0
+2m,Hartsel FD,154.145,FM,,,TRUE,0
+2m,North-West FPD,154.205,FM,,,TRUE,0
+2m,Jeff-Como FPD,154.22,FM,141.3,,TRUE,0
+2m,Hartsel FD Tac,154.3625,FM,,,TRUE,0
+2m,Platte Canyn FPD,154.43,FM,156.7,,TRUE,0
+2m,So Park Co FPD,159.45,FM,,,TRUE,0
