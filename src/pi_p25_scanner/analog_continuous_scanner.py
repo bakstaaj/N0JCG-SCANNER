@@ -9,6 +9,7 @@ import collections
 import json
 import math
 import os
+import select
 import signal
 import socket
 import subprocess
@@ -158,6 +159,8 @@ class ContinuousScanner:
         self.channel_tunes = 0
         self.scan_cycles = 0
         self.lock_count = 0
+        self.watchdog_timeouts = 0
+        self.child_restarts = 0
         self.frames_received = 0
         self.bytes_received = 0
         self.frames_forwarded = 0
@@ -202,6 +205,8 @@ class ContinuousScanner:
             "channel_tunes": self.channel_tunes,
             "scan_cycles": self.scan_cycles,
             "lock_count": self.lock_count,
+            "watchdog_timeouts": self.watchdog_timeouts,
+            "child_restarts": self.child_restarts,
             "frames_received": self.frames_received,
             "bytes_received": self.bytes_received,
             "frames_forwarded": self.frames_forwarded,
@@ -263,21 +268,47 @@ class ContinuousScanner:
         assert self.process.stdout is not None
 
         try:
+            pcm_deadline = time.monotonic() + float(
+                self.worker.get("pcm_watchdog_seconds") or 3.0
+            )
+            heartbeat_at = time.monotonic() + 1.0
             while not self.stop_requested:
-                data = self.process.stdout.read(FRAME_BYTES)
-                if not data:
-                    stderr = b""
-                    if self.process.stderr is not None:
-                        stderr = self.process.stderr.read()[-2000:]
-                    text = stderr.decode("utf-8", errors="replace")
-                    if any(token in text.lower() for token in TRANSIENT_PATTERNS):
-                        self.status("retrying", channel, error=text[-800:])
-                        time.sleep(0.75)
+                now = time.monotonic()
+                timeout = max(0.0, min(0.5, pcm_deadline - now))
+                ready, _, _ = select.select([self.process.stdout], [], [], timeout)
+                if not ready:
+                    now = time.monotonic()
+                    if now >= heartbeat_at:
+                        self.status(
+                            "locked" if locked else "tuning",
+                            channel,
+                            watchdog_waiting=True,
+                        )
+                        heartbeat_at = now + 1.0
+                    if now >= pcm_deadline:
+                        self.watchdog_timeouts += 1
+                        self.child_restarts += 1
+                        self.status(
+                            "retrying",
+                            channel,
+                            error="rtl_fm PCM watchdog timeout",
+                            watchdog_timeout=True,
+                        )
+                        self.stop_process()
+                        time.sleep(0.35)
                         return
-                    raise ScannerError(
-                        f"rtl_fm ended on {channel.get('name')}: {text[-1000:]}"
-                    )
+                    continue
 
+                data = os.read(self.process.stdout.fileno(), FRAME_BYTES)
+                if not data:
+                    self.child_restarts += 1
+                    self.status("retrying", channel, error="rtl_fm stdout closed")
+                    return
+
+                pcm_deadline = time.monotonic() + float(
+                    self.worker.get("pcm_watchdog_seconds") or 3.0
+                )
+                heartbeat_at = time.monotonic() + 1.0
                 self.frames_received += 1
                 self.bytes_received += len(data)
                 now = time.monotonic()

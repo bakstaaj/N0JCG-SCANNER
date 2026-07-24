@@ -550,7 +550,8 @@
       "activity_confirm_frames": 3,
       "activity_window_frames": 5,
       "adaptive_squelch_multiplier": 1.45,
-      "adaptive_squelch_offset": 175
+      "adaptive_squelch_offset": 175,
+      "pcm_watchdog_seconds": 3.0
     },
     "analog_70cm": {
       "enabled": true,
@@ -691,7 +692,8 @@
       "activity_confirm_frames": 3,
       "activity_window_frames": 5,
       "adaptive_squelch_multiplier": 1.45,
-      "adaptive_squelch_offset": 175
+      "adaptive_squelch_offset": 175,
+      "pcm_watchdog_seconds": 3.0
     }
   },
   "last_import": {
