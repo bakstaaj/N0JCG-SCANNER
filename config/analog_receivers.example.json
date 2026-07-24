@@ -552,7 +552,7 @@
       "adaptive_squelch_multiplier": 1.45,
       "adaptive_squelch_offset": 175,
       "pcm_watchdog_seconds": 3.0,
-      "search_mode": "fast_spectrum",
+      "search_mode": "linear",
       "spectrum_bin_hz": 12500,
       "spectrum_margin_db": 6.0,
       "spectrum_candidate_limit": 12,
@@ -562,7 +562,8 @@
       "spectrum_edge_padding_hz": 50000,
       "spectrum_minimum_span_hz": 250000,
       "spectrum_segment_timeout_seconds": 8.0,
-      "spectrum_capture_seconds": 2.0
+      "spectrum_capture_seconds": 2.0,
+      "spectrum_disabled_reason": "rtl_power PLL does not lock on receiver serial 00000440"
     },
     "analog_70cm": {
       "enabled": true,
