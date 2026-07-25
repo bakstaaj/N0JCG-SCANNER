@@ -717,6 +717,7 @@ class ContinuousScanner:
                 return 0
 
             self.channel_tunes += 1
+            self.last_threshold_rms = open_rms
             self.status(
                 "native_scanning",
                 synthetic_channel,
@@ -750,18 +751,48 @@ class ContinuousScanner:
                     )
 
                     if not ready:
-                        if time.monotonic() >= pcm_deadline:
-                            self.watchdog_timeouts += 1
+                        now = time.monotonic()
+
+                        # In native rtl_fm scan mode, squelch suppresses stdout
+                        # completely while every configured channel is quiet.
+                        # No PCM is therefore the normal scanning state, not a
+                        # receiver watchdog failure. Restart only if rtl_fm
+                        # actually exits.
+                        if process.poll() is not None:
                             self.child_restarts += 1
                             self.status(
                                 "retrying",
                                 synthetic_channel,
                                 native_scan=True,
                                 error=(
-                                    "persistent rtl_fm PCM watchdog timeout"
+                                    "persistent rtl_fm exited with status "
+                                    f"{process.returncode}"
                                 ),
                             )
                             break
+
+                        if now >= heartbeat_at:
+                            self.status(
+                                "native_scanning",
+                                synthetic_channel,
+                                native_scan=True,
+                                exact_frequency_available=False,
+                                scan_frequencies_hz=frequencies_hz,
+                                rms=0,
+                                threshold_rms=open_rms,
+                                release_squelch_rms=close_rms,
+                                active_frames=0,
+                                lock_confirm_frames=confirm_frames,
+                                lock_window_frames=window_frames,
+                                squelch_quiet=True,
+                            )
+                            heartbeat_at = now + 0.5
+
+                        # Keep the diagnostic deadline moving while the child
+                        # remains alive and legitimately squelched.
+                        pcm_deadline = now + float(
+                            self.worker.get("pcm_watchdog_seconds") or 6.0
+                        )
                         continue
 
                     chunk = os.read(
