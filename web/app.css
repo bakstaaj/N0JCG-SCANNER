@@ -542,3 +542,12 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
 .analog-lock-counter strong {
   font-size: .8rem;
 }
+
+/* BOTTOM_LOCK_COUNTERS_V1 */
+.analog-lock-counters,
+.analog-lock-line,
+.analog-lock-strip,
+.analog-lock-item,
+.analog-scanner-panel {
+  display: none !important;
+}

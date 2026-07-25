@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=analog-lock-counts-v1">
+  <link rel="stylesheet" href="/app.css?v=bottom-lock-counters-v1">
 </head>
 <body>
   <div class="app-shell">
@@ -64,30 +64,7 @@
             <div><span>Audio</span><strong id="browserAudioLastEvent">Ready</strong></div>
           </div>
         </section>
-        <div class="analog-lock-counters" aria-label="analog lock counts">
-          <span class="analog-lock-counter">VHF Locks <strong id="analogVhfLocks">0</strong></span>
-          <span class="analog-lock-counter">UHF Locks <strong id="analogUhfLocks">0</strong></span>
 
-          <span id="analogVhfBadge" hidden>Scanning</span>
-          <span id="analogVhfChannel" hidden>Scanning</span>
-          <span id="analogVhfFrequency" hidden>-</span>
-          <span id="analogVhfLastLock" hidden>None</span>
-          <span id="analogVhfTunes" hidden>-</span>
-          <span id="analogVhfCycles" hidden>-</span>
-
-          <span id="analogUhfBadge" hidden>Scanning</span>
-          <span id="analogUhfChannel" hidden>Scanning</span>
-          <span id="analogUhfFrequency" hidden>-</span>
-          <span id="analogUhfLastLock" hidden>None</span>
-          <span id="analogUhfTunes" hidden>-</span>
-          <span id="analogUhfCycles" hidden>-</span>
-
-          <span id="analogScannerSummaryBadge" hidden>Loading</span>
-          <div id="analogScannerGrid" hidden></div>
-          <div id="analogAudioMessage" hidden></div>
-        </div>
-          <div id="analogAudioMessage" hidden></div>
-        </div>
         <section class="stats-grid" aria-label="statistics">
           <article><span>State</span><strong id="scannerState">-</strong></article>
           <article><span>PID</span><strong id="decoderPid">-</strong></article>
@@ -95,7 +72,27 @@
           <article><span>Voice Calls</span><strong id="activityVoiceCalls">-</strong></article>
           <article><span>Clear Confirmed</span><strong id="activityClearEvents">-</strong></article>
           <article><span>Encrypted</span><strong id="activityEncryptedEvents">-</strong></article>
+          <article><span>VHF Locks</span><strong id="analogVhfLocks">0</strong></article>
+          <article><span>UHF Locks</span><strong id="analogUhfLocks">0</strong></article>
         </section>
+
+        <div class="analog-status-support" hidden aria-hidden="true">
+          <span id="analogVhfBadge">Scanning</span>
+          <span id="analogVhfChannel">Scanning</span>
+          <span id="analogVhfFrequency">-</span>
+          <span id="analogVhfLastLock">None</span>
+          <span id="analogVhfTunes">-</span>
+          <span id="analogVhfCycles">-</span>
+          <span id="analogUhfBadge">Scanning</span>
+          <span id="analogUhfChannel">Scanning</span>
+          <span id="analogUhfFrequency">-</span>
+          <span id="analogUhfLastLock">None</span>
+          <span id="analogUhfTunes">-</span>
+          <span id="analogUhfCycles">-</span>
+          <span id="analogScannerSummaryBadge">Loading</span>
+          <div id="analogScannerGrid"></div>
+          <div id="analogAudioMessage"></div>
+        </div>
       </section>
 
       <section id="radioSetupScreen" class="screen" aria-label="radio setup">
@@ -210,7 +207,7 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=analog-lock-counts-v1"></script>
+  <script src="/app.js?v=bottom-lock-counters-v1"></script>
   <script src="/audio_arbitrator_live.js?v=dashboard-cleanup-v1"></script>
 </body>
 </html>
