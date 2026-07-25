@@ -344,7 +344,10 @@ class ContinuousScanner:
         return subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            # rtl_fm writes startup/device information to stderr.
+            # Leaving stderr as an unread PIPE can block the child before
+            # PCM reaches stdout, especially with several RTL devices.
+            stderr=subprocess.DEVNULL,
             start_new_session=True,
             bufsize=0,
         )
@@ -442,31 +445,13 @@ class ContinuousScanner:
                     if now >= pcm_deadline:
                         self.watchdog_timeouts += 1
                         self.child_restarts += 1
-                        self.stop_process()
-                        stderr_text = ""
-                        if process.stderr is not None:
-                            try:
-                                stderr_text = process.stderr.read().decode(
-                                    "utf-8", errors="replace"
-                                )[-4000:]
-                            except OSError as exc:
-                                stderr_text = f"stderr read failed: {exc}"
-                        diagnostic = (
-                            "rtl_fm PCM watchdog timeout; "
-                            + (stderr_text.strip() or "no stderr output")
-                        )
-                        print(
-                            f"UHF_PCM_WATCHDOG {diagnostic}",
-                            file=sys.stderr,
-                            flush=True,
-                        )
                         self.status(
                             "retrying",
                             channel,
-                            error=diagnostic,
+                            error="rtl_fm PCM watchdog timeout",
                             watchdog_timeout=True,
-                            rtl_fm_stderr=stderr_text,
                         )
+                        self.stop_process()
                         time.sleep(0.35)
                         return
                     continue
