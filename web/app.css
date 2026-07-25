@@ -745,3 +745,15 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     margin-left: auto;
   }
 }
+
+/* MATCH_ACTIVE_TGID_FONT_V1 */
+#activeTalkgroupLabel,
+#activeTgid.active-tgid-inline {
+  font-family: inherit !important;
+  font-size: var(--ui-value-size, .86rem) !important;
+  font-weight: var(--ui-value-weight, 700) !important;
+  line-height: 1.1 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: inherit !important;
+}
