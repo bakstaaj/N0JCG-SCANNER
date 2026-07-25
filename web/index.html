@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=bottom-lock-counters-v1">
+  <link rel="stylesheet" href="/app.css?v=compact-counter-audio-v2">
 </head>
 <body>
   <div class="app-shell">
@@ -43,20 +43,23 @@
             <span class="label">Unified Audio</span>
             <strong id="arbitratorAudioSource">Idle</strong>
           </div>
-          <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
-            Volume
-            <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
-          </label>
+          <div class="arbitrator-audio-controls">
+            <button id="arbitratorMuteBtn" type="button" class="audio-mute-button" aria-pressed="false">Mute</button>
+            <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
+              Volume
+              <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
+            </label>
+          </div>
         </section>
         <section class="activity-card">
           <div class="activity-topline">
-            <div>
+            <div class="activity-heading-inline">
               <span class="label">Active / Last Talkgroup</span>
               <strong id="activeTalkgroupLabel">Waiting for activity</strong>
+              <strong id="activeTgid" class="active-tgid-inline">-</strong>
             </div>
             <span id="stateBadge" class="pill">-</span>
           </div>
-          <div class="talkgroup-number" id="activeTgid">-</div>
           <div class="activity-grid">
             <div><span>Voice</span><strong id="voiceFrequency">-</strong></div>
             <div><span>Control</span><strong id="controlFrequency">-</strong></div>
@@ -70,7 +73,6 @@
           <article><span>PID</span><strong id="decoderPid">-</strong></article>
           <article><span>Unique TGIDs</span><strong id="activityUniqueTgids">-</strong></article>
           <article><span>Voice Calls</span><strong id="activityVoiceCalls">-</strong></article>
-          <article><span>Clear Confirmed</span><strong id="activityClearEvents">-</strong></article>
           <article><span>Encrypted</span><strong id="activityEncryptedEvents">-</strong></article>
           <article><span>VHF Locks</span><strong id="analogVhfLocks">0</strong></article>
           <article><span>UHF Locks</span><strong id="analogUhfLocks">0</strong></article>
@@ -207,7 +209,7 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=bottom-lock-counters-v1"></script>
-  <script src="/audio_arbitrator_live.js?v=dashboard-cleanup-v1"></script>
+  <script src="/app.js?v=compact-counter-audio-v2"></script>
+  <script src="/audio_arbitrator_live.js?v=compact-counter-audio-v2"></script>
 </body>
 </html>

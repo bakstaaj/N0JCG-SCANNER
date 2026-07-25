@@ -12,13 +12,31 @@
   let nextPlayTime = 0;
   let pending = new Uint8Array(0);
 
-  const field = (id) => document.getElementById(id);
+    let muted = false;
+const field = (id) => document.getElementById(id);
   function setStatus(message) { const node = field('browserAudioLastEvent'); if (node) node.textContent = message; }
   function setSource(source) { const node = field('arbitratorAudioSource'); if (node) node.textContent = source || 'Idle'; }
   function applyVolume() {
     const slider = field('arbitratorAudioVolume');
     const value = slider ? Number(slider.value) : 80;
-    if (gainNode) gainNode.gain.value = Math.max(0, Math.min(1, value / 100));
+    if (gainNode) {
+      gainNode.gain.value = muted ? 0 : Math.max(0, Math.min(1, value / 100));
+    }
+  }
+
+  function updateMuteButton() {
+    const button = field('arbitratorMuteBtn');
+    if (!button) return;
+    button.textContent = muted ? 'Unmute' : 'Mute';
+    button.setAttribute('aria-pressed', muted ? 'true' : 'false');
+    button.classList.toggle('active', muted);
+  }
+
+  function toggleMute() {
+    muted = !muted;
+    applyVolume();
+    updateMuteButton();
+    setStatus(muted ? 'Unified audio muted' : 'Unified audio unmuted');
   }
   async function ensureContext() {
     if (!context) {
@@ -81,6 +99,13 @@
   function wireControls() {
     const volume = field('arbitratorAudioVolume');
     if (volume && !volume.dataset.arbitratorWired) { volume.dataset.arbitratorWired = '1'; volume.addEventListener('input', applyVolume); }
+    const mute = field('arbitratorMuteBtn');
+    if (mute && !mute.dataset.arbitratorWired) {
+      mute.dataset.arbitratorWired = '1';
+      mute.addEventListener('click', toggleMute);
+      updateMuteButton();
+    }
+
     const start = field('startBtn');
     if (start && !start.dataset.arbitratorWired) {
       start.dataset.arbitratorWired = '1';

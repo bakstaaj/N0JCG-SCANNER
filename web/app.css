@@ -551,3 +551,67 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
 .analog-scanner-panel {
   display: none !important;
 }
+
+/* COMPACT_COUNTER_AUDIO_V2 */
+.activity-heading-inline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .35rem .6rem;
+}
+.activity-heading-inline .label {
+  flex-basis: 100%;
+}
+.active-tgid-inline {
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+}
+.talkgroup-number {
+  display: none !important;
+}
+.arbitrator-audio-controls {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+.audio-mute-button {
+  min-width: 4.75rem;
+  padding: .4rem .7rem;
+}
+.audio-mute-button.active {
+  font-weight: 800;
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: .3rem;
+}
+.stats-grid article {
+  min-width: 0;
+  padding: .4rem .3rem;
+}
+.stats-grid article span {
+  font-size: .66rem;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+.stats-grid article strong {
+  font-size: .86rem;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .stats-grid {
+    grid-template-columns: repeat(7, minmax(70px, 1fr));
+    overflow-x: auto;
+  }
+}
+@media (max-width: 720px) {
+  .arbitrator-audio-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
