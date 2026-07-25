@@ -1286,3 +1286,44 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   const start = () => { ensurePanel(); refresh(); window.setInterval(refresh, 1500); };
   document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", start, {once:true}) : start();
 })();
+
+// Unified three-scanner audio ownership display.
+(function installUnifiedAudioArbitratorUi() {
+  if (window.__piScannerUnifiedAudioUiInstalled) return;
+  window.__piScannerUnifiedAudioUiInstalled = true;
+
+  const statusUrl = () =>
+    `http://${window.location.hostname}:8072/api/audio/status?_=${Date.now()}`;
+
+  async function refreshUnifiedAudioOwner() {
+    try {
+      const response = await fetch(statusUrl(), { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const status = await response.json();
+      const source = status.active_source;
+      const message = source
+        ? `Playing ${source} scanner audio`
+        : 'Scanning all three receivers; waiting for audio';
+      const eventNode = document.getElementById('browserAudioLastEvent');
+      if (eventNode) eventNode.textContent = message;
+      const analogMessage = document.getElementById('analogAudioMessage');
+      if (analogMessage) analogMessage.textContent = message;
+
+      for (const id of ['analogVhfListenBtn', 'analogUhfListenBtn']) {
+        const button = document.getElementById(id);
+        if (button) button.hidden = true;
+      }
+      const analogPlayer = document.getElementById('analogAudioPlayer');
+      if (analogPlayer) {
+        analogPlayer.pause();
+        analogPlayer.removeAttribute('src');
+        analogPlayer.hidden = true;
+      }
+    } catch (_error) {
+      // Main scanner status refresh remains authoritative if audio is offline.
+    }
+  }
+
+  refreshUnifiedAudioOwner();
+  window.setInterval(refreshUnifiedAudioOwner, 500);
+})();
