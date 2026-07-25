@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=compact-audio-tile-v1">
+  <link rel="stylesheet" href="/app.css?v=typography-cleanup-v1">
 </head>
 <body>
   <div class="app-shell">
@@ -39,20 +39,20 @@
           <button id="stopBtn" type="button" class="big-action stop">Stop</button>
         </div>
         <section class="arbitrator-audio-bar compact-audio-tile" aria-label="scanner audio">
-          <span class="audio-inline-label">Audio</span>
-          <strong id="arbitratorAudioSource" class="audio-inline-value">Idle</strong>
-          <button id="arbitratorMuteBtn" type="button" class="audio-mute-button" aria-pressed="false">Mute</button>
+          <span class="ui-label">Audio</span>
+          <strong id="arbitratorAudioSource" class="ui-value">Idle</strong>
           <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
-            <span>Volume</span>
+            <span class="ui-label">Volume</span>
             <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
           </label>
+          <button id="arbitratorMuteBtn" type="button" class="audio-mute-button" aria-pressed="false">Mute</button>
         </section>
         <section class="activity-card">
           <div class="activity-topline">
             <div class="activity-heading-inline">
-              <span class="label">Active / Last Talkgroup</span>
-              <strong id="activeTalkgroupLabel">Waiting for activity</strong>
-              <strong id="activeTgid" class="active-tgid-inline">-</strong>
+              <span class="ui-label">Active / Last Talkgroup</span>
+              <strong id="activeTalkgroupLabel" class="ui-value">Waiting for activity</strong>
+              <strong id="activeTgid" class="active-tgid-inline ui-value">-</strong>
             </div>
             <span id="stateBadge" class="pill">-</span>
           </div>
@@ -205,7 +205,7 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=compact-audio-tile-v1"></script>
-  <script src="/audio_arbitrator_live.js?v=compact-audio-tile-v1"></script>
+  <script src="/app.js?v=typography-cleanup-v1"></script>
+  <script src="/audio_arbitrator_live.js?v=typography-cleanup-v1"></script>
 </body>
 </html>
