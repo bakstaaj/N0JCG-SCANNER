@@ -540,6 +540,23 @@ class ContinuousScanner:
                             baseline_rms=baseline,
                             threshold_rms=threshold,
                         )
+                        if len(self.worker.get("channels") or []) == 1:
+                            locked = False
+                            recent.clear()
+                            prebuffer.clear()
+                            last_active = 0.0
+                            self.last_active_frames = 0
+                            self.status(
+                                "tuning",
+                                channel,
+                                rms=value,
+                                baseline_rms=baseline,
+                                threshold_rms=threshold,
+                                active_frames=0,
+                                lock_confirm_frames=lock_confirm_frames,
+                                lock_window_frames=lock_window_frames,
+                            )
+                            continue
                         return
                 elif now >= dwell_until:
                     self.status(
