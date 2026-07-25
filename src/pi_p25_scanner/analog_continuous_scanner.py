@@ -663,7 +663,6 @@ class ContinuousScanner:
                     "rtl_power", "-d", self.serial,
                     "-f", f"{low_hz}:{high_hz}:{bin_hz}",
                     "-i", "1",
-                    "-e", f"{capture_seconds:g}s",
                     "-g", str(gain), str(output),
                 ]
                 process = subprocess.Popen(
@@ -672,13 +671,14 @@ class ContinuousScanner:
                     stderr=subprocess.PIPE,
                     start_new_session=True,
                 )
-                deadline = time.monotonic() + timeout_seconds
+                capture_deadline = time.monotonic() + capture_seconds
+                hard_deadline = time.monotonic() + timeout_seconds
                 heartbeat = 0.0
                 timed_out = False
+                capture_stopped = False
                 while process.poll() is None:
                     now = time.monotonic()
-                    if self.stop_requested or now >= deadline:
-                        timed_out = now >= deadline
+                    if self.stop_requested:
                         try:
                             os.killpg(process.pid, signal.SIGINT)
                             process.wait(timeout=2.0)
@@ -687,6 +687,35 @@ class ContinuousScanner:
                                 os.killpg(process.pid, signal.SIGKILL)
                             except ProcessLookupError:
                                 pass
+                        break
+                    if now >= capture_deadline:
+                        try:
+                            os.killpg(process.pid, signal.SIGINT)
+                            process.wait(timeout=3.0)
+                            capture_stopped = True
+                        except ProcessLookupError:
+                            capture_stopped = True
+                        except subprocess.TimeoutExpired:
+                            timed_out = True
+                            try:
+                                os.killpg(process.pid, signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
+                            try:
+                                process.wait(timeout=1.0)
+                            except subprocess.TimeoutExpired:
+                                pass
+                        break
+                    if now >= hard_deadline:
+                        timed_out = True
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        try:
+                            process.wait(timeout=1.0)
+                        except subprocess.TimeoutExpired:
+                            pass
                         break
                     if now >= heartbeat:
                         self.status(
@@ -698,12 +727,18 @@ class ContinuousScanner:
                             spectrum_elapsed_seconds=round(now - sweep_started, 1),
                         )
                         heartbeat = now + 1.0
-                    time.sleep(0.2)
+                    time.sleep(0.1)
 
                 stderr_text = ""
                 if process.stderr is not None:
-                    stderr_text = process.stderr.read().decode("utf-8", errors="replace")[-1000:]
-                if timed_out or process.returncode not in (0, None):
+                    stderr_text = process.stderr.read().decode(
+                        "utf-8", errors="replace"
+                    )[-1000:]
+                process_failed = (
+                    process.returncode not in (0, None)
+                    and not capture_stopped
+                )
+                if timed_out or process_failed:
                     self.spectrum_failures += 1
                     metrics.append({
                         "index": index, "low_hz": low_hz, "high_hz": high_hz,
