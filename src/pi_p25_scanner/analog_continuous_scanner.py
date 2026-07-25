@@ -329,10 +329,25 @@ class ContinuousScanner:
             "updated_epoch": time.time(),
         }
         if channel is not None:
+            native_scan = bool(extra.get("native_scan"))
+            exact_frequency_available = bool(
+                extra.get("exact_frequency_available")
+            )
+            if native_scan and not exact_frequency_available:
+                display_name = (
+                    "Locked / Active"
+                    if state == "locked"
+                    else "Scanning"
+                )
+                frequency_hz = None
+            else:
+                display_name = channel.get("name")
+                frequency_hz = int(channel["frequency_hz"])
+
             payload["current_channel"] = {
                 "id": channel.get("id"),
-                "name": channel.get("name"),
-                "frequency_hz": int(channel["frequency_hz"]),
+                "name": display_name,
+                "frequency_hz": frequency_hz,
                 "mode": channel.get("mode", "fm"),
                 "priority": int(channel.get("priority") or 0),
             }
@@ -722,6 +737,7 @@ class ContinuousScanner:
                 "native_scanning",
                 synthetic_channel,
                 native_scan=True,
+                exact_frequency_available=False,
                 scan_frequencies_hz=frequencies_hz,
                 squelch_rms=open_rms,
                 release_squelch_rms=close_rms,
