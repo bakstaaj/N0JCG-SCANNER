@@ -255,6 +255,9 @@ class ContinuousScanner:
         self.bytes_received = 0
         self.frames_forwarded = 0
         self.last_lock: dict[str, Any] | None = None
+        self.last_rms = 0
+        self.last_baseline_rms = 0
+        self.last_threshold_rms = 0
         self.started_monotonic = time.monotonic()
 
     def request_stop(self, _signum: int, _frame: Any) -> None:
@@ -305,6 +308,9 @@ class ContinuousScanner:
             "frames_received": self.frames_received,
             "bytes_received": self.bytes_received,
             "frames_forwarded": self.frames_forwarded,
+            "rms": self.last_rms,
+            "baseline_rms": self.last_baseline_rms,
+            "threshold_rms": self.last_threshold_rms,
             "audio_udp_host": self.udp_target[0],
             "audio_udp_port": self.udp_target[1],
             "demod_sample_rate_hz": int(
@@ -371,6 +377,10 @@ class ContinuousScanner:
         settle_until = channel_started + settle_seconds
         dwell_until = channel_started + settle_seconds + dwell_seconds
         threshold = configured_squelch
+        self.last_rms = 0
+        self.last_baseline_rms = 0
+        self.last_threshold_rms = threshold
+        demod_buffer = bytearray()
 
         self.channel_tunes += 1
         self.status("tuning", channel, squelch_rms=threshold)
@@ -412,11 +422,21 @@ class ContinuousScanner:
                         return
                     continue
 
-                demod_data = os.read(process.stdout.fileno(), DEMOD_FRAME_BYTES)
-                if not demod_data:
+                chunk = os.read(
+                    process.stdout.fileno(),
+                    DEMOD_FRAME_BYTES - len(demod_buffer),
+                )
+                if not chunk:
                     self.child_restarts += 1
                     self.status("retrying", channel, error="rtl_fm stdout closed")
                     return
+
+                demod_buffer.extend(chunk)
+                if len(demod_buffer) < DEMOD_FRAME_BYTES:
+                    continue
+
+                demod_data = bytes(demod_buffer[:DEMOD_FRAME_BYTES])
+                del demod_buffer[:DEMOD_FRAME_BYTES]
 
                 data = downsample_pcm16_3x(demod_data)
                 if len(data) != AUDIO_FRAME_BYTES:
@@ -424,7 +444,10 @@ class ContinuousScanner:
                     self.status(
                         "retrying",
                         channel,
-                        error=f"unexpected decimated PCM frame size {len(data)} != {AUDIO_FRAME_BYTES}",
+                        error=(
+                            "unexpected decimated PCM frame size "
+                            f"{len(data)} != {AUDIO_FRAME_BYTES}"
+                        ),
                     )
                     return
 
@@ -436,6 +459,7 @@ class ContinuousScanner:
                 self.bytes_received += len(data)
                 now = time.monotonic()
                 value = rms_pcm16(data)
+                self.last_rms = value
                 prebuffer.append(data)
 
                 if now < settle_until:
@@ -454,6 +478,8 @@ class ContinuousScanner:
                 )
                 adaptive = baseline + threshold_rise
                 threshold = max(configured_squelch, adaptive)
+                self.last_baseline_rms = baseline
+                self.last_threshold_rms = threshold
                 active = value >= threshold
                 recent.append(active)
                 confirmed = sum(recent) >= lock_confirm_frames
