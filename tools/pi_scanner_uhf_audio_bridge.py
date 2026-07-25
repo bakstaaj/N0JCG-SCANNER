@@ -30,7 +30,7 @@ DEFAULT_HTTP_HOST = "0.0.0.0"
 DEFAULT_HTTP_PORT = 8074
 DEFAULT_UDP_HOST = "127.0.0.1"
 DEFAULT_UDP_PORT = 23459
-DEFAULT_MAX_QUEUE_CHUNKS = 1500
+DEFAULT_MAX_QUEUE_CHUNKS = 25
 
 
 def wav_header() -> bytes:
@@ -101,6 +101,8 @@ class UhfAudioState:
     accepted_frames: int = 0
     ignored_packets: int = 0
     bytes_received: int = 0
+    dropped_stale_frames: int = 0
+    dropped_no_client_frames: int = 0
     frames_sent: int = 0
     silence_frames_sent: int = 0
     stream_clients: int = 0
@@ -112,7 +114,7 @@ class UhfAudioState:
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def __post_init__(self) -> None:
-        self.queue = deque(maxlen=max(100, self.max_queue_chunks))
+        self.queue = deque(maxlen=max(5, self.max_queue_chunks))
 
     def add_packet(self, payload: bytes) -> None:
         with self.lock:
@@ -123,6 +125,13 @@ class UhfAudioState:
                 self.ignored_packets += 1
                 return
             self.accepted_frames += 1
+            if self.stream_clients <= 0:
+                self.dropped_no_client_frames += 1
+                self.queue.clear()
+                return
+            if len(self.queue) >= self.queue.maxlen:
+                self.queue.popleft()
+                self.dropped_stale_frames += 1
             self.queue.append(payload)
 
     def pop_audio(self) -> bytes | None:
@@ -141,6 +150,8 @@ class UhfAudioState:
 
     def client_started(self) -> None:
         with self.lock:
+            self.dropped_stale_frames += len(self.queue)
+            self.queue.clear()
             self.stream_clients += 1
 
     def client_ended(self) -> None:
@@ -164,6 +175,10 @@ class UhfAudioState:
                 "ignored_packets": self.ignored_packets,
                 "bytes_received": self.bytes_received,
                 "queued_frames": len(self.queue),
+                "queue_capacity_frames": self.queue.maxlen,
+                "queue_latency_capacity_seconds": round(self.queue.maxlen * 0.02, 3),
+                "dropped_stale_frames": self.dropped_stale_frames,
+                "dropped_no_client_frames": self.dropped_no_client_frames,
                 "frames_sent": self.frames_sent,
                 "silence_frames_sent": self.silence_frames_sent,
                 "stream_clients": self.stream_clients,
@@ -308,14 +323,22 @@ def self_test() -> int:
     state = UhfAudioState()
     active = struct.pack("<160h", *([2000] * 160))
     state.add_packet(active)
+    no_client_snapshot = state.snapshot()
+    state.client_started()
+    state.add_packet(active)
     state.add_packet(b"invalid")
     output = state.pop_audio()
     snapshot = state.snapshot()
+    state.client_ended()
     checks = [
         output == active,
-        snapshot["packets"] == 2,
-        snapshot["accepted_frames"] == 1,
+        snapshot["packets"] == 3,
+        snapshot["accepted_frames"] == 2,
         snapshot["ignored_packets"] == 1,
+        no_client_snapshot["queued_frames"] == 0,
+        no_client_snapshot["dropped_no_client_frames"] == 1,
+        snapshot["queue_capacity_frames"] == DEFAULT_MAX_QUEUE_CHUNKS,
+        snapshot["queue_latency_capacity_seconds"] <= 0.5,
         wav_header().startswith(b"RIFF"),
         generated_tone_wav().startswith(b"RIFF"),
     ]
