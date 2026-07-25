@@ -513,3 +513,32 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     flex-wrap: wrap;
   }
 }
+
+/* ANALOG_LOCK_COUNTS_V1 */
+.analog-lock-line,
+.analog-lock-group,
+.analog-lock-separator {
+  display: none !important;
+}
+.analog-lock-counters {
+  display: flex;
+  justify-content: flex-end;
+  gap: .5rem;
+  margin-top: .35rem;
+  padding-top: .35rem;
+  border-top: 1px solid var(--border, #48525b);
+}
+.analog-lock-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .18rem .45rem;
+  border: 1px solid var(--border, #48525b);
+  border-radius: 999px;
+  font-size: .75rem;
+  line-height: 1;
+  opacity: .85;
+}
+.analog-lock-counter strong {
+  font-size: .8rem;
+}
