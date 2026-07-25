@@ -23,13 +23,13 @@ from typing import Any, Deque
 
 ROLE_DEFAULTS = {
     "analog_2m": {
-        "serial": "00000440",
+        "serial": "00000144",
         "udp_port": 23458,
         "status_name": "analog_2m.json",
         "expected_channels": 32,
     },
     "analog_70cm": {
-        "serial": "00000144",
+        "serial": "00000440",
         "udp_port": 23459,
         "status_name": "analog_70cm.json",
         "expected_channels": 7,

@@ -5,7 +5,7 @@
   "workers": {
     "analog_2m": {
       "enabled": true,
-      "rtl_serial": "00000440",
+      "rtl_serial": "00000144",
       "modulation": "fm",
       "gain_db": 49.6,
       "ppm": 0,
@@ -319,7 +319,7 @@
     },
     "analog_70cm": {
       "enabled": true,
-      "rtl_serial": "00000144",
+      "rtl_serial": "00000440",
       "modulation": "fm",
       "gain_db": 49.6,
       "ppm": 0,
