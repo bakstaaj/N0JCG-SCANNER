@@ -183,17 +183,24 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(payload)
             return
-        if path != "/audio.wav":
+        if path not in ("/audio.wav", "/audio.pcm"):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
 
         self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "audio/wav")
-        self.send_header("Cache-Control", "no-store")
+        self.send_header(
+            "Content-Type",
+            "audio/wav" if path == "/audio.wav" else "application/octet-stream",
+        )
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
-        self.wfile.write(wav_header())
-        self.wfile.flush()
+        if path == "/audio.wav":
+            self.wfile.write(wav_header())
+            self.wfile.flush()
         with self.state.lock:
             self.state.clients += 1
         try:
