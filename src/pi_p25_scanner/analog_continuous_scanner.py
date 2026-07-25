@@ -625,6 +625,254 @@ class ContinuousScanner:
                 )
             )
 
+
+    def native_linear_command(self) -> list[str]:
+        channels = self.worker["channels"]
+        if not channels:
+            raise ScannerError(f"{self.role} has no enabled channels")
+
+        modes = {
+            str(channel.get("mode") or "fm").strip().lower()
+            for channel in channels
+        }
+        if len(modes) != 1:
+            raise ScannerError(
+                f"{self.role} native scan requires one modulation mode"
+            )
+
+        mode = "am" if modes == {"am"} else "fm"
+        gain = float(self.worker.get("gain_db") or 49.6)
+        ppm = int(self.worker.get("ppm") or 0)
+        native_squelch = int(
+            self.worker.get("native_rtl_fm_squelch_level") or 50
+        )
+        native_delay = int(
+            self.worker.get("native_rtl_fm_squelch_delay") or 10
+        )
+
+        command = ["rtl_fm", "-d", self.serial]
+        for channel in channels:
+            command += ["-f", str(int(channel["frequency_hz"]))]
+
+        command += [
+            "-M", mode,
+            "-s", str(int(self.worker.get("demod_rate_hz") or DEMOD_RATE)),
+            "-g", str(gain),
+            "-l", str(native_squelch),
+            "-t", str(native_delay),
+            "-p", str(ppm),
+            "-E", "dc",
+        ]
+        if mode == "fm":
+            command += ["-E", "deemp"]
+        return command
+
+    def run_native_linear(
+        self,
+        started: float,
+        max_seconds: float | None,
+    ) -> int:
+        channels = self.worker["channels"]
+        open_rms = int(self.worker.get("lock_squelch_rms") or 550)
+        close_rms = int(self.worker.get("release_squelch_rms") or 475)
+        close_rms = min(close_rms, open_rms)
+        release_seconds = float(
+            self.worker.get("native_release_seconds") or 2.5
+        )
+        confirm_frames = max(
+            1, int(self.worker.get("lock_confirm_frames") or 1)
+        )
+        window_frames = max(
+            confirm_frames,
+            int(self.worker.get("lock_window_frames") or 3),
+        )
+
+        prebuffer: Deque[bytes] = collections.deque(maxlen=20)
+        recent: Deque[bool] = collections.deque(maxlen=window_frames)
+        demod_buffer = bytearray()
+        locked = False
+        below_since: float | None = None
+        heartbeat_at = 0.0
+        frequencies_hz = [
+            int(channel["frequency_hz"]) for channel in channels
+        ]
+        synthetic_channel = {
+            "id": f"{self.role}-native-linear",
+            "name": (
+                "2 m Native Scan"
+                if self.role == "analog_2m"
+                else "70 cm Native Scan"
+            ),
+            "frequency_hz": frequencies_hz[0],
+            "mode": channels[0].get("mode", "fm"),
+            "priority": 0,
+        }
+
+        while not self.stop_requested:
+            if (
+                max_seconds is not None
+                and time.monotonic() - started >= max_seconds
+            ):
+                self.status("smoke_passed")
+                return 0
+
+            self.channel_tunes += 1
+            self.status(
+                "native_scanning",
+                synthetic_channel,
+                native_scan=True,
+                scan_frequencies_hz=frequencies_hz,
+                squelch_rms=open_rms,
+                release_squelch_rms=close_rms,
+            )
+
+            process = subprocess.Popen(
+                self.native_linear_command(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                bufsize=0,
+            )
+            self.process = process
+            assert process.stdout is not None
+            pcm_deadline = time.monotonic() + float(
+                self.worker.get("pcm_watchdog_seconds") or 6.0
+            )
+
+            try:
+                while not self.stop_requested:
+                    now = time.monotonic()
+                    ready, _, _ = select.select(
+                        [process.stdout],
+                        [],
+                        [],
+                        max(0.0, min(0.5, pcm_deadline - now)),
+                    )
+
+                    if not ready:
+                        if time.monotonic() >= pcm_deadline:
+                            self.watchdog_timeouts += 1
+                            self.child_restarts += 1
+                            self.status(
+                                "retrying",
+                                synthetic_channel,
+                                native_scan=True,
+                                error=(
+                                    "persistent rtl_fm PCM watchdog timeout"
+                                ),
+                            )
+                            break
+                        continue
+
+                    chunk = os.read(
+                        process.stdout.fileno(),
+                        DEMOD_FRAME_BYTES - len(demod_buffer),
+                    )
+                    if not chunk:
+                        self.child_restarts += 1
+                        self.status(
+                            "retrying",
+                            synthetic_channel,
+                            native_scan=True,
+                            error="persistent rtl_fm stdout closed",
+                        )
+                        break
+
+                    demod_buffer.extend(chunk)
+                    if len(demod_buffer) < DEMOD_FRAME_BYTES:
+                        continue
+
+                    demod_data = bytes(
+                        demod_buffer[:DEMOD_FRAME_BYTES]
+                    )
+                    del demod_buffer[:DEMOD_FRAME_BYTES]
+                    data = downsample_pcm16_3x(demod_data)
+                    if len(data) != AUDIO_FRAME_BYTES:
+                        self.child_restarts += 1
+                        break
+
+                    pcm_deadline = time.monotonic() + float(
+                        self.worker.get("pcm_watchdog_seconds") or 6.0
+                    )
+                    self.frames_received += 1
+                    self.bytes_received += len(data)
+
+                    now = time.monotonic()
+                    value = rms_pcm16(data)
+                    self.last_rms = value
+                    self.last_threshold_rms = open_rms
+                    prebuffer.append(data)
+
+                    active = value >= open_rms
+                    recent.append(active)
+                    active_frames = sum(recent)
+                    self.last_active_frames = active_frames
+                    confirmed = active_frames >= confirm_frames
+
+                    if not locked and confirmed:
+                        locked = True
+                        self.lock_count += 1
+                        below_since = None
+                        self.last_lock = {
+                            "name": synthetic_channel["name"],
+                            "frequency_hz": None,
+                            "rms": value,
+                            "threshold_rms": open_rms,
+                            "started_epoch": time.time(),
+                            "native_scan": True,
+                        }
+                        if not self.no_forward:
+                            for frame in prebuffer:
+                                self.udp.sendto(frame, self.udp_target)
+                                self.frames_forwarded += 1
+
+                    if locked:
+                        if confirmed:
+                            below_since = None
+                        elif value <= close_rms:
+                            if below_since is None:
+                                below_since = now
+                        else:
+                            below_since = None
+
+                        if not self.no_forward:
+                            self.udp.sendto(data, self.udp_target)
+                            self.frames_forwarded += 1
+
+                        if (
+                            below_since is not None
+                            and now - below_since >= release_seconds
+                        ):
+                            locked = False
+                            below_since = None
+                            recent.clear()
+                            prebuffer.clear()
+                            self.last_active_frames = 0
+
+                    if now >= heartbeat_at:
+                        self.status(
+                            "locked" if locked else "native_scanning",
+                            synthetic_channel,
+                            native_scan=True,
+                            exact_frequency_available=False,
+                            scan_frequencies_hz=frequencies_hz,
+                            rms=value,
+                            threshold_rms=open_rms,
+                            release_squelch_rms=close_rms,
+                            active_frames=active_frames,
+                            lock_confirm_frames=confirm_frames,
+                            lock_window_frames=window_frames,
+                        )
+                        heartbeat_at = now + 0.25
+            finally:
+                self.stop_process()
+
+            if not self.stop_requested:
+                time.sleep(0.75)
+
+        self.status("stopped")
+        return 0
+
     def acquire_spectrum_candidates(self) -> list[dict[str, Any]]:
         channels = self.worker["channels"]
         frequencies = sorted({int(c["frequency_hz"]) for c in channels})
@@ -878,6 +1126,8 @@ class ContinuousScanner:
         ).strip().lower()
         if search_mode == "fast_spectrum":
             return self.run_fast_spectrum(started, max_seconds)
+        if search_mode in {"native_linear", "persistent_linear"}:
+            return self.run_native_linear(started, max_seconds)
 
         while not self.stop_requested:
             for channel in self.worker["channels"]:
