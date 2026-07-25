@@ -359,6 +359,12 @@ class ContinuousScanner:
             or self.worker.get("lock_squelch_rms")
             or 1200
         )
+        release_squelch = int(
+            channel.get("release_squelch_rms")
+            or self.worker.get("release_squelch_rms")
+            or max(0, configured_squelch - 75)
+        )
+        release_squelch = min(release_squelch, configured_squelch)
         lock_window_frames = max(
             2,
             int(self.worker.get("lock_window_frames") or 4),
@@ -375,6 +381,7 @@ class ContinuousScanner:
         baseline_values: list[int] = []
         locked = False
         last_active = 0.0
+        release_below_since: float | None = None
         channel_started = time.monotonic()
         settle_until = channel_started + settle_seconds
         dwell_until = channel_started + settle_seconds + dwell_seconds
@@ -505,6 +512,7 @@ class ContinuousScanner:
                     locked = True
                     self.lock_count += 1
                     last_active = now
+                    release_below_since = None
                     self.last_lock = {
                         "name": channel.get("name"),
                         "frequency_hz": int(channel["frequency_hz"]),
@@ -527,12 +535,21 @@ class ContinuousScanner:
                     )
 
                 if locked:
-                    if active:
+                    if confirmed:
                         last_active = now
+                        release_below_since = None
+                    elif value <= release_squelch:
+                        if release_below_since is None:
+                            release_below_since = now
                     if not self.no_forward:
                         self.udp.sendto(data, self.udp_target)
                         self.frames_forwarded += 1
-                    if now - last_active >= max(hold_seconds, release_seconds):
+                    release_elapsed = (
+                        0.0
+                        if release_below_since is None
+                        else now - release_below_since
+                    )
+                    if release_elapsed >= max(hold_seconds, release_seconds):
                         self.status(
                             "releasing",
                             channel,
@@ -545,6 +562,7 @@ class ContinuousScanner:
                             recent.clear()
                             prebuffer.clear()
                             last_active = 0.0
+                            release_below_since = None
                             self.last_active_frames = 0
                             self.status(
                                 "tuning",
