@@ -350,8 +350,23 @@ class ContinuousScanner:
         )
 
     def scan_channel(self, channel: dict[str, Any]) -> None:
-        settle_seconds = float(self.worker.get("settle_seconds") or 0.18)
-        dwell_seconds = float(self.worker.get("dwell_seconds") or 0.55)
+        spectrum_candidate = "spectrum_margin_db" in channel
+        settle_seconds = float(
+            self.worker.get(
+                "spectrum_candidate_settle_seconds"
+                if spectrum_candidate
+                else "settle_seconds"
+            )
+            or (0.10 if spectrum_candidate else 0.18)
+        )
+        dwell_seconds = float(
+            self.worker.get(
+                "spectrum_candidate_dwell_seconds"
+                if spectrum_candidate
+                else "dwell_seconds"
+            )
+            or (2.5 if spectrum_candidate else 0.55)
+        )
         hold_seconds = float(channel.get("hold_seconds") or 1.0)
         release_seconds = float(channel.get("resume_delay_seconds") or 1.25)
         configured_squelch = int(
@@ -486,7 +501,11 @@ class ContinuousScanner:
                     self.worker.get("lock_threshold_above_baseline_rms") or 200
                 )
                 adaptive = baseline + threshold_rise
-                threshold = max(configured_squelch, adaptive)
+                threshold = (
+                    configured_squelch
+                    if spectrum_candidate
+                    else max(configured_squelch, adaptive)
+                )
                 self.last_baseline_rms = baseline
                 self.last_threshold_rms = threshold
                 active = value >= threshold
@@ -505,6 +524,8 @@ class ContinuousScanner:
                         active_frames=active_frames,
                         lock_confirm_frames=lock_confirm_frames,
                         lock_window_frames=lock_window_frames,
+                        spectrum_candidate=spectrum_candidate,
+                        adaptive_threshold_bypassed=spectrum_candidate,
                     )
                     live_status_at = now + 0.25
 
