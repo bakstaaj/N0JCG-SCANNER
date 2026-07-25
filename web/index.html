@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=compact-counter-audio-v2">
+  <link rel="stylesheet" href="/app.css?v=compact-audio-tile-v1">
 </head>
 <body>
   <div class="app-shell">
@@ -38,18 +38,14 @@
           <button id="startBtn" type="button" class="big-action start">Start Scanner + Audio</button>
           <button id="stopBtn" type="button" class="big-action stop">Stop</button>
         </div>
-        <section class="arbitrator-audio-bar" aria-label="scanner audio">
-          <div class="arbitrator-audio-copy">
-            <span class="label">Unified Audio</span>
-            <strong id="arbitratorAudioSource">Idle</strong>
-          </div>
-          <div class="arbitrator-audio-controls">
-            <button id="arbitratorMuteBtn" type="button" class="audio-mute-button" aria-pressed="false">Mute</button>
-            <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
-              Volume
-              <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
-            </label>
-          </div>
+        <section class="arbitrator-audio-bar compact-audio-tile" aria-label="scanner audio">
+          <span class="audio-inline-label">Audio</span>
+          <strong id="arbitratorAudioSource" class="audio-inline-value">Idle</strong>
+          <button id="arbitratorMuteBtn" type="button" class="audio-mute-button" aria-pressed="false">Mute</button>
+          <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
+            <span>Volume</span>
+            <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
+          </label>
         </section>
         <section class="activity-card">
           <div class="activity-topline">
@@ -209,7 +205,7 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=compact-counter-audio-v2"></script>
-  <script src="/audio_arbitrator_live.js?v=compact-counter-audio-v2"></script>
+  <script src="/app.js?v=compact-audio-tile-v1"></script>
+  <script src="/audio_arbitrator_live.js?v=compact-audio-tile-v1"></script>
 </body>
 </html>

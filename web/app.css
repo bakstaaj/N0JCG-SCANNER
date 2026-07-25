@@ -615,3 +615,61 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     justify-content: space-between;
   }
 }
+
+/* COMPACT_AUDIO_TILE_V1 */
+.arbitrator-audio-bar.compact-audio-tile {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  margin: .45rem 0;
+  padding: .38rem .5rem;
+  border: 1px solid var(--border, #48525b);
+  border-radius: .55rem;
+  background: var(--panel, #151c22);
+  color: inherit;
+  box-shadow: none;
+}
+.compact-audio-tile .audio-inline-label,
+.compact-audio-tile .arbitrator-volume-label > span {
+  font-size: .68rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.compact-audio-tile .audio-inline-value {
+  min-width: 2.8rem;
+  font-size: .86rem;
+  line-height: 1;
+}
+.compact-audio-tile .audio-mute-button {
+  min-width: 4.25rem;
+  padding: .28rem .55rem;
+  font-size: .72rem;
+  line-height: 1;
+}
+.compact-audio-tile .arbitrator-volume-label {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  margin-left: auto;
+  font-size: inherit;
+  font-weight: inherit;
+}
+.compact-audio-tile .arbitrator-volume-label input {
+  width: min(180px, 28vw);
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .arbitrator-audio-bar.compact-audio-tile {
+    flex-wrap: wrap;
+  }
+  .compact-audio-tile .arbitrator-volume-label {
+    margin-left: 0;
+    width: 100%;
+  }
+  .compact-audio-tile .arbitrator-volume-label input {
+    flex: 1;
+    width: auto;
+  }
+}
