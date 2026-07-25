@@ -408,6 +408,13 @@ class ContinuousScanner:
 
         self.channel_tunes += 1
         self.status("tuning", channel, squelch_rms=threshold)
+
+        launch_delay = float(
+            self.worker.get("linear_receiver_release_seconds") or 0.12
+        )
+        if launch_delay > 0:
+            time.sleep(launch_delay)
+
         process = self.open_channel(channel)
         self.process = process
         assert process.stdout is not None
@@ -608,7 +615,12 @@ class ContinuousScanner:
                     return
         finally:
             self.stop_process()
-            time.sleep(0.12)
+            time.sleep(
+                float(
+                    self.worker.get("linear_receiver_release_seconds")
+                    or 0.12
+                )
+            )
 
     def acquire_spectrum_candidates(self) -> list[dict[str, Any]]:
         channels = self.worker["channels"]
