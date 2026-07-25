@@ -258,6 +258,7 @@ class ContinuousScanner:
         self.last_rms = 0
         self.last_baseline_rms = 0
         self.last_threshold_rms = 0
+        self.last_active_frames = 0
         self.started_monotonic = time.monotonic()
 
     def request_stop(self, _signum: int, _frame: Any) -> None:
@@ -311,6 +312,7 @@ class ContinuousScanner:
             "rms": self.last_rms,
             "baseline_rms": self.last_baseline_rms,
             "threshold_rms": self.last_threshold_rms,
+            "active_frames": self.last_active_frames,
             "audio_udp_host": self.udp_target[0],
             "audio_udp_port": self.udp_target[1],
             "demod_sample_rate_hz": int(
@@ -377,10 +379,10 @@ class ContinuousScanner:
         settle_until = channel_started + settle_seconds
         dwell_until = channel_started + settle_seconds + dwell_seconds
         threshold = configured_squelch
-        self.last_rms = 0
-        self.last_baseline_rms = 0
         self.last_threshold_rms = threshold
+        self.last_active_frames = 0
         demod_buffer = bytearray()
+        live_status_at = time.monotonic()
 
         self.channel_tunes += 1
         self.status("tuning", channel, squelch_rms=threshold)
@@ -482,7 +484,22 @@ class ContinuousScanner:
                 self.last_threshold_rms = threshold
                 active = value >= threshold
                 recent.append(active)
-                confirmed = sum(recent) >= lock_confirm_frames
+                active_frames = sum(recent)
+                self.last_active_frames = active_frames
+                confirmed = active_frames >= lock_confirm_frames
+
+                if now >= live_status_at:
+                    self.status(
+                        "locked" if locked else "tuning",
+                        channel,
+                        rms=value,
+                        baseline_rms=baseline,
+                        threshold_rms=threshold,
+                        active_frames=active_frames,
+                        lock_confirm_frames=lock_confirm_frames,
+                        lock_window_frames=lock_window_frames,
+                    )
+                    live_status_at = now + 0.25
 
                 if not locked and confirmed:
                     locked = True
