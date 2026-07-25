@@ -950,3 +950,43 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     padding-right: .26rem;
   }
 }
+
+/* AUDIO_SLIDER_MAX_50_PERCENT_V1 */
+.arbitrator-audio-bar.compact-audio-tile {
+  grid-template-columns:
+    max-content
+    minmax(0, max-content)
+    minmax(70px, 50%)
+    max-content !important;
+}
+
+.compact-audio-tile .arbitrator-volume-label {
+  width: 100%;
+  max-width: 100%;
+  justify-self: stretch;
+}
+
+.compact-audio-tile .arbitrator-volume-label input[type="range"] {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+@media (max-width: 850px) {
+  .arbitrator-audio-bar.compact-audio-tile {
+    grid-template-columns:
+      max-content
+      minmax(0, max-content)
+      minmax(55px, 50%)
+      max-content !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .arbitrator-audio-bar.compact-audio-tile {
+    grid-template-columns:
+      max-content
+      minmax(0, max-content)
+      minmax(42px, 50%)
+      max-content !important;
+  }
+}
