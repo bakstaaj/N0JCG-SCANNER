@@ -662,7 +662,7 @@ class ContinuousScanner:
                 command = [
                     "rtl_power", "-d", self.serial,
                     "-f", f"{low_hz}:{high_hz}:{bin_hz}",
-                    "-i", "1",
+                    "-1",
                     "-g", str(gain), str(output),
                 ]
                 process = subprocess.Popen(
@@ -671,32 +671,18 @@ class ContinuousScanner:
                     stderr=subprocess.PIPE,
                     start_new_session=True,
                 )
-                capture_deadline = time.monotonic() + capture_seconds
-                hard_deadline = time.monotonic() + timeout_seconds
+                deadline = time.monotonic() + timeout_seconds
                 heartbeat = 0.0
                 timed_out = False
-                capture_stopped = False
+
                 while process.poll() is None:
                     now = time.monotonic()
-                    if self.stop_requested:
+                    if self.stop_requested or now >= deadline:
+                        timed_out = now >= deadline
                         try:
                             os.killpg(process.pid, signal.SIGINT)
                             process.wait(timeout=2.0)
                         except (ProcessLookupError, subprocess.TimeoutExpired):
-                            try:
-                                os.killpg(process.pid, signal.SIGKILL)
-                            except ProcessLookupError:
-                                pass
-                        break
-                    if now >= capture_deadline:
-                        try:
-                            os.killpg(process.pid, signal.SIGINT)
-                            process.wait(timeout=3.0)
-                            capture_stopped = True
-                        except ProcessLookupError:
-                            capture_stopped = True
-                        except subprocess.TimeoutExpired:
-                            timed_out = True
                             try:
                                 os.killpg(process.pid, signal.SIGKILL)
                             except ProcessLookupError:
@@ -706,17 +692,7 @@ class ContinuousScanner:
                             except subprocess.TimeoutExpired:
                                 pass
                         break
-                    if now >= hard_deadline:
-                        timed_out = True
-                        try:
-                            os.killpg(process.pid, signal.SIGKILL)
-                        except ProcessLookupError:
-                            pass
-                        try:
-                            process.wait(timeout=1.0)
-                        except subprocess.TimeoutExpired:
-                            pass
-                        break
+
                     if now >= heartbeat:
                         self.status(
                             "spectrum_scanning",
@@ -725,20 +701,20 @@ class ContinuousScanner:
                             spectrum_low_hz=low_hz,
                             spectrum_high_hz=high_hz,
                             spectrum_elapsed_seconds=round(now - sweep_started, 1),
+                            spectrum_capture_mode="single_shot",
                         )
-                        heartbeat = now + 1.0
+                        heartbeat = now + 0.5
+
                     time.sleep(0.1)
 
                 stderr_text = ""
                 if process.stderr is not None:
                     stderr_text = process.stderr.read().decode(
-                        "utf-8", errors="replace"
+                        "utf-8",
+                        errors="replace",
                     )[-1000:]
-                process_failed = (
-                    process.returncode not in (0, None)
-                    and not capture_stopped
-                )
-                if timed_out or process_failed:
+
+                if timed_out or process.returncode not in (0, None):
                     self.spectrum_failures += 1
                     metrics.append({
                         "index": index, "low_hz": low_hz, "high_hz": high_hz,
