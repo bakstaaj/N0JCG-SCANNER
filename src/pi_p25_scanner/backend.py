@@ -1089,8 +1089,8 @@ ScannerManager.activity_payload = _v04h5_activity_payload
 # ANALOG_DASHBOARD_STATUS_V1
 _ANALOG_DASHBOARD_ROOT = Path(os.environ.get("PI_SCANNER_ANALOG_ROOT", "/home/pi/PI-SCANNER"))
 _ANALOG_DASHBOARD_ROLES = {
-    "analog_2m": {"label": "VHF", "status_file": "analog_2m.json", "audio_port": 8073, "expected_serial": "00000440"},
-    "analog_70cm": {"label": "UHF", "status_file": "analog_70cm.json", "audio_port": 8074, "expected_serial": "00000144"},
+    "analog_2m": {"label": "VHF", "status_file": "analog_2m.json", "audio_port": 8073, "expected_serial": "00000144"},
+    "analog_70cm": {"label": "UHF", "status_file": "analog_70cm.json", "audio_port": 8074, "expected_serial": "00000440"},
 }
 
 
