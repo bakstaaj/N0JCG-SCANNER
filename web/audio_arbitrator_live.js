@@ -1,97 +1,60 @@
-(function installLowLatencyScannerAudio() {
-  if (window.__lowLatencyScannerAudioInstalled) return;
-  window.__lowLatencyScannerAudioInstalled = true;
-
+(function installUnifiedArbitratorAudio() {
+  if (window.__unifiedArbitratorAudioInstalled) return;
+  window.__unifiedArbitratorAudioInstalled = true;
   const SAMPLE_RATE = 8000;
   const FRAME_SAMPLES = 160;
   const MAX_QUEUED_SECONDS = 0.35;
-
   let context = null;
+  let gainNode = null;
   let reader = null;
   let running = false;
   let stopping = false;
   let nextPlayTime = 0;
   let pending = new Uint8Array(0);
 
-  function setStatus(message) {
-    const node = document.getElementById('browserAudioLastEvent');
-    if (node) node.textContent = message;
+  const field = (id) => document.getElementById(id);
+  function setStatus(message) { const node = field('browserAudioLastEvent'); if (node) node.textContent = message; }
+  function setSource(source) { const node = field('arbitratorAudioSource'); if (node) node.textContent = source || 'Idle'; }
+  function applyVolume() {
+    const slider = field('arbitratorAudioVolume');
+    const value = slider ? Number(slider.value) : 80;
+    if (gainNode) gainNode.gain.value = Math.max(0, Math.min(1, value / 100));
   }
-
-  function stopNativePlayer() {
-    const player = document.getElementById('browserAudioPlayer');
-    if (!player) return;
-    try {
-      player.pause();
-      player.removeAttribute('src');
-      player.load();
-    } catch (_error) {}
-  }
-
   async function ensureContext() {
     if (!context) {
-      context = new (window.AudioContext || window.webkitAudioContext)({
-        sampleRate: SAMPLE_RATE,
-        latencyHint: 'interactive'
-      });
+      context = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' });
+      gainNode = context.createGain();
+      gainNode.connect(context.destination);
+      applyVolume();
     }
     if (context.state === 'suspended') await context.resume();
   }
-
-  function appendBytes(a, b) {
-    const joined = new Uint8Array(a.length + b.length);
-    joined.set(a, 0);
-    joined.set(b, a.length);
-    return joined;
-  }
-
+  function appendBytes(a, b) { const joined = new Uint8Array(a.length + b.length); joined.set(a); joined.set(b, a.length); return joined; }
   function scheduleFrame(bytes) {
+    if (!context || !gainNode) return;
     const buffer = context.createBuffer(1, FRAME_SAMPLES, SAMPLE_RATE);
     const channel = buffer.getChannelData(0);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-
-    for (let i = 0; i < FRAME_SAMPLES; i += 1) {
-      channel[i] = view.getInt16(i * 2, true) / 32768;
-    }
-
+    for (let i = 0; i < FRAME_SAMPLES; i += 1) channel[i] = view.getInt16(i * 2, true) / 32768;
     const now = context.currentTime;
-    if (nextPlayTime < now + 0.02 || nextPlayTime - now > MAX_QUEUED_SECONDS) {
-      nextPlayTime = now + 0.02;
-    }
-
+    if (nextPlayTime < now + 0.02 || nextPlayTime - now > MAX_QUEUED_SECONDS) nextPlayTime = now + 0.02;
     const source = context.createBufferSource();
     source.buffer = buffer;
-    source.connect(context.destination);
+    source.connect(gainNode);
     source.start(nextPlayTime);
     nextPlayTime += FRAME_SAMPLES / SAMPLE_RATE;
   }
-
-  async function startLowLatencyAudio() {
+  async function startAudio() {
     if (running) return;
-    running = true;
-    stopping = false;
-    pending = new Uint8Array(0);
-    nextPlayTime = 0;
-
-    stopNativePlayer();
+    running = true; stopping = false; nextPlayTime = 0; pending = new Uint8Array(0);
     await ensureContext();
-
-    const response = await fetch(
-      `http://${window.location.hostname}:8072/audio.pcm?_=${Date.now()}`,
-      { cache: 'no-store', mode: 'cors' }
-    );
-
-    if (!response.ok || !response.body) {
-      throw new Error(`PCM stream HTTP ${response.status}`);
-    }
-
+    const response = await fetch(`http://${window.location.hostname}:8072/audio.pcm?_=${Date.now()}`, { cache: 'no-store', mode: 'cors' });
+    if (!response.ok || !response.body) throw new Error(`PCM stream HTTP ${response.status}`);
     reader = response.body.getReader();
-    setStatus('Low-latency scanner audio connected');
-
+    setStatus('Unified audio connected');
     while (!stopping) {
       const result = await reader.read();
       if (result.done) break;
-
       pending = appendBytes(pending, result.value);
       while (pending.length >= FRAME_SAMPLES * 2) {
         const frame = pending.slice(0, FRAME_SAMPLES * 2);
@@ -99,44 +62,34 @@
         scheduleFrame(frame);
       }
     }
-
-    running = false;
-    reader = null;
+    reader = null; running = false;
   }
-
-  async function stopLowLatencyAudio() {
-    stopping = true;
-    running = false;
-    if (reader) {
-      try { await reader.cancel(); } catch (_error) {}
-    }
-    reader = null;
-    pending = new Uint8Array(0);
-    nextPlayTime = 0;
-    setStatus('Scanner audio stopped');
+  async function stopAudio() {
+    stopping = true; running = false;
+    if (reader) { try { await reader.cancel(); } catch (_error) {} }
+    reader = null; pending = new Uint8Array(0); nextPlayTime = 0;
+    setSource('Idle'); setStatus('Scanner audio stopped');
   }
-
+  async function pollArbitrator() {
+    try {
+      const response = await fetch(`http://${window.location.hostname}:8072/api/audio/status?_=${Date.now()}`, { cache: 'no-store', mode: 'cors' });
+      if (!response.ok) return;
+      const status = await response.json();
+      setSource(status.active_source || 'Idle');
+    } catch (_error) { setSource('Offline'); }
+  }
   function wireControls() {
-    const startButton = document.getElementById('startBtn');
-    if (startButton && !startButton.dataset.lowLatencyWired) {
-      startButton.dataset.lowLatencyWired = '1';
-      startButton.addEventListener('click', () => {
-        window.setTimeout(() => {
-          startLowLatencyAudio().catch((error) => {
-            running = false;
-            setStatus(`Low-latency audio error: ${error.message}`);
-          });
-        }, 100);
-      });
+    const volume = field('arbitratorAudioVolume');
+    if (volume && !volume.dataset.arbitratorWired) { volume.dataset.arbitratorWired = '1'; volume.addEventListener('input', applyVolume); }
+    const start = field('startBtn');
+    if (start && !start.dataset.arbitratorWired) {
+      start.dataset.arbitratorWired = '1';
+      start.addEventListener('click', () => window.setTimeout(() => startAudio().catch((error) => { running = false; setStatus(`Unified audio error: ${error.message}`); }), 100));
     }
-
-    const stopButton = document.getElementById('stopBtn') || document.getElementById('stopScannerBtn');
-    if (stopButton && !stopButton.dataset.lowLatencyWired) {
-      stopButton.dataset.lowLatencyWired = '1';
-      stopButton.addEventListener('click', stopLowLatencyAudio);
-    }
+    const stop = field('stopBtn');
+    if (stop && !stop.dataset.arbitratorWired) { stop.dataset.arbitratorWired = '1'; stop.addEventListener('click', stopAudio); }
   }
-
-  wireControls();
+  wireControls(); pollArbitrator();
   window.setInterval(wireControls, 1000);
+  window.setInterval(pollArbitrator, 250);
 })();
