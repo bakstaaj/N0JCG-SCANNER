@@ -840,3 +840,113 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     min-width: 40px;
   }
 }
+
+/* AUDIO_TILE_SINGLE_ROW_GRID_V2 */
+.arbitrator-audio-bar.compact-audio-tile {
+  display: grid !important;
+  grid-template-columns:
+    max-content
+    minmax(0, max-content)
+    minmax(90px, 1fr)
+    max-content;
+  align-items: center;
+  column-gap: clamp(.2rem, .8vw, .55rem);
+  row-gap: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  flex-wrap: nowrap !important;
+}
+
+.compact-audio-tile > * {
+  min-width: 0;
+  margin: 0 !important;
+}
+
+.compact-audio-tile .audio-title,
+.compact-audio-tile .audio-inline-value {
+  white-space: nowrap;
+}
+
+.compact-audio-tile .audio-inline-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact-audio-tile .arbitrator-volume-label {
+  display: grid !important;
+  grid-template-columns: max-content minmax(45px, 1fr);
+  align-items: center;
+  gap: clamp(.18rem, .55vw, .4rem);
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.compact-audio-tile .arbitrator-volume-label input[type="range"] {
+  display: block;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+.compact-audio-tile .audio-mute-button {
+  grid-column: 4;
+  justify-self: end;
+  min-width: 0 !important;
+  width: auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 850px) {
+  .arbitrator-audio-bar.compact-audio-tile {
+    grid-template-columns:
+      max-content
+      minmax(0, max-content)
+      minmax(70px, 1fr)
+      max-content;
+    column-gap: .24rem;
+    padding: .26rem .3rem;
+  }
+
+  .compact-audio-tile .audio-title,
+  .compact-audio-tile .audio-inline-value,
+  .compact-audio-tile .arbitrator-volume-label {
+    font-size: clamp(.64rem, 1.55vw, .82rem) !important;
+    line-height: 1;
+  }
+
+  .compact-audio-tile .audio-mute-button {
+    font-size: clamp(.62rem, 1.45vw, .78rem);
+    padding: .24rem .34rem;
+  }
+
+  .compact-audio-tile input[type="range"] {
+    height: 1rem;
+  }
+}
+
+@media (max-width: 620px) {
+  .arbitrator-audio-bar.compact-audio-tile {
+    grid-template-columns:
+      max-content
+      minmax(0, max-content)
+      minmax(48px, 1fr)
+      max-content;
+    column-gap: .18rem;
+    padding: .22rem .24rem;
+  }
+
+  .compact-audio-tile .arbitrator-volume-label {
+    grid-template-columns: max-content minmax(36px, 1fr);
+    gap: .16rem;
+  }
+
+  .compact-audio-tile .audio-mute-button {
+    padding-left: .26rem;
+    padding-right: .26rem;
+  }
+}
