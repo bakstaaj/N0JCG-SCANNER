@@ -465,3 +465,51 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
 .analog-lock-item .pill{grid-column:2;grid-row:1/span 3}
 .analog-lock-item small{opacity:.78;overflow-wrap:anywhere}
 @media(max-width:720px){.arbitrator-audio-bar{align-items:stretch;flex-direction:column}.arbitrator-volume-label{justify-content:space-between}.arbitrator-volume-label input{width:55vw}.analog-lock-strip{grid-template-columns:1fr}}
+
+/* ANALOG_LOCK_LINE_V1 */
+.analog-lock-strip,
+.analog-lock-item {
+  display: none !important;
+}
+.analog-lock-line {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-top: .5rem;
+  padding: .4rem .55rem;
+  border-top: 1px solid var(--border, #48525b);
+  font-size: .8rem;
+  line-height: 1.2;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.analog-lock-group {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  min-width: 0;
+}
+.analog-lock-group .label {
+  font-weight: 800;
+}
+.analog-lock-group .pill {
+  padding: .1rem .35rem;
+  font-size: .68rem;
+}
+.analog-lock-separator {
+  opacity: .45;
+}
+@media (max-width: 720px) {
+  .analog-lock-line {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: .3rem;
+    white-space: normal;
+  }
+  .analog-lock-separator {
+    display: none;
+  }
+  .analog-lock-group {
+    flex-wrap: wrap;
+  }
+}
