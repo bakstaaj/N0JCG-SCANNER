@@ -7,7 +7,6 @@ import io
 import time
 from typing import Any
 
-from .analog_channels import AnalogChannelError
 from .config_model import ConfigError, frequency_to_hz
 from .config_store import (
     read_active_config_payload,
@@ -34,7 +33,7 @@ HEADERS = (
 REQUIRED = {"RecordType", "System"}
 
 
-class P25CsvError(AnalogChannelError):
+class P25CsvError(ValueError):
     pass
 
 
@@ -259,19 +258,22 @@ def import_p25_csv_request(request: dict[str, Any]) -> dict[str, Any]:
                 "modulation": incoming["modulation"],
             }
         )
-        # Preserve receiver_roles and decoder from the current system.
         merged.setdefault("receiver_roles", existing.get("receiver_roles", {}))
         merged.setdefault("decoder", existing.get("decoder", {}))
 
         if replace_mode == "append" and existing:
-            merged["control_channels_hz"] = list(dict.fromkeys(
-                list(existing.get("control_channels_hz") or [])
-                + incoming["control_channels_hz"]
-            ))
-            merged["voice_channels_hz"] = list(dict.fromkeys(
-                list(existing.get("voice_channels_hz") or [])
-                + incoming["voice_channels_hz"]
-            ))
+            merged["control_channels_hz"] = list(
+                dict.fromkeys(
+                    list(existing.get("control_channels_hz") or [])
+                    + incoming["control_channels_hz"]
+                )
+            )
+            merged["voice_channels_hz"] = list(
+                dict.fromkeys(
+                    list(existing.get("voice_channels_hz") or [])
+                    + incoming["voice_channels_hz"]
+                )
+            )
             tg_by_id = {
                 int(item["tgid"]): dict(item)
                 for item in existing.get("talkgroups", [])
@@ -302,3 +304,14 @@ def import_p25_csv_request(request: dict[str, Any]) -> dict[str, Any]:
         "warnings": parsed["warnings"],
         "replace_mode": replace_mode,
     }
+
+
+# Compatibility for the route currently importing these names from analog_channels.
+# This avoids changing backend.py and avoids a circular import.
+try:
+    from . import analog_channels as _analog_channels
+
+    _analog_channels.P25CsvError = P25CsvError
+    _analog_channels.import_p25_csv_request = import_p25_csv_request
+except Exception:
+    pass
