@@ -7,6 +7,7 @@ import io
 import time
 from typing import Any
 
+from .analog_channels import AnalogChannelError
 from .config_model import ConfigError, frequency_to_hz
 from .config_store import (
     read_active_config_payload,
@@ -33,7 +34,7 @@ HEADERS = (
 REQUIRED = {"RecordType", "System"}
 
 
-class P25CsvError(ValueError):
+class P25CsvError(AnalogChannelError):
     pass
 
 
