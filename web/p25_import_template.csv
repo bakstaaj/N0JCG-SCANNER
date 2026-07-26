@@ -1,0 +1,4 @@
+RecordType,System,Site,FrequencyMHz,TGID,Name,Enabled,Priority,ServiceType,NAC,Modulation,Description
+control,Example P25 System,Main Site,851.012500,,,true,,,0x000,CQPSK,Replace this example control channel
+voice,Example P25 System,Main Site,851.262500,,,true,,,0x000,CQPSK,Replace this example voice channel
+talkgroup,Example P25 System,Main Site,,1001,Dispatch,true,10,Law Dispatch,0x000,CQPSK,Replace this example talkgroup

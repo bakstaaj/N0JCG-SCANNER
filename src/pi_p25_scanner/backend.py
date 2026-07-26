@@ -47,6 +47,7 @@ if __package__ in (None, ""):
     from pi_p25_scanner.op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
     from pi_p25_scanner.runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from pi_p25_scanner.runtime_activity import RuntimeActivityTracker
+    from pi_p25_scanner.p25_csv_import import P25CsvError, import_p25_csv_request
     from pi_p25_scanner.receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
     try:
         from pi_p25_scanner.radioreference_import import (
@@ -85,6 +86,7 @@ else:
     from .op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
     from .runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from .runtime_activity import RuntimeActivityTracker
+    from .p25_csv_import import P25CsvError, import_p25_csv_request
     from .receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
     try:
         from .radioreference_import import (
@@ -1246,6 +1248,14 @@ class Handler(SimpleHTTPRequestHandler):
                 try:
                     result = import_csv_request(self._read_json())
                 except AnalogChannelError as exc:
+                    raise ConfigError(str(exc)) from exc
+                self._send_json(result, HTTPStatus.ACCEPTED)
+                return
+            if path == "/api/p25/csv/import":
+                from pi_p25_scanner.analog_channels import P25CsvError, import_p25_csv_request
+                try:
+                    result = import_p25_csv_request(self._read_json())
+                except P25CsvError as exc:
                     raise ConfigError(str(exc)) from exc
                 self._send_json(result, HTTPStatus.ACCEPTED)
                 return

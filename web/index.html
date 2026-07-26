@@ -132,6 +132,22 @@
           <pre id="analogCsvStatusText">Choose a CSV file to import.</pre>
         </section>
 
+        <section class="rr-panel p25-csv-panel" data-p25-csv-section="systems">
+          <div class="section-row">
+            <div>
+              <strong>P25 Control, Voice, and Talkgroup CSV Import</strong>
+              <p>Use RecordType control, voice, or talkgroup. Import replaces only systems named in the file.</p>
+            </div>
+            <span id="p25CsvStatusBadge" class="pill warn">Not loaded</span>
+          </div>
+          <div class="analog-csv-upload-row">
+            <input id="p25CsvFile" type="file" accept=".csv,text/csv">
+            <button id="importP25CsvBtn" type="button" class="primary">Import P25 CSV</button>
+            <a class="button-link" href="/p25_import_template.csv" download="p25_import_template.csv">Download P25 CSV Template</a>
+          </div>
+          <pre id="p25CsvStatusText">Choose a P25 CSV file to import.</pre>
+        </section>
+
         <section class="rr-panel" data-v05d-section="profiles">
           <div class="section-row"><div><strong>1. Saved Profiles</strong><p>Reload a known-good profile or save the current active setup for future use.</p></div><span id="profileStatusBadge" class="pill warn">Profiles</span></div>
           <div class="wizard-grid">

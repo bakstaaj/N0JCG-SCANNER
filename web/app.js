@@ -1327,3 +1327,45 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   refreshUnifiedAudioOwner();
   window.setInterval(refreshUnifiedAudioOwner, 500);
 })();
+
+// P25_CSV_IMPORT_V1
+async function importP25CsvFile() {
+  const input = field('p25CsvFile');
+  const file = input?.files?.[0];
+  if (!file) {
+    setBadge('p25CsvStatusBadge', 'Choose file', 'warn');
+    setText('p25CsvStatusText', 'Choose a P25 CSV file first.');
+    return;
+  }
+
+  const button = field('importP25CsvBtn');
+  if (button) button.disabled = true;
+  setBadge('p25CsvStatusBadge', 'Importing', 'warn');
+  setText('p25CsvStatusText', `Reading ${file.name}...`);
+
+  try {
+    const csvText = await file.text();
+    const result = await postJson('/api/p25/csv/import', {
+      filename: file.name,
+      csv_text: csvText,
+      replace_mode: 'systems_in_file',
+    });
+    const systems = Array.isArray(result.systems) ? result.systems.join(', ') : '-';
+    const warnings = Array.isArray(result.warnings) && result.warnings.length
+      ? `\nWarnings:\n${result.warnings.join('\n')}`
+      : '';
+    setBadge('p25CsvStatusBadge', 'Imported', 'ok');
+    setText(
+      'p25CsvStatusText',
+      `Imported ${result.imported_rows || 0} rows.\nSystems: ${systems}${warnings}`
+    );
+    await refreshStatus();
+  } catch (error) {
+    setBadge('p25CsvStatusBadge', 'Failed', 'bad');
+    setText('p25CsvStatusText', `P25 CSV import failed: ${error.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+field('importP25CsvBtn')?.addEventListener('click', importP25CsvFile);
