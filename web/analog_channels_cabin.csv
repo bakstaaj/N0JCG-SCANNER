@@ -1,39 +1,39 @@
-receiver,name,frequency_mhz,mode,ctcss_hz,dcs_code,enabled,priority
-2m,2 m National Simplex,146.52,FM,,,TRUE,0
-70cm,70 cm National Simplex,446,FM,,,TRUE,0
-70cm,Example 70 cm Repeater,449.5,FM,100,,TRUE,0
-2m,Crpl Crk EMS,154.34,FM,,,TRUE,0
-2m,Crpl Crk Police,154.89,FM,,,TRUE,0
-2m,Crpl Crk Fire,154.965,FM,,,TRUE,0
-2m,Crpl Crk PD *S,156.12,FM,,,TRUE,0
-2m,Florissant Fire,154.19,FM,151.4,,TRUE,0
-2m,NE Teller Fire,154.4,FM,179.9,,TRUE,0
-2m,Mtn Comuni VFD,154.9875,FM,167.9,,TRUE,0
-2m,Four Mile Fire,155.13,FM,107.2,,TRUE,0
-2m,Teller SAR,155.175,FM,179.9,,TRUE,0
-2m,Teller Sheriff 1,155.58,FM,107.2,,TRUE,0
-2m,Teller Shrf Tac,155.64,FM,131.8,,TRUE,0
-2m,Teller Shrf c2c,155.91,FM,131.8,,TRUE,0
-2m,Divide Fire,155.985,FM,131.8,,TRUE,0
-70cm,Teller Roads B,453.1875,FM,131.8,,TRUE,0
-70cm,Teller Roads W,453.5125,FM,,,TRUE,0
-70cm,Teller Roads  V,453.6375,FM,,,TRUE,0
-70cm,Teller Roads C,453.8125,FM,,,TRUE,0
-70cm,SW TellerEMS,464.9125,FM,250.3,,TRUE,0
-2m,Cripple Creek,147.015,FM,107.2,,TRUE,0
-2m,Park Co SO 2,151.025,FM,156.7,,TRUE,0
-2m,Park Co SO 1,151.31,FM,131.8,,TRUE,0
-2m,Fairplay PD Tac,154.025,FM,107.2,,TRUE,0
-2m,LocalGovFairplay,155.07,FM,131.8,,TRUE,0
-2m,EM Badger Mtn,155.4,FM,156.7,,TRUE,0
-2m,Local Gov Badger,155.88,FM,107.2,,TRUE,0
-2m,Park Co SAR,156.18,FM,,,TRUE,0
-2m,Park Co DPW,159.105,FM,156.7,,TRUE,0
-2m,Lake George FPD,151.1525,FM,,,TRUE,0
-2m,Park Co Fire/EMS,154.085,FM,107.2,,TRUE,0
-2m,Hartsel FD,154.145,FM,,,TRUE,0
-2m,North-West FPD,154.205,FM,,,TRUE,0
-2m,Jeff-Como FPD,154.22,FM,141.3,,TRUE,0
-2m,Hartsel FD Tac,154.3625,FM,,,TRUE,0
-2m,Platte Canyn FPD,154.43,FM,156.7,,TRUE,0
-2m,So Park Co FPD,159.45,FM,,,TRUE,0
+Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment,URCALL,RPT1CALL,RPT2CALL,DVCODE
+0,2 m National Simplex,146.520000,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+1,70 cm National Simplex,446.000000,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 70cm,,,,
+2,Example 70 cm Repeater,449.500000,off,0.000000,TSQL,100,100,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 70cm,,,,
+3,Crpl Crk EMS,154.340000,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+4,Crpl Crk Police,154.890000,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+5,Crpl Crk Fire,154.965000,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+6,Crpl Crk PD *S,156.120000,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+7,Florissant Fire,154.190000,off,0.000000,TSQL,151.4,151.4,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+8,NE Teller Fire,154.400000,off,0.000000,TSQL,179.9,179.9,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+9,Mtn Comuni VFD,154.987500,off,0.000000,TSQL,167.9,167.9,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+10,Four Mile Fire,155.130000,off,0.000000,TSQL,107.2,107.2,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+11,Teller SAR,155.175000,off,0.000000,TSQL,179.9,179.9,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+12,Teller Sheriff 1,155.580000,off,0.000000,TSQL,107.2,107.2,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+13,Teller Shrf Tac,155.640000,off,0.000000,TSQL,131.8,131.8,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+14,Teller Shrf c2c,155.910000,off,0.000000,TSQL,131.8,131.8,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+15,Divide Fire,155.985000,off,0.000000,TSQL,131.8,131.8,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+16,Teller Roads B,453.187500,off,0.000000,TSQL,131.8,131.8,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 70cm,,,,
+17,Teller Roads W,453.512500,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 70cm,,,,
+18,Teller Roads  V,453.637500,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 70cm,,,,
+19,Teller Roads C,453.812500,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 70cm,,,,
+20,SW TellerEMS,464.912500,off,0.000000,TSQL,250.3,250.3,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 70cm,,,,
+21,Cripple Creek,147.015000,off,0.000000,TSQL,107.2,107.2,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+22,Park Co SO 2,151.025000,off,0.000000,TSQL,156.7,156.7,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+23,Park Co SO 1,151.310000,off,0.000000,TSQL,131.8,131.8,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+24,Fairplay PD Tac,154.025000,off,0.000000,TSQL,107.2,107.2,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+25,LocalGovFairplay,155.070000,off,0.000000,TSQL,131.8,131.8,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+26,EM Badger Mtn,155.400000,off,0.000000,TSQL,156.7,156.7,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+27,Local Gov Badger,155.880000,off,0.000000,TSQL,107.2,107.2,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+28,Park Co SAR,156.180000,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+29,Park Co DPW,159.105000,off,0.000000,TSQL,156.7,156.7,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+30,Lake George FPD,151.152500,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+31,Park Co Fire/EMS,154.085000,off,0.000000,TSQL,107.2,107.2,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+32,Hartsel FD,154.145000,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+33,North-West FPD,154.205000,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+34,Jeff-Como FPD,154.220000,off,0.000000,TSQL,141.3,141.3,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+35,Hartsel FD Tac,154.362500,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+36,Platte Canyn FPD,154.430000,off,0.000000,TSQL,156.7,156.7,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
+37,So Park Co FPD,159.450000,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
