@@ -1,6 +1,7 @@
 # CSV-backed 2 m and 70 cm channel configuration for PI-SCANNER.
 
 from __future__ import annotations
+from pi_p25_scanner.chirp_csv_import import ChirpCsvError, normalize_chirp_rows
 
 import csv
 import io
@@ -152,7 +153,7 @@ def parse_csv_text(text: str) -> dict[str, Any]:
         raise AnalogChannelError("csv_text must be a string")
     if len(text.encode("utf-8")) > MAX_CSV_BYTES:
         raise AnalogChannelError("CSV is too large")
-    reader = csv.DictReader(io.StringIO(text.lstrip("\ufeff")))
+    reader = normalize_chirp_rows(csv.DictReader(io.StringIO(text.lstrip("\ufeff"))))
     if not reader.fieldnames:
         raise AnalogChannelError("CSV header row is missing")
     headers = [_key(item) for item in reader.fieldnames]

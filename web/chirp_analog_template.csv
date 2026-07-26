@@ -1,0 +1,2 @@
+Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment,URCALL,RPT1CALL,RPT2CALL,DVCODE
+0,Example,155.000000,off,0.000000,,88.5,88.5,023,NN,023,Tone->Tone,NFM,5.00,,,Replace or delete this example row,,,,,
