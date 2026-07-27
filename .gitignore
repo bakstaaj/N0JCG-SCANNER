@@ -88,3 +88,12 @@ Thumbs.db
 .env
 .env.local
 !.env.example
+
+# Historical patch and source snapshots
+*.bak
+*.bak.*
+*.bak_*
+*.bak-*
+*.v0_*.bak
+.backup_*/
+.patch_backups/
