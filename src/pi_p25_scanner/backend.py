@@ -17,6 +17,7 @@ import time
 import urllib.error
 import urllib.request
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -965,29 +966,97 @@ def _v04h5_rebuild_blocked_tgids(manager: Any) -> set[int]:
     return set(blocked.keys())
 
 
+_V04H5_AUDIO_GATE_CACHE_LIMIT = 256
+_V04H5_AUDIO_GATE_MAX_PENDING = 8
+_V04H5_AUDIO_GATE_EXECUTOR = ThreadPoolExecutor(
+    max_workers=2,
+    thread_name_prefix="audio-gate",
+)
+_V04H5_AUDIO_GATE_SLOTS = threading.BoundedSemaphore(
+    _V04H5_AUDIO_GATE_MAX_PENDING
+)
+
+
+def _v04h5_audio_gate_allowed(
+    manager: Any,
+    key: str,
+    now: float,
+) -> bool:
+    lock = getattr(manager, "_v04h5_audio_gate_lock", None)
+    if lock is None:
+        lock = threading.Lock()
+        manager._v04h5_audio_gate_lock = lock
+
+    with lock:
+        cache = getattr(manager, "_v04h5_audio_gate_cache", None)
+        if not isinstance(cache, dict):
+            cache = {}
+
+        cutoff = now - _V04H5_AUDIO_GATE_RATE_LIMIT_SECONDS
+        expired = [
+            cached_key
+            for cached_key, timestamp in cache.items()
+            if float(timestamp) < cutoff
+        ]
+        for cached_key in expired:
+            cache.pop(cached_key, None)
+
+        previous = cache.get(key)
+        if previous is not None:
+            if now - float(previous) < _V04H5_AUDIO_GATE_RATE_LIMIT_SECONDS:
+                manager._v04h5_audio_gate_cache = cache
+                return False
+
+        cache[key] = now
+
+        if len(cache) > _V04H5_AUDIO_GATE_CACHE_LIMIT:
+            oldest_keys = sorted(
+                cache,
+                key=lambda cached_key: float(cache[cached_key]),
+            )
+            remove_count = len(cache) - _V04H5_AUDIO_GATE_CACHE_LIMIT
+            for cached_key in oldest_keys[:remove_count]:
+                cache.pop(cached_key, None)
+
+        manager._v04h5_audio_gate_cache = cache
+        return True
+
+
+def _v04h5_audio_gate_request(url: str) -> None:
+    try:
+        urllib.request.urlopen(url, timeout=0.35).read(2048)
+    except Exception:
+        pass
+    finally:
+        _V04H5_AUDIO_GATE_SLOTS.release()
+
+
 def _v04h5_gate_audio_for_tgid(manager: Any, tgid: int, reason: str) -> None:
     now = time.time()
-    cache = getattr(manager, "_v04h5_audio_gate_cache", {})
     key = f"{tgid}:{reason}"
-    if now - float(cache.get(key, 0.0)) < _V04H5_AUDIO_GATE_RATE_LIMIT_SECONDS:
+
+    if not _v04h5_audio_gate_allowed(manager, key, now):
         return
-    cache[key] = now
-    manager._v04h5_audio_gate_cache = cache
+
+    if not _V04H5_AUDIO_GATE_SLOTS.acquire(blocking=False):
+        return
+
     try:
         import urllib.parse as _v04h5_urlparse
 
-        query = _v04h5_urlparse.urlencode({"hold_ms": str(_V04H5_AUDIO_GATE_HOLD_MS), "reason": f"{reason}-tgid-{tgid}"})
+        query = _v04h5_urlparse.urlencode(
+            {
+                "hold_ms": str(_V04H5_AUDIO_GATE_HOLD_MS),
+                "reason": f"{reason}-tgid-{tgid}",
+            }
+        )
         url = f"{_V04H5_AUDIO_GATE_URL}?{query}"
-
-        def _worker() -> None:
-            try:
-                urllib.request.urlopen(url, timeout=0.35).read(2048)
-            except Exception:
-                pass
-
-        threading.Thread(target=_worker, daemon=True).start()
+        _V04H5_AUDIO_GATE_EXECUTOR.submit(
+            _v04h5_audio_gate_request,
+            url,
+        )
     except Exception:
-        pass
+        _V04H5_AUDIO_GATE_SLOTS.release()
 
 
 def _v04h5_filter_payload(manager: Any, payload: dict[str, Any]) -> dict[str, Any]:
