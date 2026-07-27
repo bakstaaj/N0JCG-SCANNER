@@ -686,3 +686,63 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     min-height: 3.1rem;
   }
 }
+
+
+/* ANALOG_SQUELCH_VALUE_LAYOUT_V114 */
+.analog-live-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.analog-squelch-row {
+  display: grid;
+  grid-template-columns: auto minmax(4.5rem, 0.7fr) minmax(8rem, 1.6fr) minmax(4.5rem, 0.7fr);
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.analog-squelch-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3.6rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #07131f;
+  color: var(--accent);
+  font-size: 1.15rem;
+  font-weight: 900;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.analog-channel-action-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+  width: 100%;
+}
+
+.analog-channel-action-row button,
+.analog-squelch-row button {
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .analog-squelch-row {
+    grid-template-columns: auto 1fr 1.4fr 1fr;
+    gap: 0.45rem;
+  }
+
+  .analog-squelch-value {
+    font-size: 0.95rem;
+    padding-inline: 0.35rem;
+  }
+
+  .analog-channel-action-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

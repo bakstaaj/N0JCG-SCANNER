@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI P25 Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=1.0.13-preserve-status-counters">
+  <link rel="stylesheet" href="/app.css?v=1.0.14-squelch-value-layout">
 </head>
 <body>
   <div class="app-shell">
@@ -72,7 +72,7 @@
           aria-label="analog scanner controls"
           aria-disabled="true"
         >
-          <div class="analog-control-group analog-squelch-group">
+          <div class="analog-squelch-row">
             <span class="analog-squelch-label">Squelch</span>
             <button
               id="analogSquelchDownBtn"
@@ -80,6 +80,11 @@
               title="Lower squelch"
               disabled
             >−</button>
+            <strong
+              id="analogSquelchValue"
+              class="analog-squelch-value"
+              aria-live="polite"
+            >—</strong>
             <button
               id="analogSquelchUpBtn"
               type="button"
@@ -87,23 +92,27 @@
               disabled
             >+</button>
           </div>
-          <button
-            id="analogSkipBtn"
-            type="button"
-            title="Skip current channel for 10 minutes"
-            disabled
-          >Skip 10 Min</button>
-          <button
-            id="analogBlockBtn"
-            type="button"
-            title="Block current channel until cleared"
-            disabled
-          >Block Channel</button>
-          <button
-            id="analogClearBlockBtn"
-            type="button"
-            title="Clear all VHF and UHF skipped and blocked channels"
-          >Clear All Blocks</button>
+
+          <div class="analog-channel-action-row">
+            <button
+              id="analogSkipBtn"
+              type="button"
+              title="Skip current channel for 10 minutes"
+              disabled
+            >Skip 10 Min</button>
+            <button
+              id="analogBlockBtn"
+              type="button"
+              title="Block current channel until cleared"
+              disabled
+            >Block Channel</button>
+            <button
+              id="analogClearBlockBtn"
+              type="button"
+              title="Clear all VHF and UHF skipped and blocked channels"
+              disabled
+            >Clear All Blocks</button>
+          </div>
         </section>
 </section>
 
@@ -186,7 +195,7 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=1.0.12-analog-control-state"></script>
+  <script src="/app.js?v=1.0.14-squelch-value-layout"></script>
   <script src="/audio_arbitrator_live.js?v=1.0.6-controls-only"></script>
 </body>
 </html>

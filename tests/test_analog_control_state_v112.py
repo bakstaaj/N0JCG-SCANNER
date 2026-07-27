@@ -17,12 +17,12 @@ def test_controls_follow_required_enablement_rules() -> None:
     radio_pos = index.index('id="radioSetupScreen"')
 
     assert stats_pos < controls_pos < radio_pos
-    assert "ANALOG_CONTROL_STATE_V112" in app
+    assert "ANALOG_SQUELCH_VALUE_LAYOUT_V114" in app
     assert "p25IsActive" in app
     assert "analogScanningAvailable" in app
     assert "hasAnyBlocksOrSkips" in app
     assert "clearButton.disabled = !hasAnyBlocksOrSkips" in app
     assert "Raised VHF and UHF squelch" in app
     assert "Lowered VHF and UHF squelch" in app
-    assert "ANALOG_CONTROL_LAYOUT_V112" in css
+    assert "ANALOG_SQUELCH_VALUE_LAYOUT_V114" in css
     assert "clear: both" in css
