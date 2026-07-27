@@ -479,21 +479,32 @@ class ContinuousScanner:
         )
         hold_seconds = float(channel.get("hold_seconds") or 1.0)
         release_seconds = float(channel.get("resume_delay_seconds") or 1.25)
-        configured_squelch = max(
+        base_squelch = max(
             0,
             int(
                 channel.get("squelch_rms")
                 or self.worker.get("lock_squelch_rms")
                 or 1200
-            )
-            + analog_squelch_offset(self.role),
+            ),
         )
-        release_squelch = int(
+        squelch_offset = analog_squelch_offset(self.role)
+        configured_squelch = max(
+            0,
+            base_squelch + squelch_offset,
+        )
+
+        base_release_squelch = int(
             channel.get("release_squelch_rms")
             or self.worker.get("release_squelch_rms")
-            or max(0, configured_squelch - 75)
+            or max(0, base_squelch - 75)
         )
-        release_squelch = min(release_squelch, configured_squelch)
+        release_squelch = max(
+            0,
+            min(
+                configured_squelch,
+                base_release_squelch + squelch_offset,
+            ),
+        )
         lock_window_frames = max(
             2,
             int(self.worker.get("lock_window_frames") or 4),
