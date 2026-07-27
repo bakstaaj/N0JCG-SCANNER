@@ -1,7 +1,7 @@
 [Unit]
 Description=PI-SCANNER Isolated VHF Analog Scanner
-Wants=network-online.target pi-scanner-vhf-audio.service
-After=network-online.target pi-scanner-vhf-audio.service
+Wants=network-online.target
+After=network-online.target
 
 [Service]
 Type=simple
