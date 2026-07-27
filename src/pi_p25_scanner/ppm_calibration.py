@@ -154,6 +154,55 @@ def _score_text(text: str) -> tuple[int, dict[str, int], dict[str, int], list[st
     return score, positive, negative, lines[-20:]
 
 
+def _signal_process_group(
+    proc: subprocess.Popen[str],
+    sig: int,
+) -> None:
+    """Signal the candidate process group, falling back to the direct child."""
+    try:
+        os.killpg(proc.pid, sig)
+    except (AttributeError, ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.send_signal(sig)
+        except (ProcessLookupError, OSError):
+            pass
+
+
+def _terminate_process_group(
+    proc: subprocess.Popen[str],
+    term_timeout: float = 3.0,
+    kill_timeout: float = 3.0,
+) -> str:
+    """Terminate a process tree and return all output collected before exit."""
+    if proc.poll() is not None:
+        output, _ = proc.communicate()
+        return output or ""
+
+    _signal_process_group(proc, signal.SIGTERM)
+
+    try:
+        output, _ = proc.communicate(timeout=term_timeout)
+        return output or ""
+    except subprocess.TimeoutExpired as exc:
+        partial = exc.output or ""
+
+    sigkill = getattr(signal, "SIGKILL", None)
+    if sigkill is not None:
+        _signal_process_group(proc, sigkill)
+    else:
+        try:
+            proc.kill()
+        except (ProcessLookupError, OSError):
+            pass
+
+    try:
+        output, _ = proc.communicate(timeout=kill_timeout)
+        return (partial or "") + (output or "")
+    except subprocess.TimeoutExpired as exc:
+        final_partial = exc.output or ""
+        return (partial or "") + (final_partial or "")
+
+
 def _run_candidate(base_command: list[str], cwd: str, env: dict[str, str], ppm: int, dwell_seconds: int) -> CandidateResult:
     command = _calibration_command(base_command, ppm)
     launch_env = os.environ.copy()
@@ -169,18 +218,14 @@ def _run_candidate(base_command: list[str], cwd: str, env: dict[str, str], ppm: 
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        start_new_session=True,
     )
     timed_out = False
     try:
         output, _ = proc.communicate(timeout=dwell_seconds)
     except subprocess.TimeoutExpired:
         timed_out = True
-        try:
-            proc.send_signal(signal.SIGTERM)
-            output, _ = proc.communicate(timeout=3)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            output, _ = proc.communicate(timeout=3)
+        output = _terminate_process_group(proc)
     runtime = time.monotonic() - start
     score, positive, negative, tail = _score_text(output or "")
     return CandidateResult(
