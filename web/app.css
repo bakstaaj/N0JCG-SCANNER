@@ -746,3 +746,150 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+
+/* COMPACT_800X480_V115 */
+@media (max-width: 900px) and (max-height: 540px) {
+  :root {
+    --touch: 44px;
+  }
+
+  .topbar {
+    height: 46px;
+    min-height: 46px;
+    padding: 4px 8px;
+    gap: 7px;
+  }
+
+  .title-block strong {
+    font-size: 16px;
+  }
+
+  .title-block span {
+    font-size: 10px;
+  }
+
+  .screen {
+    padding: 6px;
+    gap: 5px;
+  }
+
+  #dashboardScreen.screen.active {
+    gap: 5px;
+  }
+
+  .control-strip {
+    grid-template-columns: 1fr 92px;
+    gap: 6px;
+  }
+
+  .big-action {
+    min-height: 52px;
+    font-size: 17px;
+    border-radius: 14px;
+  }
+
+  .audio-controls-only {
+    gap: 5px;
+  }
+
+  .audio-mute-button {
+    min-height: 44px;
+  }
+
+  .activity-card {
+    min-height: 108px;
+    padding: 8px;
+    gap: 5px;
+    border-radius: 14px;
+  }
+
+  .activity-topline {
+    gap: 6px;
+  }
+
+  #activeTalkgroupLabel {
+    font-size: 17px;
+  }
+
+  .active-tgid-inline {
+    font-size: 15px;
+  }
+
+  .pill {
+    min-height: 30px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+
+  .activity-grid,
+  .stats-grid {
+    gap: 5px;
+  }
+
+  .activity-grid div,
+  .stats-grid article {
+    min-height: 46px;
+    padding: 6px;
+    border-radius: 11px;
+  }
+
+  .activity-grid strong,
+  .stats-grid strong {
+    font-size: 14px;
+  }
+
+  .label,
+  article span,
+  .activity-grid span {
+    font-size: 9px;
+    letter-spacing: 0.045em;
+  }
+
+  #dashboardScreen > .stats-grid {
+    min-height: 50px;
+  }
+
+  #dashboardScreen > .stats-grid > article {
+    min-height: 46px;
+  }
+
+  .analog-live-controls {
+    gap: 5px;
+    margin-top: 4px;
+    margin-bottom: 2px;
+    padding: 5px;
+    border-radius: 12px;
+  }
+
+  .analog-squelch-row {
+    grid-template-columns: auto 54px minmax(110px, 1fr) 54px;
+    gap: 5px;
+  }
+
+  .analog-squelch-label {
+    font-size: 12px;
+  }
+
+  .analog-squelch-value {
+    min-height: 42px;
+    padding: 4px 6px;
+    border-radius: 11px;
+    font-size: 15px;
+  }
+
+  .analog-channel-action-row {
+    gap: 5px;
+  }
+
+  .analog-live-controls button {
+    min-height: 42px;
+    padding: 4px 8px;
+    border-radius: 11px;
+    font-size: 14px;
+  }
+
+  .analog-squelch-row button {
+    font-size: 20px;
+  }
+}
