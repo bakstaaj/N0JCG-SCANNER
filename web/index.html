@@ -3,18 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
-  <title>PI Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=typography-cleanup-v1">
+  <title>PI P25 Scanner</title>
+  <link rel="stylesheet" href="/app.css?v=0.5ar-compact-spacing">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <button id="menuBtn" class="icon-button" type="button" aria-label="Open menu">☰</button>
       <div class="title-block">
-        <strong>PI Scanner</strong>
+        <strong>PI P25 Scanner</strong>
         <span id="dashboardSummary">Loading scanner state...</span>
       </div>
       <span id="connectionStatus" class="pill warn">Connecting</span>
@@ -38,24 +35,16 @@
           <button id="startBtn" type="button" class="big-action start">Start Scanner + Audio</button>
           <button id="stopBtn" type="button" class="big-action stop">Stop</button>
         </div>
-        <section class="arbitrator-audio-bar compact-audio-tile" aria-label="scanner audio">
-          <span class="ui-label">Audio</span>
-          <strong id="arbitratorAudioSource" class="ui-value">Idle</strong>
-          <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
-            <span class="ui-label">Volume</span>
-            <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
-          </label>
-          <button id="arbitratorMuteBtn" type="button" class="audio-mute-button" aria-pressed="false">Mute</button>
-        </section>
+        <audio id="browserAudioPlayer" class="audio-player" controls preload="none"></audio>
         <section class="activity-card">
           <div class="activity-topline">
-            <div class="activity-heading-inline">
-              <span class="ui-label">Active / Last Talkgroup</span>
-              <strong id="activeTalkgroupLabel" class="ui-value">Waiting for activity</strong>
-              <strong id="activeTgid" class="active-tgid-inline ui-value">-</strong>
+            <div>
+              <span class="label">Active / Last Talkgroup</span>
+              <strong id="activeTalkgroupLabel">Waiting for activity</strong>
             </div>
             <span id="stateBadge" class="pill">-</span>
           </div>
+          <div class="talkgroup-number" id="activeTgid">-</div>
           <div class="activity-grid">
             <div><span>Voice</span><strong id="voiceFrequency">-</strong></div>
             <div><span>Control</span><strong id="controlFrequency">-</strong></div>
@@ -63,34 +52,14 @@
             <div><span>Audio</span><strong id="browserAudioLastEvent">Ready</strong></div>
           </div>
         </section>
-
         <section class="stats-grid" aria-label="statistics">
           <article><span>State</span><strong id="scannerState">-</strong></article>
           <article><span>PID</span><strong id="decoderPid">-</strong></article>
           <article><span>Unique TGIDs</span><strong id="activityUniqueTgids">-</strong></article>
-          <article><span>Voice Calls</span><strong id="activityVoiceCalls">-</strong></article>
+          <article><span>Clear</span><strong id="activityClearEvents">-</strong></article>
           <article><span>Encrypted</span><strong id="activityEncryptedEvents">-</strong></article>
-          <article><span>VHF Locks</span><strong id="analogVhfLocks">0</strong></article>
-          <article><span>UHF Locks</span><strong id="analogUhfLocks">0</strong></article>
+          <article><span>Muted</span><strong id="activityMutedEvents">-</strong></article>
         </section>
-
-        <div class="analog-status-support" hidden aria-hidden="true">
-          <span id="analogVhfBadge">Scanning</span>
-          <span id="analogVhfChannel">Scanning</span>
-          <span id="analogVhfFrequency">-</span>
-          <span id="analogVhfLastLock">None</span>
-          <span id="analogVhfTunes">-</span>
-          <span id="analogVhfCycles">-</span>
-          <span id="analogUhfBadge">Scanning</span>
-          <span id="analogUhfChannel">Scanning</span>
-          <span id="analogUhfFrequency">-</span>
-          <span id="analogUhfLastLock">None</span>
-          <span id="analogUhfTunes">-</span>
-          <span id="analogUhfCycles">-</span>
-          <span id="analogScannerSummaryBadge">Loading</span>
-          <div id="analogScannerGrid"></div>
-          <div id="analogAudioMessage"></div>
-        </div>
       </section>
 
       <section id="radioSetupScreen" class="screen" aria-label="radio setup">
@@ -98,55 +67,6 @@
           <h1>Radio Setup</h1>
           <p>One workflow: choose a saved profile or import a RadioReference system/site, filter talkgroups, calibrate if needed, then save as a named profile.</p>
         </div>
-
-        <!-- PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A -->
-        <section class="rr-panel receiver-inventory-panel" data-v06-section="receivers">
-          <div class="section-row">
-            <div>
-              <strong>Receiver Inventory</strong>
-              <p>Persistent serial-bound assignments are independent of P25 profiles. Analog workers remain disabled in this phase.</p>
-            </div>
-            <span id="receiverInventoryBadge" class="pill warn">Loading</span>
-          </div>
-          <div class="wizard-actions compact-actions receiver-actions">
-            <button id="refreshReceiverInventoryBtn" type="button">Refresh Receiver Inventory</button>
-          </div>
-          <div id="receiverInventoryGrid" class="receiver-inventory-grid"></div>
-          <pre id="receiverInventoryStatus">Receiver inventory not loaded yet.</pre>
-        </section>
-
-        <section class="rr-panel analog-csv-panel" data-analog-csv-section="channels">
-          <div class="section-row">
-            <div>
-              <strong>Analog 2 m / 70 cm Channel Lists</strong>
-              <p>Upload one CSV containing either or both receiver lists. Required columns: receiver and frequency_mhz. Bands in the file replace only those bands.</p>
-            </div>
-            <span id="analogCsvStatusBadge" class="pill warn">Not loaded</span>
-          </div>
-          <div class="analog-csv-upload-row">
-            <input id="analogCsvFile" type="file" accept=".csv,text/csv">
-            <button id="importAnalogCsvBtn" type="button" class="primary">Import CSV Channel List</button>
-            <a class="button-link" href="/chirp_analog_template.csv" download="chirp_analog_template.csv">Download CSV Template</a>
-            <a class="button-link" href="/analog_channels_cabin.csv" download="analog_channels_cabin.csv">Download Cabin Starter List</a>
-          </div>
-          <pre id="analogCsvStatusText">Choose a CSV file to import.</pre>
-        </section>
-
-        <section class="rr-panel p25-csv-panel" data-p25-csv-section="systems">
-          <div class="section-row">
-            <div>
-              <strong>P25 Control, Voice, and Talkgroup CSV Import</strong>
-              <p>Use RecordType control, voice, or talkgroup. Import replaces only systems named in the file.</p>
-            </div>
-            <span id="p25CsvStatusBadge" class="pill warn">Not loaded</span>
-          </div>
-          <div class="analog-csv-upload-row">
-            <input id="p25CsvFile" type="file" accept=".csv,text/csv">
-            <button id="importP25CsvBtn" type="button" class="primary">Import P25 CSV</button>
-            <a class="button-link" href="/p25_import_template.csv" download="p25_import_template.csv">Download P25 CSV Template</a>
-          </div>
-          <pre id="p25CsvStatusText">Choose a P25 CSV file to import.</pre>
-        </section>
 
         <section class="rr-panel" data-v05d-section="profiles">
           <div class="section-row"><div><strong>1. Saved Profiles</strong><p>Reload a known-good profile or save the current active setup for future use.</p></div><span id="profileStatusBadge" class="pill warn">Profiles</span></div>
@@ -221,7 +141,6 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=typography-cleanup-v1"></script>
-  <script src="/audio_arbitrator_live.js?v=typography-cleanup-v1"></script>
+  <script src="/app.js?v=0.5ar-tgid-label-fix"></script>
 </body>
 </html>

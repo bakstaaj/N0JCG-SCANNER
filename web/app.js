@@ -46,14 +46,6 @@ let currentConfig = null;
 let rrSystems = [];
 let rrSites = [];
 let browserAudioLastEvent = 'Ready';
-let latestReceiverInventory = null; // PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
-
-// PHASE18E_BALANCED_UI_POLLING
-const STATUS_REFRESH_INTERVAL_MS = 1000;
-const FAST_ACTIVITY_REFRESH_INTERVAL_MS = 1000;
-const FAST_ACTIVITY_STAGGER_MS = 500;
-let statusRefreshInFlight = false;
-let fastActivityRefreshInFlight = false;
 
 const CATEGORY_DEFAULTS = [
   'Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Utilities', 'Transportation',
@@ -152,9 +144,9 @@ function formatActivityEvent(event) {
 
 function renderActivitySummary(activity) {
   setText('activityUniqueTgids', activity?.unique_tgid_count ?? 0);
-  setText('activityVoiceCalls', activity?.voice_call_events ?? 0);
   setText('activityClearEvents', activity?.clear_voice_events ?? 0);
   setText('activityEncryptedEvents', activity?.encrypted_events ?? 0);
+  setText('activityMutedEvents', activity?.muted_events ?? 0);
   const recent = Array.isArray(activity?.recent_events) ? activity.recent_events : [];
   setText('activityRecentEvents', recent.length ? recent.slice(-10).map(formatActivityEvent).join('\n') : 'No parsed activity yet.');
 }
@@ -171,10 +163,20 @@ function renderDashboard(status) {
   const marker = process.validated_marker || {};
   const running = Boolean(process.running);
   const ready = markerIsReady(marker) || Boolean(process.start_enabled);
+  const talkgroup = bestTalkgroup(status || {});
   const listener = extractOp25HttpListener(status || {});
+  const controlState = status?.control_channel_state || (running ? 'searching' : 'idle');
+  const controlSummary = controlState === 'locked'
+    ? `Locked: ${formatHz(status?.active_control_frequency_hz)}`
+    : `Searching: ${formatHz(status?.active_control_frequency_hz)}`;
+  setText('dashboardSummary', running ? (talkgroup.has_talkgroup ? talkgroup.short_label : controlSummary) : (ready ? 'Ready to start' : 'Not launch-ready'));
   setText('scannerState', status?.scanner_state || '-');
   setText('decoderPid', process.pid || '-');
   setText('controlFrequency', formatHz(status?.active_control_frequency_hz));
+  setText('voiceFrequency', formatHz(talkgroup.voice_frequency_hz));
+  setText('activeTgid', talkgroup.tgid_text);
+  setText('activeTalkgroupLabel', talkgroup.label);
+  setText('p25Phase', status?.p25_phase || '-');
   setText('op25HttpListener', listener ? listener.piLocalUrl : '-');
   setText('launchReady', ready ? 'yes' : 'no');
   setText('commandSource', process.command_source || '-');
@@ -182,10 +184,7 @@ function renderDashboard(status) {
   setText('validatedCommand', formatList(process.command));
   setText('lastEvent', status?.last_event || '-');
   setText('logTail', formatList(status?.log_tail));
-  setText(
-    'lastUpdated',
-    `Last update: ${new Date().toLocaleTimeString()}`
-  );
+  setText('lastUpdated', `Last update: ${new Date().toLocaleTimeString()}`);
   setBadge('stateBadge', running ? 'ON AIR' : (status?.scanner_state || '-'), running ? 'ok' : (status?.ok ? 'warn' : 'bad'));
   setBadge('connectionStatus', 'Connected', 'ok');
   renderActivitySummary(status?.activity_summary || {});
@@ -194,8 +193,6 @@ function renderDashboard(status) {
 }
 
 async function refreshStatus() {
-  if (statusRefreshInFlight) return;
-  statusRefreshInFlight = true;
   try {
     latestStatus = await fetchJson('/api/status');
     renderDashboard(latestStatus);
@@ -203,138 +200,6 @@ async function refreshStatus() {
     setBadge('connectionStatus', 'Offline', 'bad');
     setText('dashboardSummary', `Status error: ${error.message}`);
     setText('lastEvent', `Status error: ${error.message}`);
-  } finally {
-    statusRefreshInFlight = false;
-  }
-}
-
-function renderFastActivity(activity) {
-  const activeTgid = activity?.active_tgid ?? null;
-  const lastTgid = activity?.last_active_tgid ?? null;
-  const displayTgid = activeTgid ?? activity?.display_tgid ?? lastTgid ?? null;
-  const activeLabel = String(activity?.active_talkgroup_label || '').trim();
-  const lastLabel = String(activity?.last_active_talkgroup_label || '').trim();
-  const displayLabel = activeLabel
-    || String(activity?.display_talkgroup_label || '').trim()
-    || lastLabel
-    || (displayTgid ? 'Unmapped talkgroup' : '');
-  const voiceFrequency = activity?.active_voice_frequency_hz
-    ?? activity?.display_voice_frequency_hz
-    ?? activity?.last_active_voice_frequency_hz
-    ?? null;
-  const activeNow = activeTgid !== null && activeTgid !== undefined;
-  const running = activity?.scanner_state === 'running';
-
-  setText(
-    'dashboardSummary',
-    displayTgid
-      ? `${displayLabel || 'Unmapped talkgroup'} · TGID ${displayTgid}`
-      : (running ? 'Scanning for voice activity' : 'Waiting for activity')
-  );
-  setText('activeTgid', displayTgid ? `TGID ${displayTgid}` : '-');
-  setText(
-    'activeTalkgroupLabel',
-    displayTgid
-      ? `${activeNow ? 'Active' : 'Last heard'}: ${displayLabel || 'Unmapped talkgroup'}`
-      : (running ? 'Scanning for voice activity' : 'Waiting for activity')
-  );
-  setText('voiceFrequency', formatHz(voiceFrequency));
-  setText('p25Phase', activity?.p25_phase || '-');
-
-}
-
-async function refreshFastActivity() {
-  if (fastActivityRefreshInFlight) return;
-  fastActivityRefreshInFlight = true;
-  try {
-    const activity = await fetchJson(
-      `/api/activity?_=${Date.now()}`
-    );
-    renderFastActivity(activity);
-  } catch (error) {
-    setText('lastEvent', `Activity status error: ${error.message}`);
-  } finally {
-    fastActivityRefreshInFlight = false;
-  }
-}
-
-// PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
-function receiverStateKind(state) {
-  if (state === 'active' || state === 'ready') return 'ok';
-  if (state === 'missing') return 'bad';
-  return 'warn';
-}
-
-function renderReceiverInventory(payload) {
-  const grid = field('receiverInventoryGrid');
-  const roles = Array.isArray(payload?.roles) ? payload.roles : [];
-  const expected = Number(payload?.expected_rtl_count || 0);
-  const present = Number(payload?.device_count || 0);
-  setBadge('receiverInventoryBadge', `${present}/${expected || '?'} RTL`, payload?.ok ? 'ok' : 'bad');
-
-  if (grid) {
-    grid.innerHTML = '';
-    roles.forEach((role) => {
-      const card = document.createElement('article');
-      card.className = `receiver-card ${role.state || 'unknown'}`;
-
-      const top = document.createElement('div');
-      top.className = 'receiver-card-top';
-
-      const title = document.createElement('strong');
-      title.textContent = role.label || role.role || 'Receiver';
-
-      const badge = document.createElement('span');
-      badge.className = `pill ${receiverStateKind(role.state)}`;
-      badge.textContent = String(role.state || 'unknown').toUpperCase();
-
-      top.append(title, badge);
-
-      const serial = document.createElement('div');
-      serial.className = 'receiver-serial';
-      serial.textContent = role.rtl_serial || '-';
-
-      const detail = document.createElement('div');
-      detail.className = 'receiver-detail';
-      const device = role.device || {};
-      const pieces = [
-        role.role,
-        device.product || role.service,
-        device.usb_path ? `USB ${device.usb_path}` : '',
-        role.active && Array.isArray(role.processes) && role.processes.length
-          ? `PID ${role.processes[0].pid}`
-          : '',
-      ].filter(Boolean);
-      detail.textContent = pieces.join(' · ') || '-';
-
-      const note = document.createElement('div');
-      note.className = 'receiver-note';
-      note.textContent = role.notes || (role.enabled ? 'Enabled' : 'Reserved');
-
-      card.append(top, serial, detail, note);
-      grid.append(card);
-    });
-  }
-
-  const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
-  const summary = [
-    `Role registry: ${payload?.role_config_path || '-'}`,
-    `Configured roles: ${payload?.configured_role_count ?? 0}`,
-    `Present devices: ${present} / ${expected || '-'}`,
-    `Missing configured serials: ${(payload?.missing_configured_serials || []).join(', ') || 'none'}`,
-    `Unassigned serials: ${(payload?.unassigned_serials || []).join(', ') || 'none'}`,
-    `Warnings: ${warnings.join(' | ') || 'none'}`,
-  ];
-  setText('receiverInventoryStatus', summary.join('\n'));
-}
-
-async function refreshReceiverInventory() {
-  try {
-    latestReceiverInventory = await fetchJson('/api/receivers/inventory');
-    renderReceiverInventory(latestReceiverInventory);
-  } catch (error) {
-    setBadge('receiverInventoryBadge', 'Inventory error', 'bad');
-    setText('receiverInventoryStatus', `Receiver inventory failed: ${error.message}`);
   }
 }
 
@@ -783,86 +648,6 @@ async function autoCalibratePpm() {
   }
 }
 
-
-// ANALOG_CSV_CHANNEL_IMPORT_V1
-async function refreshAnalogChannels() {
-  try {
-    const result = await fetchJson('/api/analog/channels');
-    const counts = result?.channel_counts || {};
-    const twoMeter = Number(counts.analog_2m || 0);
-    const seventyCm = Number(counts.analog_70cm || 0);
-    setBadge('analogCsvStatusBadge', `${twoMeter} 2 m / ${seventyCm} 70 cm`,
-      (twoMeter + seventyCm) > 0 ? 'ok' : 'warn');
-    setText('analogCsvStatusText', safeJson({
-      channel_counts: result.channel_counts,
-      enabled_counts: result.enabled_counts,
-      serial_bindings: result.serial_bindings,
-      last_import: result.last_import
-    }));
-  } catch (error) {
-    setBadge('analogCsvStatusBadge', 'Load failed', 'bad');
-    setText('analogCsvStatusText', `Analog channel status failed: ${error.message}`);
-  }
-}
-
-async function importAnalogCsv() {
-  const file = field('analogCsvFile')?.files?.[0];
-  if (!file) {
-    setBadge('analogCsvStatusBadge', 'Choose CSV', 'warn');
-    setText('analogCsvStatusText', 'Choose a CSV file before importing.');
-    return;
-  }
-  setBadge('analogCsvStatusBadge', 'Importing', 'warn');
-  try {
-    const result = await postJson('/api/analog/channels/import', {
-      filename: file.name,
-      csv_text: await file.text(),
-      replace_mode: 'roles_in_file'
-    });
-    setBadge('analogCsvStatusBadge', 'Imported', 'ok');
-    setText('analogCsvStatusText', safeJson({
-      filename: result.filename,
-      imported_rows: result.imported_rows,
-      roles_present: result.roles_present,
-      channel_counts: result.channel_counts,
-      warnings: result.warnings,
-      backup_path: result.backup_path
-    }));
-    await refreshAnalogChannels();
-  } catch (error) {
-    setBadge('analogCsvStatusBadge', 'Import failed', 'bad');
-    setText('analogCsvStatusText', `CSV import failed: ${error.message}`);
-  }
-}
-
-
-// ANALOG_DASHBOARD_STATUS_V1
-let latestAnalogStatus = null;
-let analogStatusRefreshInFlight = false;
-let selectedAnalogRole = null;
-function analogRoleUi(role) { return role === 'analog_2m' ? { prefix: 'analogVhf', label: 'VHF', port: 8073 } : { prefix: 'analogUhf', label: 'UHF', port: 8074 }; }
-function analogStateKind(s) { if (!s?.ok) return 'bad'; return s.state === 'locked' ? 'ok' : 'warn'; }
-function renderAnalogRole(role, s) {
-  const ui = analogRoleUi(role); const c = s?.current_channel || {}; const last = s?.last_lock || {};
-  setBadge(`${ui.prefix}Badge`, String(s?.state || 'offline').toUpperCase(), analogStateKind(s));
-  setText(`${ui.prefix}Channel`, c.name || (s?.ok ? 'Scanning configured channels' : 'Scanner unavailable'));
-  setText(`${ui.prefix}Frequency`, formatHz(c.frequency_hz));
-  setText(`${ui.prefix}Tunes`, s?.channel_tunes ?? 0); setText(`${ui.prefix}Cycles`, s?.scan_cycles ?? 0); setText(`${ui.prefix}Locks`, s?.lock_count ?? 0);
-  setText(`${ui.prefix}LastLock`, last.name || (last.frequency_hz ? formatHz(last.frequency_hz) : 'None'));
-  const b = field(`${ui.prefix}ListenBtn`); if (b) { const selected = selectedAnalogRole === role; b.textContent = selected ? `Listening to ${ui.label}` : `Listen to ${ui.label}`; b.classList.toggle('active-listen', selected); b.disabled = !s?.ok; }
-}
-function renderAnalogStatus(payload) {
-  latestAnalogStatus = payload; const roles = payload?.roles || {}; renderAnalogRole('analog_2m', roles.analog_2m || {}); renderAnalogRole('analog_70cm', roles.analog_70cm || {});
-  const healthy = ['analog_2m','analog_70cm'].filter((r) => roles[r]?.ok).length; const locks = ['analog_2m','analog_70cm'].reduce((n,r) => n + Number(roles[r]?.lock_count || 0), 0);
-  setBadge('analogScannerSummaryBadge', `${healthy}/2 ACTIVE · ${locks} LOCKS`, healthy === 2 ? 'ok' : (healthy ? 'warn' : 'bad'));
-}
-async function refreshAnalogStatus() { if (analogStatusRefreshInFlight) return; analogStatusRefreshInFlight = true; try { renderAnalogStatus(await fetchJson(`/api/analog/status?_=${Date.now()}`)); } catch (error) { setBadge('analogScannerSummaryBadge', 'Status error', 'bad'); setText('analogAudioMessage', `Analog status error: ${error.message}`); } finally { analogStatusRefreshInFlight = false; } }
-async function listenToAnalogRole(role) {
-  const s = latestAnalogStatus?.roles?.[role]; const ui = analogRoleUi(role); if (!s?.ok) { setText('analogAudioMessage', `${ui.label} scanner is not ready.`); return; }
-  const audio = field('analogAudioPlayer'); if (!audio) return; selectedAnalogRole = role; audio.pause(); audio.src = `${s.audio_url || `http://${window.location.hostname}:${ui.port}/audio.wav`}?_=${Date.now()}`; audio.load(); renderAnalogStatus(latestAnalogStatus);
-  try { await audio.play(); setText('analogAudioMessage', `Listening to ${ui.label}. Audio opens when the scanner locks on activity.`); } catch (error) { setText('analogAudioMessage', `${ui.label} selected. Press Play if blocked: ${error.message}`); }
-}
-
 function attachEventHandlers() {
   field('menuBtn')?.addEventListener('click', openDrawer);
   field('closeDrawerBtn')?.addEventListener('click', closeDrawer);
@@ -870,10 +655,6 @@ function attachEventHandlers() {
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => showScreen(button.dataset.screen)));
   field('startBtn')?.addEventListener('click', (event) => { if (p25AllowManualStart(event)) startScannerAndAudio(); });
   field('stopBtn')?.addEventListener('click', stopScanner);
-  field('analogVhfListenBtn')?.addEventListener('click', () => listenToAnalogRole('analog_2m'));
-  field('analogUhfListenBtn')?.addEventListener('click', () => listenToAnalogRole('analog_70cm'));
-  field('refreshReceiverInventoryBtn')?.addEventListener('click', refreshReceiverInventory);
-  field('importAnalogCsvBtn')?.addEventListener('click', importAnalogCsv);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
   field('loadProfileBtn')?.addEventListener('click', loadSelectedProfile);
   field('saveProfileBtn')?.addEventListener('click', saveCurrentProfile);
@@ -894,21 +675,9 @@ p25RemoveDashboardAutostartTuningRemnants();
   updateAudioPanel();
   refreshProfiles();
   refreshRadioReferenceStatus();
-  refreshReceiverInventory();
-  refreshAnalogChannels();
-  refreshAnalogStatus();
   refreshStatus();
   refreshConfig();
-  setInterval(refreshStatus, STATUS_REFRESH_INTERVAL_MS);
-  window.setTimeout(() => {
-    refreshFastActivity();
-    setInterval(
-      refreshFastActivity,
-      FAST_ACTIVITY_REFRESH_INTERVAL_MS
-    );
-  }, FAST_ACTIVITY_STAGGER_MS);
-  setInterval(refreshReceiverInventory, 15000);
-  setInterval(refreshAnalogStatus, 1000);
+  setInterval(refreshStatus, 3000);
 }
 
 if (document.readyState === 'loading') {
@@ -1174,198 +943,3 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   window.piP25SelectedRadioReferenceCounty = selectedCounty;
 })();
 // END V0.5AH RR SITE COUNTY FILTER
-
-/* PI_SCANNER_SPECTRUM_TELEMETRY_V1 */
-(() => {
-  "use strict";
-  const ID = "analog-spectrum-telemetry";
-  const fmt = (v, d=1) => Number.isFinite(Number(v)) ? Number(v).toFixed(d) : "—";
-  const mhz = (v) => Number.isFinite(Number(v)) ? `${(Number(v)/1e6).toFixed(4)} MHz` : "—";
-  const label = (v) => String(v || "offline").replaceAll("_"," ").replace(/\b\w/g, c => c.toUpperCase());
-
-  function role(payload, key) {
-    const aliases = key === "analog_2m"
-      ? ["analog_2m", "vhf", "VHF", "analog_vhf"]
-      : ["analog_70cm", "uhf", "UHF", "analog_uhf"];
-    const visited = new Set();
-
-    function search(value, depth = 0) {
-      if (!value || typeof value !== "object" || depth > 5) return null;
-      if (visited.has(value)) return null;
-      visited.add(value);
-
-      if (String(value.role || "") === key) return value;
-
-      for (const alias of aliases) {
-        const direct = value[alias];
-        if (direct && typeof direct === "object") {
-          if (
-            String(direct.role || "") === key ||
-            direct.state ||
-            direct.current_channel ||
-            direct.spectrum_sweeps !== undefined
-          ) return direct;
-        }
-      }
-
-      for (const child of Object.values(value)) {
-        const match = search(child, depth + 1);
-        if (match) return match;
-      }
-      return null;
-    }
-
-    return search(payload) || {};
-  }
-
-  function topCandidate(status) {
-    const list = status?.last_spectrum?.top_candidates;
-    return Array.isArray(list) && list.length ? list[0] : {};
-  }
-
-  function segment(status) {
-    const current = Number(status.spectrum_segment_index);
-    const total = Number(status.spectrum_segment_count || status?.last_spectrum?.segment_count);
-    if (Number.isFinite(current) && Number.isFinite(total) && total > 0) return `${current} of ${total}`;
-    if (Number.isFinite(total) && total > 0) return `${total} total`;
-    return "—";
-  }
-
-  function card(title, status) {
-    const spectrum = status.last_spectrum || {};
-    const candidate = topCandidate(status);
-    const count = status.spectrum_candidate_count ?? spectrum.selected_candidate_count ?? 0;
-    const frequency = status.current_channel?.frequency_hz ?? candidate.frequency_hz;
-    const margin = status.current_channel?.spectrum_margin_db ?? candidate.margin_db;
-    const noise = status.current_channel?.spectrum_noise_floor_db ?? candidate.noise_floor_db;
-    const duration = status.spectrum_elapsed_seconds ?? spectrum.duration_seconds;
-    const state = String(status.state || "offline");
-    const good = !["offline","error","stopped"].includes(state);
-
-    return `<article class="spectrum-telemetry-card">
-      <div class="spectrum-telemetry-heading"><strong>${title}</strong><span class="spectrum-state ${good ? "is-active" : "is-error"}">${label(state)}</span></div>
-      <div class="spectrum-telemetry-grid">
-        <span>Segment</span><b>${segment(status)}</b>
-        <span>Sweep</span><b>${fmt(duration)} s</b>
-        <span>Candidates</span><b>${count}</b>
-        <span>Strongest</span><b>${mhz(frequency)}</b>
-        <span>Margin</span><b>${fmt(margin)} dB</b>
-        <span>Noise floor</span><b>${fmt(noise)} dB</b>
-      </div>
-    </article>`;
-  }
-
-  function ensurePanel() {
-    let panel = document.getElementById(ID);
-    if (panel) return panel;
-    panel = document.createElement("section");
-    panel.id = ID;
-    panel.className = "analog-spectrum-telemetry";
-    panel.innerHTML = `<div class="spectrum-telemetry-title"><div><h3>Fast Spectrum Telemetry</h3><p>CSV-constrained RF sweep and candidate status</p></div><span id="spectrum-telemetry-updated">Waiting for data…</span></div><div id="spectrum-telemetry-cards" class="spectrum-telemetry-cards"></div>`;
-    const target = document.querySelector("[data-analog-status], #analog-status, .analog-status, main");
-    target && target !== document.body ? target.insertAdjacentElement("afterend", panel) : document.body.appendChild(panel);
-    return panel;
-  }
-
-  async function refresh() {
-    const panel = ensurePanel();
-    try {
-      const response = await fetch(`/api/analog/status?_=${Date.now()}`, {cache:"no-store"});
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = await response.json();
-      panel.querySelector("#spectrum-telemetry-cards").innerHTML =
-        card("VHF", role(payload, "analog_2m")) + card("UHF", role(payload, "analog_70cm"));
-      panel.querySelector("#spectrum-telemetry-updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
-      panel.classList.remove("has-error");
-    } catch (error) {
-      panel.classList.add("has-error");
-      panel.querySelector("#spectrum-telemetry-updated").textContent = `Telemetry unavailable: ${error.message}`;
-    }
-  }
-
-  const start = () => { ensurePanel(); refresh(); window.setInterval(refresh, 1500); };
-  document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", start, {once:true}) : start();
-})();
-
-// Unified three-scanner audio ownership display.
-(function installUnifiedAudioArbitratorUi() {
-  if (window.__piScannerUnifiedAudioUiInstalled) return;
-  window.__piScannerUnifiedAudioUiInstalled = true;
-
-  const statusUrl = () =>
-    `http://${window.location.hostname}:8072/api/audio/status?_=${Date.now()}`;
-
-  async function refreshUnifiedAudioOwner() {
-    try {
-      const response = await fetch(statusUrl(), { cache: 'no-store' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const status = await response.json();
-      const source = status.active_source;
-      const message = source
-        ? `Playing ${source} scanner audio`
-        : 'Scanning all three receivers; waiting for audio';
-      const eventNode = document.getElementById('browserAudioLastEvent');
-      if (eventNode) eventNode.textContent = message;
-      const analogMessage = document.getElementById('analogAudioMessage');
-      if (analogMessage) analogMessage.textContent = message;
-
-      for (const id of ['analogVhfListenBtn', 'analogUhfListenBtn']) {
-        const button = document.getElementById(id);
-        if (button) button.hidden = true;
-      }
-      const analogPlayer = document.getElementById('analogAudioPlayer');
-      if (analogPlayer) {
-        analogPlayer.pause();
-        analogPlayer.removeAttribute('src');
-        analogPlayer.hidden = true;
-      }
-    } catch (_error) {
-      // Main scanner status refresh remains authoritative if audio is offline.
-    }
-  }
-
-  refreshUnifiedAudioOwner();
-  window.setInterval(refreshUnifiedAudioOwner, 500);
-})();
-
-// P25_CSV_IMPORT_V1
-async function importP25CsvFile() {
-  const input = field('p25CsvFile');
-  const file = input?.files?.[0];
-  if (!file) {
-    setBadge('p25CsvStatusBadge', 'Choose file', 'warn');
-    setText('p25CsvStatusText', 'Choose a P25 CSV file first.');
-    return;
-  }
-
-  const button = field('importP25CsvBtn');
-  if (button) button.disabled = true;
-  setBadge('p25CsvStatusBadge', 'Importing', 'warn');
-  setText('p25CsvStatusText', `Reading ${file.name}...`);
-
-  try {
-    const csvText = await file.text();
-    const result = await postJson('/api/p25/csv/import', {
-      filename: file.name,
-      csv_text: csvText,
-      replace_mode: 'systems_in_file',
-    });
-    const systems = Array.isArray(result.systems) ? result.systems.join(', ') : '-';
-    const warnings = Array.isArray(result.warnings) && result.warnings.length
-      ? `\nWarnings:\n${result.warnings.join('\n')}`
-      : '';
-    setBadge('p25CsvStatusBadge', 'Imported', 'ok');
-    setText(
-      'p25CsvStatusText',
-      `Imported ${result.imported_rows || 0} rows.\nSystems: ${systems}${warnings}`
-    );
-    await refreshStatus();
-  } catch (error) {
-    setBadge('p25CsvStatusBadge', 'Failed', 'bad');
-    setText('p25CsvStatusText', `P25 CSV import failed: ${error.message}`);
-  } finally {
-    if (button) button.disabled = false;
-  }
-}
-
-field('importP25CsvBtn')?.addEventListener('click', importP25CsvFile);
