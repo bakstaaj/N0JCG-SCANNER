@@ -156,6 +156,33 @@ def enumerate_rtl_sysfs(sysfs_root: Path = DEFAULT_SYSFS_ROOT) -> list[dict[str,
     return devices
 
 
+RTL_SERIAL_VALUE_OPTIONS = {
+    "-d",
+    "--device",
+    "--serial",
+    "--rtl-serial",
+    "--rtl_serial",
+}
+RTL_SERIAL_EQUALS_PREFIXES = tuple(
+    option + "=" for option in RTL_SERIAL_VALUE_OPTIONS if option.startswith("--")
+)
+
+
+def _arguments_claim_serial(arguments: list[str], serial: str) -> bool:
+    if not serial:
+        return False
+
+    for index, argument in enumerate(arguments):
+        if argument in RTL_SERIAL_VALUE_OPTIONS:
+            if index + 1 < len(arguments) and arguments[index + 1] == serial:
+                return True
+
+        if any(argument == prefix + serial for prefix in RTL_SERIAL_EQUALS_PREFIXES):
+            return True
+
+    return False
+
+
 def scan_process_claims(
     serials: list[str],
     process_root: Path = DEFAULT_PROCESS_ROOT,
@@ -164,21 +191,34 @@ def scan_process_claims(
     root = Path(process_root)
     if not root.exists():
         return claims
+
     for proc_path in root.iterdir():
         if not proc_path.name.isdigit():
             continue
+
         try:
             raw = (proc_path / "cmdline").read_bytes()
         except OSError:
             continue
-        if not raw:
+
+        arguments = [
+            item.decode("utf-8", errors="replace")
+            for item in raw.split(b"\0")
+            if item
+        ]
+        if not arguments:
             continue
-        command = raw.replace(b"\0", b" ").decode("utf-8", errors="replace").strip()
-        if not command:
-            continue
+
+        command = " ".join(arguments)
         for serial in serials:
-            if serial and serial in command:
-                claims[serial].append({"pid": int(proc_path.name), "command": command[:1200]})
+            if _arguments_claim_serial(arguments, serial):
+                claims[serial].append(
+                    {
+                        "pid": int(proc_path.name),
+                        "command": command[:1200],
+                    }
+                )
+
     return claims
 
 
