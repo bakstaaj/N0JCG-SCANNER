@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI P25 Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=1.0.6-controls-only">
+  <link rel="stylesheet" href="/app.css?v=1.0.7-inline-audio-controls">
 </head>
 <body>
   <div class="app-shell">
@@ -33,8 +33,6 @@
       <section id="dashboardScreen" class="screen active" aria-label="dashboard">
         <div class="control-strip">
           <button id="startBtn" type="button" class="big-action start">Start Scanner + Audio</button>
-          <button id="stopBtn" type="button" class="big-action stop">Stop</button>
-        </div>
 <section class="audio-controls-only" aria-label="browser audio controls">
   <button id="arbitratorMuteBtn" type="button" class="audio-mute-button" aria-pressed="false">Mute</button>
   <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
@@ -42,6 +40,8 @@
     <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
   </label>
 </section>
+<button id="stopBtn" type="button" class="big-action stop">Stop</button>
+        </div>
 <section class="activity-card">
           <div class="activity-topline">
             <div class="activity-heading-inline">

@@ -485,3 +485,79 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
 .audio-controls-only .arbitrator-volume-label{display:flex;align-items:center;gap:.45rem;font-size:.68rem;font-weight:700}
 .audio-controls-only .arbitrator-volume-label input{width:min(180px,30vw)}
 @media(max-width:720px){.audio-controls-only{justify-content:space-between}.audio-controls-only .arbitrator-volume-label input{width:50vw}}
+
+
+/* INLINE_AUDIO_CONTROLS_V107 */
+.control-strip {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.85fr) auto minmax(110px, 0.45fr);
+  align-items: center;
+  gap: .65rem;
+}
+
+.control-strip .big-action {
+  width: 100%;
+  min-width: 0;
+}
+
+.control-strip #startBtn {
+  max-width: 280px;
+  justify-self: start;
+}
+
+.control-strip #stopBtn {
+  max-width: 180px;
+  justify-self: end;
+}
+
+.control-strip .audio-controls-only {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .65rem;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.control-strip .audio-controls-only .arbitrator-volume-label {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  white-space: nowrap;
+}
+
+.control-strip .audio-controls-only .arbitrator-volume-label input {
+  width: min(180px, 22vw);
+}
+
+@media (max-width: 820px) {
+  .control-strip {
+    grid-template-columns: minmax(150px, 1fr) auto minmax(90px, .6fr);
+  }
+
+  .control-strip .audio-controls-only .arbitrator-volume-label input {
+    width: min(135px, 20vw);
+  }
+}
+
+@media (max-width: 640px) {
+  .control-strip {
+    grid-template-columns: 1fr auto;
+  }
+
+  .control-strip .audio-controls-only {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: space-between;
+  }
+
+  .control-strip #startBtn,
+  .control-strip #stopBtn {
+    max-width: none;
+  }
+
+  .control-strip .audio-controls-only .arbitrator-volume-label input {
+    width: 50vw;
+  }
+}
