@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI P25 Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=1.0.10-analog-live-controls">
+  <link rel="stylesheet" href="/app.css?v=1.0.11-bottom-analog-controls">
 </head>
 <body>
   <div class="app-shell">
@@ -49,15 +49,7 @@
               <strong id="activeTalkgroupLabel">Waiting for activity</strong>
               <strong id="activeTgid" class="active-tgid-inline">-</strong>
             </div>
-            <div id="analogLiveControls" class="analog-live-controls">
-              <span class="analog-squelch-label">Squelch</span>
-              <button id="analogSquelchDownBtn" type="button" title="Lower squelch" disabled>−</button>
-              <button id="analogSquelchUpBtn" type="button" title="Raise squelch" disabled>+</button>
-              <button id="analogSkipBtn" type="button" title="Skip for 10 minutes" disabled>Skip</button>
-              <button id="analogBlockBtn" type="button" title="Block until cleared" disabled>Block</button>
-              <button id="analogClearBlockBtn" type="button" title="Clear skipped and blocked channels" disabled>Clear</button>
-            </div>
-            <span id="stateBadge" class="pill">-</span>
+<span id="stateBadge" class="pill">-</span>
           </div>
 <div class="activity-grid">
             <div><span>Voice</span><strong id="voiceFrequency">-</strong></div>
@@ -73,6 +65,45 @@
           <article><span>VHF Locks</span><strong id="analogVhfLocks">0</strong></article>
           <article><span>UHF Locks</span><strong id="analogUhfLocks">0</strong></article>
           <article><span>Muted</span><strong id="activityMutedEvents">-</strong></article>
+        </section>
+        <section
+          id="analogLiveControls"
+          class="analog-live-controls disabled"
+          aria-label="analog scanner controls"
+          aria-disabled="true"
+        >
+          <div class="analog-control-group analog-squelch-group">
+            <span class="analog-squelch-label">Squelch</span>
+            <button
+              id="analogSquelchDownBtn"
+              type="button"
+              title="Lower squelch"
+              disabled
+            >−</button>
+            <button
+              id="analogSquelchUpBtn"
+              type="button"
+              title="Raise squelch"
+              disabled
+            >+</button>
+          </div>
+          <button
+            id="analogSkipBtn"
+            type="button"
+            title="Skip current channel for 10 minutes"
+            disabled
+          >Skip 10 Min</button>
+          <button
+            id="analogBlockBtn"
+            type="button"
+            title="Block current channel until cleared"
+            disabled
+          >Block Channel</button>
+          <button
+            id="analogClearBlockBtn"
+            type="button"
+            title="Clear all VHF and UHF skipped and blocked channels"
+          >Clear All Blocks</button>
         </section>
       </section>
 
@@ -155,7 +186,7 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=1.0.10-analog-live-controls"></script>
+  <script src="/app.js?v=1.0.11-bottom-analog-controls"></script>
   <script src="/audio_arbitrator_live.js?v=1.0.6-controls-only"></script>
 </body>
 </html>
