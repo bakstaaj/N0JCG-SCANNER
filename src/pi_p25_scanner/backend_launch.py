@@ -209,6 +209,25 @@ def _add_raw_audio_udp_args(command: list[str], values: dict[str, str]) -> list[
     return updated
 
 
+def prepend_pythonpath(
+    required_pythonpath: str,
+    existing_pythonpath: str = "",
+) -> str:
+    """Prepend required Python paths while preserving unique existing entries."""
+    combined: list[str] = []
+    seen: set[str] = set()
+
+    for raw_value in (required_pythonpath, existing_pythonpath):
+        for entry in str(raw_value or "").split(os.pathsep):
+            normalized = entry.strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            combined.append(normalized)
+
+    return os.pathsep.join(combined)
+
+
 def build_validated_op25_command(project_root: Path) -> ValidatedOp25Command | None:
     """Build an OP25 command from the validated probe marker, if present."""
 
@@ -271,7 +290,10 @@ def build_validated_op25_command(project_root: Path) -> ValidatedOp25Command | N
     command = ensure_op25_udp_audio_args(command)
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = values["P25_VALIDATED_RX_PYTHONPATH"]
+    env["PYTHONPATH"] = prepend_pythonpath(
+        values["P25_VALIDATED_RX_PYTHONPATH"],
+        env.get("PYTHONPATH", ""),
+    )
 
     return ValidatedOp25Command(
         command=command,
