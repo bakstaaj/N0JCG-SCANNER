@@ -1325,7 +1325,7 @@ def _rr_d3c_trs_variants(system_id: int, auth: dict[str, str]) -> list[Any]:
     ]
 
 
-def discover_radioreference_sites(payload: dict[str, Any]) -> dict[str, Any]:
+def _discover_radioreference_sites_base(payload: dict[str, Any]) -> dict[str, Any]:
     creds = load_credentials()
     if not creds.configured:
         raise RadioReferenceError("RadioReference credentials are not configured")
@@ -3502,10 +3502,10 @@ def _discover_trs_candidates(
 # END V0.5R RR CANDIDATE NAME ENRICHMENT
 
 # BEGIN V0.5T RR SITE RESPONSE METADATA
-_rr_v05t_base_discover_sites = discover_radioreference_sites
+_rr_v05t_base_discover_sites = _discover_radioreference_sites_base
 
 
-def discover_radioreference_sites(payload: dict[str, Any]) -> dict[str, Any]:
+def _discover_radioreference_sites_v05t(payload: dict[str, Any]) -> dict[str, Any]:
     result = _rr_v05t_base_discover_sites(payload)
     sites = list(result.get("sites") or [])
     result["sites"] = sites
@@ -3538,7 +3538,7 @@ def discover_radioreference_sites(payload: dict[str, Any]) -> dict[str, Any]:
 # END V0.5T RR SITE RESPONSE METADATA
 
 # BEGIN V0.5U RR SITE NAME ENRICHMENT
-_rr_v05u_base_discover_sites = discover_radioreference_sites
+_rr_v05u_base_discover_sites = _discover_radioreference_sites_v05t
 
 
 def discover_radioreference_sites(payload: dict[str, Any]) -> dict[str, Any]:
