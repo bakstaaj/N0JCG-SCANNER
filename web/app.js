@@ -977,3 +977,79 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   refreshAnalogLockCounters();
   window.setInterval(refreshAnalogLockCounters, 2000);
 })();
+
+/* PI Scanner accurate system and activity status v1.0.3 */
+(function installAccurateScannerStatus() {
+  if (window.__accurateScannerStatusInstalled) return;
+  window.__accurateScannerStatusInstalled = true;
+
+  const originalSetBadge = setBadge;
+  let backendReachable = false;
+  let decoderRunning = false;
+  let activeSource = null;
+  let audioReachable = false;
+
+  setBadge = function accurateStatusBadgeGuard(id, text, kind) {
+    if (id === 'connectionStatus' || id === 'stateBadge') return;
+    originalSetBadge(id, text, kind);
+  };
+
+  function renderAccurateStatus() {
+    if (!backendReachable) {
+      originalSetBadge('connectionStatus', 'Offline', 'bad');
+      originalSetBadge('stateBadge', 'Unavailable', 'bad');
+      setText('activeSourceStat', '-');
+      return;
+    }
+    originalSetBadge('connectionStatus', 'Online', 'ok');
+    if (!audioReachable) {
+      originalSetBadge('stateBadge', 'Audio Error', 'bad');
+      setText('activeSourceStat', 'Unavailable');
+      return;
+    }
+    if (activeSource) {
+      originalSetBadge('stateBadge', `${activeSource} ON AIR`, 'ok');
+      setText('activeSourceStat', activeSource);
+      return;
+    }
+    if (decoderRunning) {
+      originalSetBadge('stateBadge', 'Scanning', 'warn');
+      setText('activeSourceStat', 'None');
+      return;
+    }
+    originalSetBadge('stateBadge', 'Stopped', 'warn');
+    setText('activeSourceStat', 'None');
+  }
+
+  async function refreshAccurateStatus() {
+    try {
+      const backendResponse = await fetch('/api/status', {cache:'no-store', credentials:'same-origin'});
+      if (!backendResponse.ok) throw new Error(`backend HTTP ${backendResponse.status}`);
+      const backend = await backendResponse.json();
+      backendReachable = true;
+      decoderRunning = Boolean(backend?.decoder_process?.running);
+    } catch (_error) {
+      backendReachable = false;
+      decoderRunning = false;
+      activeSource = null;
+      audioReachable = false;
+      renderAccurateStatus();
+      return;
+    }
+
+    try {
+      const audioResponse = await fetch(`http://${window.location.hostname}:8072/api/audio/status`, {cache:'no-store', mode:'cors'});
+      if (!audioResponse.ok) throw new Error(`audio HTTP ${audioResponse.status}`);
+      const audio = await audioResponse.json();
+      audioReachable = Boolean(audio?.ok);
+      activeSource = audioReachable && audio.active_source ? String(audio.active_source).toUpperCase() : null;
+    } catch (_error) {
+      audioReachable = false;
+      activeSource = null;
+    }
+    renderAccurateStatus();
+  }
+
+  refreshAccurateStatus();
+  window.setInterval(refreshAccurateStatus, 500);
+})();
