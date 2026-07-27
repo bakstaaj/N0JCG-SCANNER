@@ -17,9 +17,43 @@ import statistics
 import subprocess
 import tempfile
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Deque
+
+def _drain_binary_stream(
+    stream: Any,
+    destination: bytearray,
+    limit_bytes: int = 64 * 1024,
+) -> None:
+    """Continuously drain a binary pipe while retaining only its newest bytes."""
+    try:
+        while True:
+            chunk = stream.read(4096)
+            if not chunk:
+                break
+            destination.extend(chunk)
+            if len(destination) > limit_bytes:
+                del destination[:-limit_bytes]
+    except (OSError, ValueError):
+        pass
+
+
+def _start_stream_drain(
+    stream: Any,
+    limit_bytes: int = 64 * 1024,
+) -> tuple[bytearray, threading.Thread]:
+    destination = bytearray()
+    thread = threading.Thread(
+        target=_drain_binary_stream,
+        args=(stream, destination, limit_bytes),
+        daemon=True,
+        name="rtl-power-stderr-drain",
+    )
+    thread.start()
+    return destination, thread
+
 
 ROLE_DEFAULTS = {
     "analog_2m": {
@@ -981,6 +1015,11 @@ class ContinuousScanner:
                     stderr=subprocess.PIPE,
                     start_new_session=True,
                 )
+                stderr_buffer = bytearray()
+                stderr_thread = None
+                if process.stderr is not None:
+                    stderr_buffer, stderr_thread = _start_stream_drain(process.stderr)
+
                 deadline = time.monotonic() + timeout_seconds
                 heartbeat = 0.0
                 timed_out = False
@@ -1017,12 +1056,13 @@ class ContinuousScanner:
 
                     time.sleep(0.1)
 
-                stderr_text = ""
-                if process.stderr is not None:
-                    stderr_text = process.stderr.read().decode(
-                        "utf-8",
-                        errors="replace",
-                    )[-1000:]
+                if stderr_thread is not None:
+                    stderr_thread.join(timeout=1.0)
+
+                stderr_text = bytes(stderr_buffer).decode(
+                    "utf-8",
+                    errors="replace",
+                )[-1000:]
 
                 if timed_out or process.returncode not in (0, None):
                     self.spectrum_failures += 1
