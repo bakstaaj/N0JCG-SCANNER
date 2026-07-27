@@ -159,15 +159,15 @@ def _plain(value: Any) -> Any:
     return str(value)
 
 
-def _iter_dicts(value: Any) -> Iterable[dict[str, Any]]:
+def _iter_dicts_v1(value: Any) -> Iterable[dict[str, Any]]:
     value = _plain(value)
     if isinstance(value, dict):
         yield value
         for item in value.values():
-            yield from _iter_dicts(item)
+            yield from _iter_dicts_v1(item)
     elif isinstance(value, list):
         for item in value:
-            yield from _iter_dicts(item)
+            yield from _iter_dicts_v1(item)
 
 
 def _iter_values_v1(value: Any) -> Iterable[Any]:
@@ -251,7 +251,7 @@ def _looks_control_channel(item: dict[str, Any]) -> bool:
 def _extract_frequencies(value: Any, prefer_control: bool = True) -> list[int]:
     frequencies: list[int] = []
     control_frequencies: list[int] = []
-    for item in _iter_dicts(value):
+    for item in _iter_dicts_v1(value):
         for key, raw in item.items():
             key_norm = _normalize(key)
             if key_norm in {"freq", "frequency", "freq mhz", "frequency mhz", "out", "out freq"} or "freq" in key_norm:
@@ -280,7 +280,7 @@ def _extract_talkgroups(value: Any, selected_categories: list[str] | None = None
     selected = set(selected_categories or [])
     talkgroups: list[dict[str, Any]] = []
     seen: set[int] = set()
-    for item in _iter_dicts(value):
+    for item in _iter_dicts_v1(value):
         keys = {str(k).lower(): k for k in item.keys()}
         raw_tgid = None
         for candidate in ("tgid", "tg_id", "decimal", "dec", "talkgroup", "talkgroupid", "tg"):
@@ -317,7 +317,7 @@ def _find_entity_id(value: Any, wanted: str, id_keys: tuple[str, ...], text_keys
     wanted_norm = _normalize(wanted)
     if not wanted_norm:
         return None
-    for item in _iter_dicts(value):
+    for item in _iter_dicts_v1(value):
         text_blob = " ".join(_text(item.get(key)) for key in text_keys if key in item)
         if wanted_norm and wanted_norm in _normalize(text_blob):
             for key in id_keys:
@@ -358,7 +358,7 @@ def _discover_trs_candidates(client: Any, auth: dict[str, str], state: str, coun
     source = county_info or state_info or country_info
     city_norm = _normalize(city)
     county_norm = _normalize(county)
-    for item in _iter_dicts(source):
+    for item in _iter_dicts_v1(source):
         sid = item.get("sid") or item.get("trsId") or item.get("systemId") or item.get("id")
         if _number(sid) is None:
             continue
@@ -627,7 +627,7 @@ def _rr_candidate_score(item: dict[str, Any], state: str, county: str, city: str
 
 def _rr_extract_system_candidates(value: Any, state: str = "", county: str = "", city: str = "") -> list[dict[str, Any]]:
     candidates: dict[int, dict[str, Any]] = {}
-    for item in _iter_dicts(value):
+    for item in _iter_dicts_v1(value):
         if not isinstance(item, dict):
             continue
         sid = _rr_first_number(
@@ -764,7 +764,7 @@ def discover_trunked_systems(payload: dict[str, Any]) -> dict[str, Any]:
 def _rr_extract_sites(value: Any) -> list[dict[str, Any]]:
     sites: dict[int, dict[str, Any]] = {}
     fallback_index = 1
-    for item in _iter_dicts(value):
+    for item in _iter_dicts_v1(value):
         if not isinstance(item, dict):
             continue
         blob = _rr_blob(item)
@@ -873,7 +873,7 @@ def _rr_picker_find_id(value: Any, wanted: str, id_keys: tuple[str, ...], text_k
     wanted_norms.discard("")
     if not wanted_norms:
         return None
-    for item in _iter_dicts(value):
+    for item in _iter_dicts_v1(value):
         text_blob = " ".join(_text(item.get(key)) for key in text_keys if key in item)
         blob_norm = _normalize(text_blob)
         if any(w == blob_norm or w in blob_norm or blob_norm in w for w in wanted_norms):
@@ -910,7 +910,7 @@ def _rr_picker_extract_systems(value: Any, *, source: str, searched: dict[str, s
     city_norm = _normalize(searched.get("city"))
     county_norm = _normalize(searched.get("county"))
     state_norm = _normalize(searched.get("state"))
-    for item in _iter_dicts(value):
+    for item in _iter_dicts_v1(value):
         sid = _rr_picker_system_id(item)
         if sid is None:
             continue
@@ -1031,7 +1031,7 @@ def _rr_d3c_find_state_id(value: Any, wanted_state: str) -> Any | None:
         return None
     id_keys = ("stid", "stateId", "state_id", "stateID", "id")
     text_keys = ("stateCode", "state_code", "code", "abbr", "state", "name", "stateName", "state_name", "shortName")
-    for item in _iter_dicts(value):
+    for item in _iter_dicts_v1(value):
         blob_parts = []
         for key in text_keys:
             if key in item:
@@ -1053,7 +1053,7 @@ def _rr_d3c_find_county_id(value: Any, wanted_county: str) -> Any | None:
         return None
     id_keys = ("ctid", "countyId", "county_id", "countyID", "id")
     text_keys = ("countyName", "county_name", "county", "name", "descr", "description")
-    for item in _iter_dicts(value):
+    for item in _iter_dicts_v1(value):
         text = _normalize(" ".join(_text(item.get(key)) for key in text_keys if key in item)).replace(" county", "").strip()
         if wanted == text or wanted in text or text in wanted:
             for key in id_keys:
@@ -1065,7 +1065,7 @@ def _rr_d3c_find_county_id(value: Any, wanted_county: str) -> Any | None:
 def _rr_d3c_source_summary(name: str, value: Any) -> dict[str, Any]:
     count = 0
     keys: set[str] = set()
-    for item in _iter_dicts(value):
+    for item in _iter_dicts_v1(value):
         count += 1
         keys.update(str(k) for k in item.keys())
         if count >= 300:
@@ -1100,7 +1100,7 @@ def _rr_d3c_extract_systems(value: Any, *, source: str, searched: dict[str, str]
     city_norm = _normalize(searched.get("city"))
     county_norm = _normalize(searched.get("county"))
     state_tokens = _rr_d3c_state_tokens(searched.get("state"))
-    for item in _iter_dicts(value):
+    for item in _iter_dicts_v1(value):
         sid = _rr_d3c_system_id(item)
         name = _rr_d3c_system_name(item)
         if sid is None or not name:
@@ -1344,7 +1344,7 @@ def discover_radioreference_sites(payload: dict[str, Any]) -> dict[str, Any]:
     site_map: dict[str, dict[str, Any]] = {}
     synthetic_index = 0
     for source, value in sources:
-        for item in _iter_dicts(value):
+        for item in _iter_dicts_v1(value):
             freqs = _extract_frequencies(item, prefer_control=True)
             site_id = _rr_d3c_site_id(item)
             name = _rr_d3c_site_name(item)
