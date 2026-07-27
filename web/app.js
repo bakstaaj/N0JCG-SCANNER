@@ -943,3 +943,37 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   window.piP25SelectedRadioReferenceCounty = selectedCounty;
 })();
 // END V0.5AH RR SITE COUNTY FILTER
+
+/* PI Scanner analog lock counter patch */
+(function installAnalogLockCounters() {
+  if (window.__analogLockCountersInstalled) return;
+  window.__analogLockCountersInstalled = true;
+
+  function setText(id, value) {
+    const node = document.getElementById(id);
+    if (node) node.textContent = String(value ?? 0);
+  }
+
+  async function refreshAnalogLockCounters() {
+    try {
+      const response = await fetch("/api/analog/status", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const data = await response.json();
+      const roles = data && data.roles ? data.roles : {};
+      const vhf = roles.analog_2m || {};
+      const uhf = roles.analog_70cm || {};
+
+      setText("analogVhfLocks", Number(vhf.lock_count || 0));
+      setText("analogUhfLocks", Number(uhf.lock_count || 0));
+    } catch (error) {
+      console.warn("Analog lock counter refresh failed:", error);
+    }
+  }
+
+  refreshAnalogLockCounters();
+  window.setInterval(refreshAnalogLockCounters, 2000);
+})();

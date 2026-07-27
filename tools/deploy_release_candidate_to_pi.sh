@@ -152,6 +152,15 @@ mkdir -p "$REMOTE_STAGE"
 
 tar -xf "$REMOTE_ARCHIVE" -C "$REMOTE_STAGE"
 
+chmod +x \
+  "$REMOTE_STAGE/tools/p25_scalable_multi_rx_wrapper.py" \
+  "$REMOTE_STAGE/tools/p25_multi_rx_sticky_launcher.py" \
+  "$REMOTE_STAGE/tools/p25_rotating_log_exec.py"
+
+test -x "$REMOTE_STAGE/tools/p25_scalable_multi_rx_wrapper.py"
+test -x "$REMOTE_STAGE/tools/p25_multi_rx_sticky_launcher.py"
+test -x "$REMOTE_STAGE/tools/p25_rotating_log_exec.py"
+
 test -f "$REMOTE_STAGE/src/pi_p25_scanner/backend.py"
 
 cd "$REMOTE_STAGE"
