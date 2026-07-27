@@ -207,3 +207,54 @@
   wireControls();
   window.setInterval(wireControls, 1000);
 })();
+
+
+/* AUDIO_CONTROLS_ONLY_MUTE_V106 */
+(function () {
+  let muted = false;
+  const field = (id) => document.getElementById(id);
+
+  function volumeValue() {
+    const slider = field('arbitratorAudioVolume');
+    const value = slider ? Number(slider.value) : 80;
+    return Math.max(0, Math.min(1, value / 100));
+  }
+
+  function apply() {
+    const button = field('arbitratorMuteBtn');
+    if (button) {
+      button.textContent = muted ? 'Unmute' : 'Mute';
+      button.setAttribute('aria-pressed', muted ? 'true' : 'false');
+    }
+
+    const gain = window.__scannerAudioGainNode;
+    if (gain && gain.gain) {
+      gain.gain.value = muted ? 0 : volumeValue();
+    }
+  }
+
+  function wire() {
+    const button = field('arbitratorMuteBtn');
+    if (button && !button.dataset.v106Wired) {
+      button.dataset.v106Wired = '1';
+      button.addEventListener('click', function () {
+        muted = !muted;
+        apply();
+      });
+    }
+
+    const slider = field('arbitratorAudioVolume');
+    if (slider && !slider.dataset.v106Wired) {
+      slider.dataset.v106Wired = '1';
+      slider.addEventListener('input', function () {
+        if (muted) muted = false;
+        apply();
+      });
+    }
+
+    apply();
+  }
+
+  wire();
+  window.setInterval(wire, 1000);
+})();

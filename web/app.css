@@ -477,3 +477,11 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
 .compact-audio-tile {
   display: none !important;
 }
+
+
+/* AUDIO_CONTROLS_ONLY_V106 */
+.audio-controls-only{display:flex;align-items:center;justify-content:flex-end;gap:.65rem;margin:.4rem 0;padding:.3rem .45rem}
+.audio-controls-only .audio-mute-button{min-width:4.25rem;padding:.28rem .55rem;font-size:.72rem;line-height:1}
+.audio-controls-only .arbitrator-volume-label{display:flex;align-items:center;gap:.45rem;font-size:.68rem;font-weight:700}
+.audio-controls-only .arbitrator-volume-label input{width:min(180px,30vw)}
+@media(max-width:720px){.audio-controls-only{justify-content:space-between}.audio-controls-only .arbitrator-volume-label input{width:50vw}}
