@@ -54,6 +54,7 @@
       });
 
       gainNode = context.createGain();
+      window.__scannerAudioGainNode = gainNode;
       gainNode.connect(context.destination);
       applyVolume();
     }
@@ -205,4 +206,58 @@
 
   wireControls();
   window.setInterval(wireControls, 1000);
+})();
+
+
+/* PI Scanner compact mute controls v1.0.4 */
+(function installCompactMuteControl() {
+  if (window.__compactMuteControlInstalled) return;
+  window.__compactMuteControlInstalled = true;
+
+  let muted = false;
+
+  function field(id) {
+    return document.getElementById(id);
+  }
+
+  function applyMuteState() {
+    const button = field('arbitratorMuteBtn');
+    if (button) {
+      button.textContent = muted ? 'Unmute' : 'Mute';
+      button.setAttribute('aria-pressed', muted ? 'true' : 'false');
+      button.classList.toggle('active', muted);
+    }
+
+    const gainNode = window.__scannerAudioGainNode;
+    if (gainNode && gainNode.gain) {
+      const slider = field('arbitratorAudioVolume');
+      const value = slider ? Number(slider.value) : 80;
+      gainNode.gain.value = muted
+        ? 0
+        : Math.max(0, Math.min(1, value / 100));
+    }
+  }
+
+  function wireMute() {
+    const button = field('arbitratorMuteBtn');
+    if (!button || button.dataset.compactMuteWired) return;
+
+    button.dataset.compactMuteWired = '1';
+    button.addEventListener('click', function () {
+      muted = !muted;
+      applyMuteState();
+
+      const status = field('browserAudioLastEvent');
+      if (status) {
+        status.textContent = muted
+          ? 'Unified audio muted'
+          : 'Unified audio unmuted';
+      }
+    });
+
+    applyMuteState();
+  }
+
+  wireMute();
+  window.setInterval(wireMute, 1000);
 })();

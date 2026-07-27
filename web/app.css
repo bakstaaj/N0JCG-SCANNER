@@ -346,3 +346,127 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     font-size: 9px;
   }
 }
+
+
+/* PI Scanner compact dashboard restore v1.0.4 */
+.audio-player {
+  display: none !important;
+}
+
+.arbitrator-audio-bar.compact-audio-tile {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  margin: .45rem 0;
+  padding: .38rem .5rem;
+  border: 1px solid var(--line, #48525b);
+  border-radius: .55rem;
+  background: var(--panel, #151c22);
+  color: inherit;
+  box-shadow: none;
+}
+
+.compact-audio-tile .audio-inline-label,
+.compact-audio-tile .arbitrator-volume-label > span {
+  font-size: .68rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.compact-audio-tile .audio-inline-value {
+  min-width: 2.8rem;
+  font-size: .86rem;
+  line-height: 1;
+}
+
+.compact-audio-tile .audio-mute-button {
+  min-width: 4.25rem;
+  padding: .28rem .55rem;
+  font-size: .72rem;
+  line-height: 1;
+}
+
+.compact-audio-tile .arbitrator-volume-label {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  margin-left: auto;
+}
+
+.compact-audio-tile .arbitrator-volume-label input {
+  width: min(180px, 30vw);
+}
+
+.activity-heading-inline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .35rem .6rem;
+}
+
+.activity-heading-inline .label {
+  flex-basis: 100%;
+}
+
+#activeTalkgroupLabel,
+#activeTgid.active-tgid-inline {
+  font-family: inherit !important;
+  font-size: var(--ui-value-size, .86rem) !important;
+  font-weight: var(--ui-value-weight, 700) !important;
+  line-height: 1.1 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: inherit !important;
+}
+
+.talkgroup-number {
+  display: none !important;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: .3rem;
+}
+
+.stats-grid article {
+  min-width: 0;
+  padding: .4rem .3rem;
+}
+
+.stats-grid article span {
+  font-size: .66rem;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.stats-grid article strong {
+  font-size: .86rem;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .stats-grid {
+    grid-template-columns: repeat(6, minmax(70px, 1fr));
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .arbitrator-audio-bar.compact-audio-tile {
+    flex-wrap: wrap;
+  }
+
+  .compact-audio-tile .arbitrator-volume-label {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
+
+  .compact-audio-tile .arbitrator-volume-label input {
+    width: 55vw;
+  }
+}

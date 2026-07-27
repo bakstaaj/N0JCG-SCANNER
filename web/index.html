@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI P25 Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=0.5ar-compact-spacing">
+  <link rel="stylesheet" href="/app.css?v=1.0.4-compact-dashboard">
 </head>
 <body>
   <div class="app-shell">
@@ -35,17 +35,25 @@
           <button id="startBtn" type="button" class="big-action start">Start Scanner + Audio</button>
           <button id="stopBtn" type="button" class="big-action stop">Stop</button>
         </div>
-        <audio id="browserAudioPlayer" class="audio-player" controls preload="none"></audio>
+<section class="arbitrator-audio-bar compact-audio-tile">
+          <span class="audio-inline-label">Audio</span>
+          <strong id="arbitratorAudioSource" class="audio-inline-value">Idle</strong>
+          <button id="arbitratorMuteBtn" type="button" class="audio-mute-button" aria-pressed="false">Mute</button>
+          <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
+            <span>Volume</span>
+            <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
+          </label>
+        </section>
         <section class="activity-card">
           <div class="activity-topline">
-            <div>
+            <div class="activity-heading-inline">
               <span class="label">Active / Last Talkgroup</span>
               <strong id="activeTalkgroupLabel">Waiting for activity</strong>
+              <strong id="activeTgid" class="active-tgid-inline">-</strong>
             </div>
             <span id="stateBadge" class="pill">-</span>
           </div>
-          <div class="talkgroup-number" id="activeTgid">-</div>
-          <div class="activity-grid">
+<div class="activity-grid">
             <div><span>Voice</span><strong id="voiceFrequency">-</strong></div>
             <div><span>Control</span><strong id="controlFrequency">-</strong></div>
             <div><span>Phase</span><strong id="p25Phase">-</strong></div>
@@ -142,6 +150,6 @@
     </main>
   </div>
   <script src="/app.js?v=1.0.3-status-accuracy"></script>
-  <script src="/audio_arbitrator_live.js?v=1.0.2"></script>
+  <script src="/audio_arbitrator_live.js?v=1.0.4-compact-dashboard"></script>
 </body>
 </html>
