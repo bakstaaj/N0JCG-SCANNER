@@ -204,6 +204,60 @@ class ScannerStatus:
     updated_utc: float = field(default_factory=time.time)
 
 
+def _stop_process_safely(
+    process: subprocess.Popen[Any],
+    terminate_timeout: float = 5.0,
+    kill_timeout: float = 5.0,
+) -> dict[str, Any]:
+    """Stop a child process without allowing wait timeouts to escape."""
+    initial_return_code = process.poll()
+
+    result: dict[str, Any] = {
+        "was_running": initial_return_code is None,
+        "terminated": False,
+        "killed": False,
+        "reaped": initial_return_code is not None,
+        "return_code": initial_return_code,
+    }
+
+    if not result["was_running"]:
+        return result
+
+    try:
+        process.terminate()
+        result["terminated"] = True
+    except (ProcessLookupError, OSError):
+        return_code = process.poll()
+        result["return_code"] = return_code
+        result["reaped"] = return_code is not None
+        return result
+
+    try:
+        result["return_code"] = process.wait(timeout=terminate_timeout)
+        result["reaped"] = True
+        return result
+    except subprocess.TimeoutExpired:
+        pass
+
+    try:
+        process.kill()
+        result["killed"] = True
+    except (ProcessLookupError, OSError):
+        return_code = process.poll()
+        result["return_code"] = return_code
+        result["reaped"] = return_code is not None
+        return result
+
+    try:
+        result["return_code"] = process.wait(timeout=kill_timeout)
+        result["reaped"] = True
+    except subprocess.TimeoutExpired:
+        return_code = process.poll()
+        result["return_code"] = return_code
+        result["reaped"] = return_code is not None
+
+    return result
+
 class ScannerManager:
     def __init__(self) -> None:
         self.status = ScannerStatus()
@@ -711,13 +765,9 @@ class ScannerManager:
     def stop(self) -> tuple[dict[str, Any], HTTPStatus]:
         with self.lock:
             process = self.process
-        if process is not None and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
+        stop_result = None
+        if process is not None:
+            stop_result = _stop_process_safely(process)
         with self.lock:
             self.process = None
             self.status.scanner_state = "stopped"
