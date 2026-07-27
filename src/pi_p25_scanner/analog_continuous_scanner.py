@@ -1214,7 +1214,11 @@ class ContinuousScanner:
         if search_mode == "fast_spectrum":
             return self.run_fast_spectrum(started, max_seconds)
         if search_mode in {"native_linear", "persistent_linear"}:
-            return self.run_native_linear(started, max_seconds)
+            # Native rtl_fm multi-frequency hopping does not expose the
+            # currently tuned frequency on all packaged rtl_fm builds.
+            # Use application-managed per-channel tuning so status and
+            # locks always identify the exact configured channel.
+            search_mode = "linear"
 
         while not self.stop_requested:
             for channel in self.worker["channels"]:
