@@ -1053,3 +1053,82 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   refreshAccurateStatus();
   window.setInterval(refreshAccurateStatus, 500);
 })();
+
+
+/* ANALOG_CHANNEL_CENTER_DISPLAY_V109 */
+(function installAnalogChannelCenterDisplay() {
+  if (window.__analogChannelCenterDisplayInstalled) return;
+  window.__analogChannelCenterDisplayInstalled = true;
+
+  let refreshInFlight = false;
+
+  function analogRoleForSource(source) {
+    const value = String(source || '').trim().toLowerCase();
+    if (value === 'vhf' || value === 'analog_2m') return 'analog_2m';
+    if (value === 'uhf' || value === 'analog_70cm') return 'analog_70cm';
+    return null;
+  }
+
+  function analogChannel(status) {
+    const current = status?.current_channel || {};
+    const last = status?.last_lock || {};
+
+    if (status?.state === 'locked') {
+      return {
+        name: current.name || last.name || status.label || 'Analog channel',
+        frequency_hz: current.frequency_hz || last.frequency_hz || null,
+      };
+    }
+
+    return {
+      name: last.name || current.name || status?.label || 'Analog channel',
+      frequency_hz: last.frequency_hz || current.frequency_hz || null,
+    };
+  }
+
+  function displayAnalogChannel(role, status) {
+    if (!role || !status) return;
+
+    const channel = analogChannel(status);
+    const label = field('activeTalkgroupLabel');
+    const identifier = field('activeTgid');
+
+    if (label) {
+      const band = role === 'analog_2m' ? 'VHF' : 'UHF';
+      label.textContent = `${band}: ${channel.name}`;
+    }
+
+    if (identifier) {
+      identifier.textContent = channel.frequency_hz
+        ? formatHz(channel.frequency_hz)
+        : 'Frequency unavailable';
+    }
+  }
+
+  async function refreshAnalogCenterDisplay() {
+    if (refreshInFlight) return;
+    refreshInFlight = true;
+
+    try {
+      const audioStatus = await fetchJson(
+        `http://${window.location.hostname}:8072/api/audio/status`
+      );
+      const role = analogRoleForSource(audioStatus?.active_source);
+
+      if (!role) return;
+
+      const analogStatus = await fetchJson('/api/analog/status');
+      const roleStatus = analogStatus?.roles?.[role];
+      if (!roleStatus) return;
+
+      displayAnalogChannel(role, roleStatus);
+    } catch (_error) {
+      // Main dashboard status handling remains authoritative on failures.
+    } finally {
+      refreshInFlight = false;
+    }
+  }
+
+  refreshAnalogCenterDisplay();
+  window.setInterval(refreshAnalogCenterDisplay, 500);
+})();
