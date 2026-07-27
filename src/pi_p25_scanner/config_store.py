@@ -11,12 +11,12 @@ from typing import Any
 
 from .config_model import DEFAULT_CONFIG_PATH, ConfigError, ProjectConfig, load_project_config
 from .rtl_serial_guard import enforce_config_payload_rtl_serial_pool  # V0.5E rtl-serial-pool-0000025X
-from .rtl_serial_guard import enforce_config_payload_rtl_serial_pool  # V0.5E rtl-serial-pool-0000025X
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_CONFIG_PATH = PROJECT_ROOT / "runtime" / "settings" / "p25_systems.json"
 LOCAL_TEMPLATE_PATH = PROJECT_ROOT / "config" / "p25_systems.local.example.json"
 NAMED_CONFIG_DIR = PROJECT_ROOT / "runtime" / "settings" / "configs"
+CONFIG_BACKUP_LIMIT = 50
 
 
 def resolve_config_path() -> Path:
@@ -108,6 +108,39 @@ def ensure_runtime_config(force: bool = False) -> dict[str, Any]:
     }
 
 
+def rotate_config_backups(
+    backup_dir: Path,
+    limit: int = CONFIG_BACKUP_LIMIT,
+) -> list[Path]:
+    """Delete oldest runtime config backups beyond the retention limit."""
+    directory = Path(backup_dir)
+    if limit < 1 or not directory.exists():
+        return []
+
+    backups = sorted(
+        (
+            candidate
+            for candidate in directory.glob("p25_systems_*.json")
+            if candidate.is_file()
+        ),
+        key=lambda candidate: (
+            candidate.stat().st_mtime_ns,
+            candidate.name,
+        ),
+        reverse=True,
+    )
+
+    removed: list[Path] = []
+    for candidate in backups[limit:]:
+        try:
+            candidate.unlink()
+        except FileNotFoundError:
+            continue
+        removed.append(candidate)
+
+    return removed
+
+
 def write_runtime_config(payload: dict[str, Any], backup: bool = True) -> dict[str, Any]:
     """Validate and write a runtime-local config file."""
 
@@ -121,6 +154,7 @@ def write_runtime_config(payload: dict[str, Any], backup: bool = True) -> dict[s
         stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         backup_path = backup_dir / f"p25_systems_{stamp}.json"
         shutil.copy2(RUNTIME_CONFIG_PATH, backup_path)
+        rotate_config_backups(backup_dir)
     RUNTIME_CONFIG_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return {
         "ok": True,
