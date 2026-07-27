@@ -1435,3 +1435,225 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   window.setInterval(refreshAnalogControlState, 500);
 })();
 
+
+/* SAME_ORIGIN_ANALOG_CONTROLS_V117 */
+(function installSameOriginAnalogControlsV117() {
+  if (window.__sameOriginAnalogControlsV117Installed) return;
+  window.__sameOriginAnalogControlsV117Installed = true;
+
+  const roles = ['analog_2m', 'analog_70cm'];
+  let activeRole = null;
+  let controlsPayload = null;
+  let busy = false;
+
+  function button(id) {
+    return document.getElementById(id);
+  }
+
+  function roleState(payload, role) {
+    return payload?.roles?.[role] || {};
+  }
+
+  function roleAvailable(payload, role) {
+    const item = roleState(payload, role);
+    const state = String(item.state || '').toLowerCase();
+    return Boolean(item.ok) && ![
+      'offline', 'error', 'stopped', 'retrying'
+    ].includes(state);
+  }
+
+  function chooseActiveRole(payload) {
+    const locked = roles.filter((role) => {
+      const state = String(
+        roleState(payload, role).state || ''
+      ).toLowerCase();
+      return state === 'locked';
+    });
+
+    if (locked.length === 1) return locked[0];
+
+    if (locked.length > 1) {
+      return locked.sort((a, b) => {
+        const aa = Number(
+          roleState(payload, a).status_age_seconds ?? 999
+        );
+        const bb = Number(
+          roleState(payload, b).status_age_seconds ?? 999
+        );
+        return aa - bb;
+      })[0];
+    }
+
+    return null;
+  }
+
+  function thresholdValue(payload, role) {
+    const value = Number(
+      roleState(payload, role).threshold_rms
+    );
+    return Number.isFinite(value) ? Math.round(value) : null;
+  }
+
+  function renderThreshold(payload) {
+    const vhf = thresholdValue(payload, 'analog_2m');
+    const uhf = thresholdValue(payload, 'analog_70cm');
+    const output = button('analogSquelchValue');
+    if (!output) return;
+
+    if (activeRole === 'analog_2m' && vhf !== null) {
+      output.textContent = String(vhf);
+    } else if (
+      activeRole === 'analog_70cm' && uhf !== null
+    ) {
+      output.textContent = String(uhf);
+    } else if (vhf !== null && uhf !== null) {
+      output.textContent = (
+        vhf === uhf
+          ? String(vhf)
+          : `VHF ${vhf} · UHF ${uhf}`
+      );
+    } else {
+      output.textContent = '—';
+    }
+  }
+
+  function hasSuppressions(payload) {
+    return roles.some((role) => {
+      const item = payload?.roles?.[role] || {};
+      const blocked = item.blocked_frequencies_hz || [];
+      const skips = item.skip_until_epoch || {};
+      return blocked.length > 0 || Object.values(skips).some(
+        (until) => Number(until) > Date.now() / 1000
+      );
+    });
+  }
+
+  function setState(statusPayload, newControlsPayload) {
+    controlsPayload = newControlsPayload;
+    activeRole = chooseActiveRole(statusPayload);
+
+    const anyAvailable = roles.some(
+      (role) => roleAvailable(statusPayload, role)
+    );
+
+    const down = button('analogSquelchDownBtn');
+    const up = button('analogSquelchUpBtn');
+    const skip = button('analogSkipBtn');
+    const block = button('analogBlockBtn');
+    const clear = button('analogClearBlockBtn');
+
+    if (down) down.disabled = !anyAvailable || busy;
+    if (up) up.disabled = !anyAvailable || busy;
+    if (skip) skip.disabled = !activeRole || busy;
+    if (block) block.disabled = !activeRole || busy;
+    if (clear) {
+      clear.disabled = !hasSuppressions(
+        newControlsPayload
+      ) || busy;
+    }
+
+    const panel = button('analogLiveControls');
+    if (panel) {
+      panel.classList.toggle('disabled', !anyAvailable);
+      panel.setAttribute(
+        'aria-disabled',
+        anyAvailable ? 'false' : 'true'
+      );
+    }
+
+    renderThreshold(statusPayload);
+  }
+
+  async function refresh() {
+    try {
+      const [statusPayload, newControlsPayload] =
+        await Promise.all([
+          fetchJson('/api/analog/status'),
+          fetchJson('/api/analog/controls'),
+        ]);
+
+      setState(statusPayload, newControlsPayload);
+    } catch (_error) {
+      for (const id of [
+        'analogSquelchDownBtn',
+        'analogSquelchUpBtn',
+        'analogSkipBtn',
+        'analogBlockBtn',
+        'analogClearBlockBtn',
+      ]) {
+        const item = button(id);
+        if (item) item.disabled = true;
+      }
+    }
+  }
+
+  async function post(role, action) {
+    return postJson('/api/analog/control', {
+      role,
+      action,
+    });
+  }
+
+  async function act(action) {
+    if (busy) return;
+    busy = true;
+    await refresh();
+
+    try {
+      if (
+        action === 'skip'
+        || action === 'block'
+      ) {
+        if (!activeRole) return;
+        await post(activeRole, action);
+      } else if (action === 'clear_blocks') {
+        await Promise.all(
+          roles.map((role) => post(role, action))
+        );
+      } else if (
+        action === 'squelch_up'
+        || action === 'squelch_down'
+      ) {
+        const targetRoles = activeRole
+          ? [activeRole]
+          : roles;
+
+        await Promise.all(
+          targetRoles.map((role) => post(role, action))
+        );
+      }
+
+      await refresh();
+    } finally {
+      busy = false;
+      await refresh();
+    }
+  }
+
+  const bindings = {
+    analogSquelchDownBtn: 'squelch_down',
+    analogSquelchUpBtn: 'squelch_up',
+    analogSkipBtn: 'skip',
+    analogBlockBtn: 'block',
+    analogClearBlockBtn: 'clear_blocks',
+  };
+
+  Object.entries(bindings).forEach(([id, action]) => {
+    const item = button(id);
+    if (!item) return;
+
+    item.addEventListener(
+      'click',
+      (event) => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        act(action);
+      },
+      true
+    );
+  });
+
+  refresh();
+  window.setInterval(refresh, 500);
+})();
+
