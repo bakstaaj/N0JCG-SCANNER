@@ -116,7 +116,7 @@ def zeep_status() -> dict[str, Any]:
     return {"available": True, "version": version}
 
 
-def radioreference_status() -> dict[str, Any]:
+def _radioreference_status_base() -> dict[str, Any]:
     creds = load_credentials()
     return {
         "ok": True,
@@ -441,7 +441,7 @@ def _rr_v0_4d2_write_credentials(creds: RadioReferenceCredentials) -> None:
         pass
 
 
-_rr_v0_4d2_base_status = radioreference_status
+_rr_v0_4d2_base_status = _radioreference_status_base
 
 
 def radioreference_status() -> dict[str, Any]:
