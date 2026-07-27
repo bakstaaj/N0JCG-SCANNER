@@ -170,16 +170,16 @@ def _iter_dicts(value: Any) -> Iterable[dict[str, Any]]:
             yield from _iter_dicts(item)
 
 
-def _iter_values(value: Any) -> Iterable[Any]:
+def _iter_values_v1(value: Any) -> Iterable[Any]:
     value = _plain(value)
     if isinstance(value, dict):
         for v in value.values():
             yield v
-            yield from _iter_values(v)
+            yield from _iter_values_v1(v)
     elif isinstance(value, list):
         for item in value:
             yield item
-            yield from _iter_values(item)
+            yield from _iter_values_v1(item)
 
 
 def _method_names(client: Any) -> list[str]:
