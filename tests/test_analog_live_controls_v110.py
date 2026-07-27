@@ -32,7 +32,7 @@ def test_analog_controls_are_runtime_backed_and_always_visible() -> None:
         1,
     )[1].split(">", 1)[0]
 
-    assert "setAnalogControlsEnabled(null)" in app
-    assert "button.disabled = !analogEnabled" in app
-    assert "clearButton.disabled = false" in app
+    assert "refreshAnalogControlState()" in app
+    assert "setButtonsDisabled" in app
+    assert "hasAnyBlocksOrSkips" in app
     assert "panel.hidden" not in app

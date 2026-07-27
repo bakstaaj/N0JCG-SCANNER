@@ -1133,45 +1133,126 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   window.setInterval(refreshAnalogCenterDisplay, 500);
 })();
 
-/* ANALOG_BOTTOM_CONTROLS_V111 */
-(function installAnalogBottomControls() {
-  if (window.__analogBottomControlsInstalled) return;
-  window.__analogBottomControlsInstalled = true;
+/* ANALOG_CONTROL_STATE_V112 */
+(function installAnalogControlStateV112() {
+  if (window.__analogControlStateV112Installed) return;
+  window.__analogControlStateV112Installed = true;
 
   let activeAnalogRole = null;
   let actionInFlight = false;
 
-  const analogOnlyIds = [
+  const squelchIds = [
     'analogSquelchDownBtn',
     'analogSquelchUpBtn',
+  ];
+
+  const channelActionIds = [
     'analogSkipBtn',
     'analogBlockBtn',
   ];
 
-  function setAnalogControlsEnabled(role) {
-    activeAnalogRole = role;
-    const analogEnabled = Boolean(role);
-
-    analogOnlyIds.forEach((id) => {
+  function setButtonsDisabled(ids, disabled) {
+    ids.forEach((id) => {
       const button = field(id);
-      if (button) button.disabled = !analogEnabled;
+      if (button) button.disabled = disabled;
     });
+  }
 
+  function hasAnyBlocksOrSkips(controlsPayload) {
+    const roles = controlsPayload?.roles || {};
+    return Object.values(roles).some((item) => {
+      const blocked = Array.isArray(
+        item?.blocked_frequencies_hz
+      )
+        ? item.blocked_frequencies_hz
+        : [];
+
+      const skips = item?.skip_until_epoch || {};
+      const activeSkips = Object.values(skips).some(
+        (value) => Number(value) > Date.now() / 1000
+      );
+
+      return blocked.length > 0 || activeSkips;
+    });
+  }
+
+  function analogRoleFromSource(source) {
+    const value = String(source || '').toLowerCase();
+
+    if (value === 'vhf' || value === 'analog_2m') {
+      return 'analog_2m';
+    }
+
+    if (value === 'uhf' || value === 'analog_70cm') {
+      return 'analog_70cm';
+    }
+
+    return null;
+  }
+
+  function p25IsActive(source) {
+    const value = String(source || '').toLowerCase();
+    return value === 'p25';
+  }
+
+  function analogScanningAvailable(analogPayload) {
+    const roles = analogPayload?.roles || {};
+    return Object.values(roles).some((status) => {
+      const state = String(status?.state || '').toLowerCase();
+      return Boolean(status?.ok) && ![
+        'offline',
+        'error',
+        'stopped',
+      ].includes(state);
+    });
+  }
+
+  function updateControlState({
+    audioSource,
+    analogPayload,
+    controlsPayload,
+  }) {
+    const p25Active = p25IsActive(audioSource);
+    activeAnalogRole = analogRoleFromSource(audioSource);
+
+    const analogAvailable = analogScanningAvailable(
+      analogPayload
+    );
+
+    // Squelch is usable while analog scanning or analog audio is active.
+    // It is disabled only while P25 owns the audio.
+    const squelchEnabled = !p25Active && analogAvailable;
+    setButtonsDisabled(squelchIds, !squelchEnabled);
+
+    // Skip and Block require an identified active analog channel.
+    const channelActionsEnabled = Boolean(activeAnalogRole);
+    setButtonsDisabled(
+      channelActionIds,
+      !channelActionsEnabled
+    );
+
+    // Clear is available only when at least one skip or block exists.
     const clearButton = field('analogClearBlockBtn');
-    if (clearButton) clearButton.disabled = false;
+    if (clearButton) {
+      clearButton.disabled = !hasAnyBlocksOrSkips(
+        controlsPayload
+      );
+    }
 
     const panel = field('analogLiveControls');
     if (panel) {
-      panel.classList.toggle('disabled', !analogEnabled);
-      panel.setAttribute(
-        'aria-disabled',
-        analogEnabled ? 'false' : 'true'
+      panel.classList.toggle(
+        'disabled',
+        !squelchEnabled && !channelActionsEnabled
       );
     }
   }
 
   async function postAnalogAction(role, action) {
-    return postJson('/api/analog/control', { role, action });
+    return postJson('/api/analog/control', {
+      role,
+      action,
+    });
   }
 
   async function clearAllAnalogBlocks() {
@@ -1179,6 +1260,7 @@ function p25RemoveDashboardAutostartTuningRemnants() {
       postAnalogAction('analog_2m', 'clear_blocks'),
       postAnalogAction('analog_70cm', 'clear_blocks'),
     ]);
+
     return {
       message: 'Cleared all VHF and UHF skips and blocks',
       results,
@@ -1188,21 +1270,58 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   async function analogControlAction(action) {
     if (actionInFlight) return;
 
-    if (action !== 'clear_blocks' && !activeAnalogRole) {
+    if (
+      ['skip', 'block'].includes(action)
+      && !activeAnalogRole
+    ) {
       return;
     }
 
     actionInFlight = true;
+
     try {
-      const result = action === 'clear_blocks'
-        ? await clearAllAnalogBlocks()
-        : await postAnalogAction(activeAnalogRole, action);
+      let result;
+
+      if (action === 'clear_blocks') {
+        result = await clearAllAnalogBlocks();
+      } else if (
+        action === 'squelch_up'
+        || action === 'squelch_down'
+      ) {
+        // While scanning with no active channel, adjust both bands so the
+        // user cannot become locked out by an overly high squelch.
+        if (activeAnalogRole) {
+          result = await postAnalogAction(
+            activeAnalogRole,
+            action
+          );
+        } else {
+          const results = await Promise.all([
+            postAnalogAction('analog_2m', action),
+            postAnalogAction('analog_70cm', action),
+          ]);
+          result = {
+            message: (
+              action === 'squelch_up'
+                ? 'Raised VHF and UHF squelch'
+                : 'Lowered VHF and UHF squelch'
+            ),
+            results,
+          };
+        }
+      } else {
+        result = await postAnalogAction(
+          activeAnalogRole,
+          action
+        );
+      }
 
       setText(
         'lastEvent',
         result.message || `Analog action: ${action}`
       );
       await refreshStatus();
+      await refreshAnalogControlState();
     } catch (error) {
       setText(
         'lastEvent',
@@ -1236,29 +1355,32 @@ function p25RemoveDashboardAutostartTuningRemnants() {
 
   async function refreshAnalogControlState() {
     try {
-      const audioStatus = await fetchJson(
-        `http://${window.location.hostname}:8072/api/audio/status`
-      );
-      const source = String(
-        audioStatus?.active_source || ''
-      ).toLowerCase();
+      const [
+        audioStatus,
+        analogPayload,
+        controlsPayload,
+      ] = await Promise.all([
+        fetchJson(
+          `http://${window.location.hostname}:8072/api/audio/status`
+        ),
+        fetchJson('/api/analog/status'),
+        fetchJson('/api/analog/controls'),
+      ]);
 
-      if (source === 'vhf' || source === 'analog_2m') {
-        setAnalogControlsEnabled('analog_2m');
-      } else if (
-        source === 'uhf'
-        || source === 'analog_70cm'
-      ) {
-        setAnalogControlsEnabled('analog_70cm');
-      } else {
-        setAnalogControlsEnabled(null);
-      }
+      updateControlState({
+        audioSource: audioStatus?.active_source,
+        analogPayload,
+        controlsPayload,
+      });
     } catch (_error) {
-      setAnalogControlsEnabled(null);
+      setButtonsDisabled(squelchIds, true);
+      setButtonsDisabled(channelActionIds, true);
+
+      const clearButton = field('analogClearBlockBtn');
+      if (clearButton) clearButton.disabled = true;
     }
   }
 
-  setAnalogControlsEnabled(null);
   refreshAnalogControlState();
   window.setInterval(refreshAnalogControlState, 500);
 })();

@@ -17,8 +17,8 @@ def test_bottom_controls_and_always_enabled_clear() -> None:
     assert "clearAllAnalogBlocks" in app
     assert "analog_2m" in app
     assert "analog_70cm" in app
-    assert "clearButton.disabled = false" in app
+    assert "clearButton.disabled = !hasAnyBlocksOrSkips" in app
 
     assert "grid-template-columns" in css
-    assert "min-height: 3.4rem" in css
+    assert "min-height: 3.6rem" in css
     assert "width: 100%" in css
