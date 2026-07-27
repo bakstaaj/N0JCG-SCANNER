@@ -145,22 +145,22 @@ def _client():
     return Client(wsdl=RR_WSDL_URL, transport=Transport(timeout=25, operation_timeout=45))
 
 
-def _plain(value: Any) -> Any:
+def _plain_v1(value: Any) -> Any:
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     if isinstance(value, dict):
-        return {str(k): _plain(v) for k, v in value.items()}
+        return {str(k): _plain_v1(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, set)):
-        return [_plain(v) for v in value]
+        return [_plain_v1(v) for v in value]
     if hasattr(value, "__values__"):
-        return {str(k): _plain(v) for k, v in value.__values__.items()}
+        return {str(k): _plain_v1(v) for k, v in value.__values__.items()}
     if hasattr(value, "__dict__"):
-        return {str(k): _plain(v) for k, v in value.__dict__.items() if not str(k).startswith("_")}
+        return {str(k): _plain_v1(v) for k, v in value.__dict__.items() if not str(k).startswith("_")}
     return str(value)
 
 
 def _iter_dicts_v1(value: Any) -> Iterable[dict[str, Any]]:
-    value = _plain(value)
+    value = _plain_v1(value)
     if isinstance(value, dict):
         yield value
         for item in value.values():
@@ -171,7 +171,7 @@ def _iter_dicts_v1(value: Any) -> Iterable[dict[str, Any]]:
 
 
 def _iter_values_v1(value: Any) -> Iterable[Any]:
-    value = _plain(value)
+    value = _plain_v1(value)
     if isinstance(value, dict):
         for v in value.values():
             yield v
@@ -560,7 +560,7 @@ def test_login() -> dict[str, Any]:
         "configured": True,
         "username": creds.username,
         "auth_mode": "named-authInfo-first-v0.4d2",
-        "user_data": _plain(response),
+        "user_data": _plain_v1(response),
         "methods": _method_names(client),
     }
 # END V0.4D2 RadioReference credential preserve and SOAP auth fix
@@ -1453,7 +1453,7 @@ def _d3d_plain(value: Any, _depth: int = 0) -> Any:
 
 
 # Override the module serializer/iterators used by existing import helpers.
-_plain = _d3d_plain
+_plain_v1 = _d3d_plain
 
 
 def _iter_dicts(value: Any) -> Iterable[dict[str, Any]]:  # type: ignore[override]
@@ -3201,7 +3201,7 @@ def _rr_v05l_system_candidates(value: Any) -> list[dict[str, Any]]:
 # reduced them to repr strings. Serialize them first so stateList, countyList,
 # trsList, site lists, and talkgroups remain traversable structures.
 
-_rr_v05o_base_plain = _plain
+_rr_v05o_base_plain = _plain_v1
 
 
 def _plain(value: Any) -> Any:
