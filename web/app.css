@@ -628,3 +628,61 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     grid-column: 1 / -1;
   }
 }
+
+
+/* PRESERVE_STATUS_COUNTERS_V113 */
+#dashboardScreen.screen.active {
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
+  height: 100%;
+  align-items: stretch;
+}
+
+#dashboardScreen > .control-strip,
+#dashboardScreen > .activity-card,
+#dashboardScreen > .stats-grid,
+#dashboardScreen > .analog-live-controls {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+#dashboardScreen > .stats-grid {
+  display: grid !important;
+  visibility: visible !important;
+  min-height: 72px;
+  height: auto;
+  overflow: visible;
+  opacity: 1;
+}
+
+#dashboardScreen > .stats-grid > article {
+  display: block;
+  min-width: 0;
+  min-height: 62px;
+}
+
+#dashboardScreen > .analog-live-controls {
+  margin-bottom: 0.5rem;
+}
+
+@media (max-height: 620px) {
+  #dashboardScreen > .activity-card {
+    min-height: 125px;
+  }
+
+  #dashboardScreen > .stats-grid {
+    min-height: 64px;
+  }
+
+  #dashboardScreen > .stats-grid > article {
+    min-height: 58px;
+    padding: 7px;
+  }
+
+  #dashboardScreen > .analog-live-controls button {
+    min-height: 3.1rem;
+  }
+}
