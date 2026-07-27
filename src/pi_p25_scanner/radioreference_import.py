@@ -193,7 +193,7 @@ def _method_names(client: Any) -> list[str]:
     return sorted(names)
 
 
-def _call_variants(client: Any, method_name: str, variants: list[tuple[Any, ...]]) -> Any:
+def _call_variants_v1(client: Any, method_name: str, variants: list[tuple[Any, ...]]) -> Any:
     service = client.service
     if not hasattr(service, method_name):
         raise RadioReferenceError(f"RadioReference method not available in WSDL: {method_name}")
@@ -337,7 +337,7 @@ def _discover_trs_candidates(client: Any, auth: dict[str, str], state: str, coun
     country_info = None
     for method_name in ("getCountryInfo",):
         try:
-            country_info = _call_variants(client, method_name, [("US", auth), (auth,), ({"countryCode": "US", "authInfo": auth},)])
+            country_info = _call_variants_v1(client, method_name, [("US", auth), (auth,), ({"countryCode": "US", "authInfo": auth},)])
             break
         except RadioReferenceError:
             continue
@@ -345,14 +345,14 @@ def _discover_trs_candidates(client: Any, auth: dict[str, str], state: str, coun
     state_info = None
     if state_id is not None:
         try:
-            state_info = _call_variants(client, "getStateInfo", [(state_id, auth), (auth, state_id), ({"stid": state_id, "authInfo": auth},)])
+            state_info = _call_variants_v1(client, "getStateInfo", [(state_id, auth), (auth, state_id), ({"stid": state_id, "authInfo": auth},)])
         except RadioReferenceError:
             state_info = None
     county_id = _find_entity_id(state_info, county, ("ctid", "countyId", "county_id", "id"), ("countyName", "name", "county")) if state_info is not None else None
     county_info = None
     if county_id is not None:
         try:
-            county_info = _call_variants(client, "getCountyInfo", [(county_id, auth), (auth, county_id), ({"ctid": county_id, "authInfo": auth},)])
+            county_info = _call_variants_v1(client, "getCountyInfo", [(county_id, auth), (auth, county_id), ({"ctid": county_id, "authInfo": auth},)])
         except RadioReferenceError:
             county_info = None
     source = county_info or state_info or country_info
@@ -514,7 +514,7 @@ def _rr_v0_4d2_call_variant(method: Any, variant: Any) -> Any:
     return method(variant)
 
 
-def _call_variants(client: Any, method_name: str, variants: list[Any]) -> Any:
+def _call_variants_v2(client: Any, method_name: str, variants: list[Any]) -> Any:
     service = client.service
     if not hasattr(service, method_name):
         raise RadioReferenceError(f"RadioReference method not available in WSDL: {method_name}")
@@ -554,7 +554,7 @@ def test_login() -> dict[str, Any]:
         raise RadioReferenceError("RadioReference credentials are not configured: missing " + ", ".join(missing))
     client = _client()
     auth = creds.auth_info()
-    response = _call_variants(client, "getUserData", _rr_v0_4d2_auth_variants(auth))
+    response = _call_variants_v2(client, "getUserData", _rr_v0_4d2_auth_variants(auth))
     return {
         "ok": True,
         "configured": True,
@@ -677,7 +677,7 @@ def _rr_discovery_sources(client: Any, auth: dict[str, str], state: str, county:
     debug: dict[str, Any] = {"calls": [], "errors": []}
     country_info = None
     try:
-        country_info = _call_variants(client, "getCountryInfo", [("US", auth), (auth,), ({"countryCode": "US", "authInfo": auth},)])
+        country_info = _call_variants_v2(client, "getCountryInfo", [("US", auth), (auth,), ({"countryCode": "US", "authInfo": auth},)])
         sources.append(country_info)
         debug["calls"].append("getCountryInfo")
     except Exception as exc:
@@ -687,7 +687,7 @@ def _rr_discovery_sources(client: Any, auth: dict[str, str], state: str, county:
     state_info = None
     if state_id is not None:
         try:
-            state_info = _call_variants(client, "getStateInfo", [(state_id, auth), (auth, state_id), ({"stid": state_id, "authInfo": auth},)])
+            state_info = _call_variants_v2(client, "getStateInfo", [(state_id, auth), (auth, state_id), ({"stid": state_id, "authInfo": auth},)])
             sources.append(state_info)
             debug["calls"].append(f"getStateInfo:{state_id}")
         except Exception as exc:
@@ -697,7 +697,7 @@ def _rr_discovery_sources(client: Any, auth: dict[str, str], state: str, county:
     county_info = None
     if county_id is not None:
         try:
-            county_info = _call_variants(client, "getCountyInfo", [(county_id, auth), (auth, county_id), ({"ctid": county_id, "authInfo": auth},)])
+            county_info = _call_variants_v2(client, "getCountyInfo", [(county_id, auth), (auth, county_id), ({"ctid": county_id, "authInfo": auth},)])
             sources.append(county_info)
             debug["calls"].append(f"getCountyInfo:{county_id}")
         except Exception as exc:
@@ -814,11 +814,11 @@ def discover_trunked_sites(payload: dict[str, Any]) -> dict[str, Any]:
     sources: list[Any] = []
     errors: list[str] = []
     try:
-        sources.append(_call_variants(client, "getTrsSites", [(system_id, auth), (auth, system_id), ({"sid": system_id, "authInfo": auth},)]))
+        sources.append(_call_variants_v2(client, "getTrsSites", [(system_id, auth), (auth, system_id), ({"sid": system_id, "authInfo": auth},)]))
     except Exception as exc:
         errors.append(f"getTrsSites: {type(exc).__name__}: {exc}")
     try:
-        sources.append(_call_variants(client, "getTrsDetails", [(system_id, auth), (auth, system_id), ({"sid": system_id, "authInfo": auth},)]))
+        sources.append(_call_variants_v2(client, "getTrsDetails", [(system_id, auth), (auth, system_id), ({"sid": system_id, "authInfo": auth},)]))
     except Exception as exc:
         errors.append(f"getTrsDetails: {type(exc).__name__}: {exc}")
     sites: list[dict[str, Any]] = []
