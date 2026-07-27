@@ -561,3 +561,46 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     width: 50vw;
   }
 }
+
+
+/* ANALOG_LIVE_CONTROLS_V110 */
+.analog-live-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+  margin-right: 0.45rem;
+  white-space: nowrap;
+}
+
+.analog-live-controls button {
+  min-width: 2.2rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.82rem;
+  line-height: 1;
+}
+
+.analog-live-controls.disabled {
+  opacity: 0.52;
+}
+
+.analog-live-controls button:disabled {
+  cursor: not-allowed;
+}
+
+.analog-squelch-label {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+@media (max-width: 820px) {
+  .activity-topline {
+    flex-wrap: wrap;
+  }
+
+  .analog-live-controls {
+    order: 2;
+    margin-left: 0;
+  }
+}

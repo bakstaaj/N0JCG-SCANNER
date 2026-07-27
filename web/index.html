@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI P25 Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=1.0.7-inline-audio-controls">
+  <link rel="stylesheet" href="/app.css?v=1.0.10-analog-live-controls">
 </head>
 <body>
   <div class="app-shell">
@@ -48,6 +48,14 @@
               <span class="label">Active / Last Talkgroup</span>
               <strong id="activeTalkgroupLabel">Waiting for activity</strong>
               <strong id="activeTgid" class="active-tgid-inline">-</strong>
+            </div>
+            <div id="analogLiveControls" class="analog-live-controls">
+              <span class="analog-squelch-label">Squelch</span>
+              <button id="analogSquelchDownBtn" type="button" title="Lower squelch" disabled>−</button>
+              <button id="analogSquelchUpBtn" type="button" title="Raise squelch" disabled>+</button>
+              <button id="analogSkipBtn" type="button" title="Skip for 10 minutes" disabled>Skip</button>
+              <button id="analogBlockBtn" type="button" title="Block until cleared" disabled>Block</button>
+              <button id="analogClearBlockBtn" type="button" title="Clear skipped and blocked channels" disabled>Clear</button>
             </div>
             <span id="stateBadge" class="pill">-</span>
           </div>
@@ -147,7 +155,7 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=1.0.9-analog-channel-center"></script>
+  <script src="/app.js?v=1.0.10-analog-live-controls"></script>
   <script src="/audio_arbitrator_live.js?v=1.0.6-controls-only"></script>
 </body>
 </html>

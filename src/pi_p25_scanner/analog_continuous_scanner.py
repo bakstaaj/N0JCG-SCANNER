@@ -71,6 +71,64 @@ ROLE_DEFAULTS = {
 }
 
 ROOT = Path(__file__).resolve().parents[2]
+
+ANALOG_CONTROL_PATH = ROOT / "runtime/settings/analog_controls.json"
+
+
+def load_analog_runtime_controls() -> dict[str, Any]:
+    try:
+        payload = json.loads(
+            ANALOG_CONTROL_PATH.read_text(encoding="utf-8")
+        )
+        return payload if isinstance(payload, dict) else {}
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def analog_role_controls(role: str) -> dict[str, Any]:
+    payload = load_analog_runtime_controls()
+    roles = payload.get("roles")
+    if not isinstance(roles, dict):
+        return {}
+    controls = roles.get(role)
+    return controls if isinstance(controls, dict) else {}
+
+
+def analog_channel_suppression(
+    role: str,
+    frequency_hz: int,
+    now_epoch: float | None = None,
+) -> tuple[str | None, float | None]:
+    controls = analog_role_controls(role)
+    frequency_key = str(int(frequency_hz))
+
+    blocked = {
+        str(value)
+        for value in (controls.get("blocked_frequencies_hz") or [])
+    }
+    if frequency_key in blocked:
+        return "blocked", None
+
+    skips = controls.get("skip_until_epoch") or {}
+    if isinstance(skips, dict):
+        try:
+            until = float(skips.get(frequency_key) or 0)
+        except (TypeError, ValueError):
+            until = 0.0
+        now_value = time.time() if now_epoch is None else now_epoch
+        if until > now_value:
+            return "skipped", until
+
+    return None, None
+
+
+def analog_squelch_offset(role: str) -> int:
+    controls = analog_role_controls(role)
+    try:
+        return int(controls.get("squelch_offset_rms") or 0)
+    except (TypeError, ValueError):
+        return 0
+
 DEFAULT_CONFIG = ROOT / "runtime/settings/analog_receivers.json"
 TEMPLATE_CONFIG = ROOT / "config/analog_receivers.example.json"
 DEFAULT_STATUS_DIR = ROOT / "runtime/status"
@@ -421,10 +479,14 @@ class ContinuousScanner:
         )
         hold_seconds = float(channel.get("hold_seconds") or 1.0)
         release_seconds = float(channel.get("resume_delay_seconds") or 1.25)
-        configured_squelch = int(
-            channel.get("squelch_rms")
-            or self.worker.get("lock_squelch_rms")
-            or 1200
+        configured_squelch = max(
+            0,
+            int(
+                channel.get("squelch_rms")
+                or self.worker.get("lock_squelch_rms")
+                or 1200
+            )
+            + analog_squelch_offset(self.role),
         )
         release_squelch = int(
             channel.get("release_squelch_rms")
@@ -477,6 +539,19 @@ class ContinuousScanner:
             )
             heartbeat_at = time.monotonic() + 1.0
             while not self.stop_requested:
+                suppression, skip_until = analog_channel_suppression(
+                    self.role,
+                    int(channel["frequency_hz"]),
+                )
+                if suppression:
+                    self.status(
+                        suppression,
+                        channel,
+                        skip_until_epoch=skip_until,
+                        control_action=True,
+                    )
+                    return
+
                 now = time.monotonic()
                 timeout = max(0.0, min(0.5, pcm_deadline - now))
                 ready, _, _ = select.select([process.stdout], [], [], timeout)
@@ -1227,6 +1302,18 @@ class ContinuousScanner:
                 if max_seconds is not None and time.monotonic() - started >= max_seconds:
                     self.status("smoke_passed")
                     return 0
+                suppression, skip_until = analog_channel_suppression(
+                    self.role,
+                    int(channel["frequency_hz"]),
+                )
+                if suppression:
+                    self.status(
+                        suppression,
+                        channel,
+                        skip_until_epoch=skip_until,
+                        control_action=True,
+                    )
+                    continue
                 try:
                     self.scan_channel(channel)
                 except ScannerError as exc:

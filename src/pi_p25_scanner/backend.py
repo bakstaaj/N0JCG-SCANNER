@@ -1266,7 +1266,165 @@ def _analog_dashboard_status_payload(host_header: str = "") -> dict[str, Any]:
             "audio_url": f"http://{hostname}:{metadata['audio_port']}/audio.wav",
             "error": error or None,
         }
-    return {"ok": all_ok, "analog_root": str(_ANALOG_DASHBOARD_ROOT), "updated_epoch": now, "roles": roles}
+    return {
+        "ok": all_ok,
+        "analog_root": str(_ANALOG_DASHBOARD_ROOT),
+        "updated_epoch": now,
+        "roles": roles,
+        "controls": _read_analog_controls().get("roles", {}),
+    }
+
+
+_ANALOG_CONTROL_FILE = (
+    _ANALOG_DASHBOARD_ROOT / "runtime/settings/analog_controls.json"
+)
+_ANALOG_CONTROL_LOCK = threading.Lock()
+
+
+def _read_analog_controls() -> dict[str, Any]:
+    try:
+        payload = json.loads(
+            _ANALOG_CONTROL_FILE.read_text(encoding="utf-8")
+        )
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+    return {"schema_version": 1, "roles": {}}
+
+
+def _write_analog_controls(payload: dict[str, Any]) -> None:
+    _ANALOG_CONTROL_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = _ANALOG_CONTROL_FILE.with_suffix(".json.tmp")
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(_ANALOG_CONTROL_FILE)
+
+
+def _active_analog_channel(role: str) -> dict[str, Any]:
+    metadata = _ANALOG_DASHBOARD_ROLES.get(role)
+    if metadata is None:
+        raise ConfigError(f"unsupported analog role: {role}")
+
+    path = (
+        _ANALOG_DASHBOARD_ROOT
+        / "runtime/status"
+        / metadata["status_file"]
+    )
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    current = payload.get("current_channel") or {}
+    lock = payload.get("last_lock") or {}
+
+    frequency = current.get("frequency_hz") or lock.get("frequency_hz")
+    name = current.get("name") or lock.get("name")
+
+    if not frequency:
+        raise ConfigError(
+            f"{metadata['label']} has no identified channel"
+        )
+
+    return {
+        "frequency_hz": int(frequency),
+        "name": str(name or frequency),
+    }
+
+
+def _analog_control_action(request: dict[str, Any]) -> dict[str, Any]:
+    role = str(request.get("role") or "").strip()
+    action = str(request.get("action") or "").strip().lower()
+
+    if role not in _ANALOG_DASHBOARD_ROLES:
+        raise ConfigError("role must be analog_2m or analog_70cm")
+
+    with _ANALOG_CONTROL_LOCK:
+        controls = _read_analog_controls()
+        roles = controls.setdefault("roles", {})
+        role_controls = roles.setdefault(role, {})
+        role_controls.setdefault("blocked_frequencies_hz", [])
+        role_controls.setdefault("skip_until_epoch", {})
+        role_controls.setdefault("squelch_offset_rms", 0)
+
+        channel = None
+        if action in {"skip", "block"}:
+            channel = _active_analog_channel(role)
+            key = str(channel["frequency_hz"])
+
+        if action == "skip":
+            until = time.time() + 600.0
+            role_controls["skip_until_epoch"][key] = until
+            result = {
+                "message": (
+                    f"Skipped {channel['name']} for 10 minutes"
+                ),
+                "skip_until_epoch": until,
+            }
+        elif action == "block":
+            blocked = {
+                int(value)
+                for value in role_controls["blocked_frequencies_hz"]
+            }
+            blocked.add(channel["frequency_hz"])
+            role_controls["blocked_frequencies_hz"] = sorted(blocked)
+            role_controls["skip_until_epoch"].pop(key, None)
+            result = {
+                "message": (
+                    f"Blocked {channel['name']} until cleared"
+                )
+            }
+        elif action == "clear_blocks":
+            role_controls["blocked_frequencies_hz"] = []
+            role_controls["skip_until_epoch"] = {}
+            result = {
+                "message": "Cleared skipped and blocked channels"
+            }
+        elif action in {"squelch_up", "squelch_down"}:
+            step = 100 if action == "squelch_up" else -100
+            current = int(
+                role_controls.get("squelch_offset_rms") or 0
+            )
+            updated = max(-500, min(5000, current + step))
+            role_controls["squelch_offset_rms"] = updated
+            result = {
+                "message": (
+                    f"Squelch offset set to {updated:+d} RMS"
+                ),
+                "squelch_offset_rms": updated,
+            }
+        else:
+            raise ConfigError("unsupported analog control action")
+
+        controls["updated_epoch"] = time.time()
+        _write_analog_controls(controls)
+
+    return {
+        "ok": True,
+        "role": role,
+        "action": action,
+        "channel": channel,
+        "controls": role_controls,
+        **result,
+    }
+
+
+def _analog_controls_payload() -> dict[str, Any]:
+    payload = _read_analog_controls()
+    now = time.time()
+    roles = payload.setdefault("roles", {})
+
+    for role in _ANALOG_DASHBOARD_ROLES:
+        item = roles.setdefault(role, {})
+        skips = item.get("skip_until_epoch") or {}
+        if isinstance(skips, dict):
+            item["skip_until_epoch"] = {
+                key: value
+                for key, value in skips.items()
+                if float(value or 0) > now
+            }
+
+    payload["ok"] = True
+    return payload
 
 MANAGER = ScannerManager()
 
@@ -1322,6 +1480,9 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/analog/status":
                 self._send_json(_analog_dashboard_status_payload(self.headers.get("Host", "")))
                 return
+            if path == "/api/analog/controls":
+                self._send_json(_analog_controls_payload())
+                return
             if path == "/api/analog/channels":
                 from pi_p25_scanner.analog_channels import channels_payload
                 self._send_json(channels_payload())
@@ -1360,6 +1521,12 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/scanner/stop":
                 payload, status = MANAGER.stop()
                 self._send_json(payload, status)
+                return
+            if path == "/api/analog/control":
+                self._send_json(
+                    _analog_control_action(self._read_json()),
+                    HTTPStatus.ACCEPTED,
+                )
                 return
             # ANALOG_CSV_CHANNEL_IMPORT_V1
             if path == "/api/analog/channels/import":

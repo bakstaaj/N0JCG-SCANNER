@@ -1132,3 +1132,112 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   refreshAnalogCenterDisplay();
   window.setInterval(refreshAnalogCenterDisplay, 500);
 })();
+
+
+/* ANALOG_LIVE_CONTROLS_V110 */
+(function installAnalogLiveControls() {
+  if (window.__analogLiveControlsInstalled) return;
+  window.__analogLiveControlsInstalled = true;
+
+  let activeAnalogRole = null;
+  let actionInFlight = false;
+
+  const controlIds = [
+    'analogSquelchDownBtn',
+    'analogSquelchUpBtn',
+    'analogSkipBtn',
+    'analogBlockBtn',
+    'analogClearBlockBtn',
+  ];
+
+  function setAnalogControlsEnabled(role) {
+    activeAnalogRole = role;
+    const enabled = Boolean(role);
+    controlIds.forEach((id) => {
+      const button = field(id);
+      if (button) button.disabled = !enabled;
+    });
+
+    const panel = field('analogLiveControls');
+    if (panel) {
+      panel.classList.toggle('disabled', !enabled);
+      panel.setAttribute(
+        'aria-disabled',
+        enabled ? 'false' : 'true'
+      );
+    }
+  }
+
+  async function analogControlAction(action) {
+    if (!activeAnalogRole || actionInFlight) return;
+    actionInFlight = true;
+
+    try {
+      const result = await postJson('/api/analog/control', {
+        role: activeAnalogRole,
+        action,
+      });
+      setText(
+        'lastEvent',
+        result.message || `Analog action: ${action}`
+      );
+      await refreshStatus();
+    } catch (error) {
+      setText(
+        'lastEvent',
+        `Analog control error: ${error.message}`
+      );
+    } finally {
+      actionInFlight = false;
+    }
+  }
+
+  field('analogSquelchDownBtn')?.addEventListener(
+    'click',
+    () => analogControlAction('squelch_down')
+  );
+  field('analogSquelchUpBtn')?.addEventListener(
+    'click',
+    () => analogControlAction('squelch_up')
+  );
+  field('analogSkipBtn')?.addEventListener(
+    'click',
+    () => analogControlAction('skip')
+  );
+  field('analogBlockBtn')?.addEventListener(
+    'click',
+    () => analogControlAction('block')
+  );
+  field('analogClearBlockBtn')?.addEventListener(
+    'click',
+    () => analogControlAction('clear_blocks')
+  );
+
+  async function refreshAnalogControlState() {
+    try {
+      const audioStatus = await fetchJson(
+        `http://${window.location.hostname}:8072/api/audio/status`
+      );
+      const source = String(
+        audioStatus?.active_source || ''
+      ).toLowerCase();
+
+      if (source === 'vhf' || source === 'analog_2m') {
+        setAnalogControlsEnabled('analog_2m');
+      } else if (
+        source === 'uhf'
+        || source === 'analog_70cm'
+      ) {
+        setAnalogControlsEnabled('analog_70cm');
+      } else {
+        setAnalogControlsEnabled(null);
+      }
+    } catch (_error) {
+      setAnalogControlsEnabled(null);
+    }
+  }
+
+  setAnalogControlsEnabled(null);
+  refreshAnalogControlState();
+  window.setInterval(refreshAnalogControlState, 500);
+})();
