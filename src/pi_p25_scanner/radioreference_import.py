@@ -3291,7 +3291,7 @@ def _rr_v05p_walk(value: Any):
             yield from _rr_v05p_walk(child)
 
 
-def _discover_trs_candidates(
+def _discover_trs_candidates_v05p(
     client: Any,
     auth: dict[str, str],
     state: str,
@@ -3415,10 +3415,10 @@ def _rr_v05q_json_safe(value: Any) -> Any:
     return str(value)
 
 
-_rr_v05p_base_discover_trs_candidates = _discover_trs_candidates
+_rr_v05p_base_discover_trs_candidates = _discover_trs_candidates_v05p
 
 
-def _discover_trs_candidates(
+def _discover_trs_candidates_v05q(
     client: Any,
     auth: dict[str, str],
     state: str,
@@ -3447,7 +3447,7 @@ def _discover_trs_candidates(
 # END V0.5Q RR JSON SAFE CANDIDATES
 
 # BEGIN V0.5R RR CANDIDATE NAME ENRICHMENT
-_rr_v05q_base_discover_trs_candidates = _discover_trs_candidates
+_rr_v05q_base_discover_trs_candidates = _discover_trs_candidates_v05q
 
 
 def _rr_v05r_detail_name(details: Any) -> str:
