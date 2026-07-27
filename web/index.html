@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>PI P25 Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=1.0.4-compact-dashboard">
+  <link rel="stylesheet" href="/app.css?v=1.0.5-no-duplicate-audio-strip">
 </head>
 <body>
   <div class="app-shell">
@@ -35,16 +35,7 @@
           <button id="startBtn" type="button" class="big-action start">Start Scanner + Audio</button>
           <button id="stopBtn" type="button" class="big-action stop">Stop</button>
         </div>
-<section class="arbitrator-audio-bar compact-audio-tile">
-          <span class="audio-inline-label">Audio</span>
-          <strong id="arbitratorAudioSource" class="audio-inline-value">Idle</strong>
-          <button id="arbitratorMuteBtn" type="button" class="audio-mute-button" aria-pressed="false">Mute</button>
-          <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
-            <span>Volume</span>
-            <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
-          </label>
-        </section>
-        <section class="activity-card">
+<section class="activity-card">
           <div class="activity-topline">
             <div class="activity-heading-inline">
               <span class="label">Active / Last Talkgroup</span>
@@ -150,6 +141,6 @@
     </main>
   </div>
   <script src="/app.js?v=1.0.3-status-accuracy"></script>
-  <script src="/audio_arbitrator_live.js?v=1.0.4-compact-dashboard"></script>
+  <script src="/audio_arbitrator_live.js?v=1.0.5-no-duplicate-audio-strip"></script>
 </body>
 </html>

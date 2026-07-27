@@ -470,3 +470,10 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     width: 55vw;
   }
 }
+
+
+/* PI Scanner hide duplicate audio strip v1.0.5 */
+.arbitrator-audio-bar,
+.compact-audio-tile {
+  display: none !important;
+}
