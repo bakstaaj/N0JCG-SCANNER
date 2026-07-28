@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy and hardware-validate the FFT-directed VHF scanner from MSYS2 UCRT64.
+# Deploy and hardware-validate the FFT-directed UHF scanner from MSYS2 UCRT64.
 
 set -Eeuo pipefail
 export PATH=/ucrt64/bin:/usr/bin:/bin
@@ -8,8 +8,8 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT/../PI-P25-SCANNER/.env}"
 ANALOG_ROOT="${ANALOG_ROOT:-/home/pi/PI-SCANNER}"
 P25_ROOT="${P25_ROOT:-/home/pi/PI-P25-SCANNER}"
-REMOTE_ARCHIVE="/tmp/pi-scanner-vhf-fft-deploy.tar.gz"
-LOCAL_ARCHIVE="${TMPDIR:-/tmp}/pi-scanner-vhf-fft-deploy.tar.gz"
+REMOTE_ARCHIVE="/tmp/pi-scanner-uhf-fft-deploy.tar.gz"
+LOCAL_ARCHIVE="${TMPDIR:-/tmp}/pi-scanner-uhf-fft-deploy.tar.gz"
 PYTHON_BIN="${PYTHON_BIN:-/ucrt64/bin/python.exe}"
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -52,27 +52,27 @@ pass "local deployment commands available"
 cd "$ROOT"
 export PYTHONPATH="$ROOT/src"
 
-"$PYTHON_BIN" -m pi_p25_scanner.analog_vhf_worker --self-test >/dev/null
-"$PYTHON_BIN" -m unittest discover -s tests -p 'test_vhf_fft_scanner.py' >/dev/null
+"$PYTHON_BIN" -m pi_p25_scanner.analog_uhf_worker --self-test >/dev/null
+"$PYTHON_BIN" -m unittest discover -s tests -p 'test_uhf_fft_scanner.py' >/dev/null
 "$PYTHON_BIN" -m py_compile \
-  src/pi_p25_scanner/vhf_fft_scanner.py \
-  src/pi_p25_scanner/analog_vhf_worker.py \
+  src/pi_p25_scanner/uhf_fft_scanner.py \
+  src/pi_p25_scanner/analog_uhf_worker.py \
   src/pi_p25_scanner/analog_channels.py
-bash -n tools/pi5_vhf_phase_smoke.sh
+bash -n tools/pi5_uhf_phase_smoke.sh
 git --no-pager diff --check
-pass "local VHF validation passed"
+pass "local UHF validation passed"
 
 rm -f "$LOCAL_ARCHIVE"
 tar -czf "$LOCAL_ARCHIVE" \
-  src/pi_p25_scanner/vhf_fft_scanner.py \
-  src/pi_p25_scanner/analog_vhf_worker.py \
+  src/pi_p25_scanner/uhf_fft_scanner.py \
+  src/pi_p25_scanner/analog_uhf_worker.py \
   src/pi_p25_scanner/analog_channels.py \
   config/analog_receivers.example.json \
   config/receiver_roles.example.json \
-  systemd/pi-scanner-vhf-worker.service \
-  systemd/pi-scanner-vhf-worker.service.d/10-usbfs-memory.conf \
-  tools/pi5_vhf_phase_smoke.sh \
-  docs/VHF_FFT_SCANNER.md
+  systemd/pi-scanner-uhf-worker.service \
+  systemd/pi-scanner-uhf-worker.service.d/10-usbfs-memory.conf \
+  tools/pi5_uhf_phase_smoke.sh \
+  docs/UHF_FFT_SCANNER.md
 [[ -s "$LOCAL_ARCHIVE" ]] \
   || { fail "deployment archive is empty"; exit 1; }
 pass "deployment archive created"
@@ -105,10 +105,10 @@ pass "deployment archive uploaded"
 set -Eeuo pipefail
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-STAGE="$(mktemp -d /tmp/pi-scanner-vhf-fft.XXXXXX)"
-BACKUP="$ANALOG_ROOT/runtime/patch_backups/vhf_fft_rebuild_$STAMP"
+STAGE="$(mktemp -d /tmp/pi-scanner-uhf-fft.XXXXXX)"
+BACKUP="$ANALOG_ROOT/runtime/patch_backups/uhf_fft_rebuild_$STAMP"
 SYSTEMD_DIR="/etc/systemd/system"
-SERVICE="pi-scanner-vhf-worker.service"
+SERVICE="pi-scanner-uhf-worker.service"
 DEPLOYED=0
 
 cleanup() {
@@ -132,15 +132,15 @@ rollback() {
         "$BACKUP/p25_analog_channels.py" \
         "$P25_ROOT/src/pi_p25_scanner/analog_channels.py"
     fi
-    if [[ -f "$BACKUP/pi-scanner-vhf-worker.service" ]]; then
+    if [[ -f "$BACKUP/pi-scanner-uhf-worker.service" ]]; then
       sudo install -m 0644 \
-        "$BACKUP/pi-scanner-vhf-worker.service" \
-        "$SYSTEMD_DIR/pi-scanner-vhf-worker.service"
+        "$BACKUP/pi-scanner-uhf-worker.service" \
+        "$SYSTEMD_DIR/pi-scanner-uhf-worker.service"
     fi
     if [[ -f "$BACKUP/90-persistent-fft.conf" ]]; then
       sudo install -D -m 0644 \
         "$BACKUP/90-persistent-fft.conf" \
-        "$SYSTEMD_DIR/pi-scanner-vhf-worker.service.d/90-persistent-fft.conf"
+        "$SYSTEMD_DIR/pi-scanner-uhf-worker.service.d/90-persistent-fft.conf"
     fi
     sudo systemctl daemon-reload
     sudo systemctl restart "$SERVICE" >/dev/null 2>&1 || true
@@ -169,19 +169,19 @@ for role, serial in expected.items():
         raise SystemExit(f"{role} must use {serial}; found {actual!r}")
 if not any(
     item.get("enabled", True)
-    for item in (workers.get("analog_2m") or {}).get("channels", [])
+    for item in (workers.get("analog_70cm") or {}).get("channels", [])
 ):
-    raise SystemExit("runtime VHF channel list is empty")
-print("PASS: runtime serial bindings and VHF channel list")
+    raise SystemExit("runtime UHF channel list is empty")
+print("PASS: runtime serial bindings and UHF channel list")
 PY
 
 paths=(
-  src/pi_p25_scanner/analog_vhf_worker.py
+  src/pi_p25_scanner/uhf_fft_scanner.py
+  src/pi_p25_scanner/analog_uhf_worker.py
   src/pi_p25_scanner/analog_channels.py
-  src/pi_p25_scanner/persistent_vhf_fft_scanner.py
   config/analog_receivers.example.json
   config/receiver_roles.example.json
-  tools/pi5_vhf_phase_smoke.sh
+  tools/pi5_uhf_phase_smoke.sh
 )
 : > "$BACKUP/analog_existing_files.txt"
 for relative in "${paths[@]}"; do
@@ -194,11 +194,11 @@ cp -p \
   "$P25_ROOT/src/pi_p25_scanner/analog_channels.py" \
   "$BACKUP/p25_analog_channels.py"
 sudo cp -p \
-  "$SYSTEMD_DIR/pi-scanner-vhf-worker.service" \
-  "$BACKUP/pi-scanner-vhf-worker.service"
-if [[ -f "$SYSTEMD_DIR/pi-scanner-vhf-worker.service.d/90-persistent-fft.conf" ]]; then
+  "$SYSTEMD_DIR/pi-scanner-uhf-worker.service" \
+  "$BACKUP/pi-scanner-uhf-worker.service"
+if [[ -f "$SYSTEMD_DIR/pi-scanner-uhf-worker.service.d/90-persistent-fft.conf" ]]; then
   sudo cp -p \
-    "$SYSTEMD_DIR/pi-scanner-vhf-worker.service.d/90-persistent-fft.conf" \
+    "$SYSTEMD_DIR/pi-scanner-uhf-worker.service.d/90-persistent-fft.conf" \
     "$BACKUP/90-persistent-fft.conf"
 fi
 
@@ -206,11 +206,11 @@ DEPLOYED=1
 sudo systemctl stop "$SERVICE"
 
 install -D -m 0644 \
-  "$STAGE/src/pi_p25_scanner/vhf_fft_scanner.py" \
-  "$ANALOG_ROOT/src/pi_p25_scanner/vhf_fft_scanner.py"
+  "$STAGE/src/pi_p25_scanner/uhf_fft_scanner.py" \
+  "$ANALOG_ROOT/src/pi_p25_scanner/uhf_fft_scanner.py"
 install -D -m 0644 \
-  "$STAGE/src/pi_p25_scanner/analog_vhf_worker.py" \
-  "$ANALOG_ROOT/src/pi_p25_scanner/analog_vhf_worker.py"
+  "$STAGE/src/pi_p25_scanner/analog_uhf_worker.py" \
+  "$ANALOG_ROOT/src/pi_p25_scanner/analog_uhf_worker.py"
 install -D -m 0644 \
   "$STAGE/src/pi_p25_scanner/analog_channels.py" \
   "$ANALOG_ROOT/src/pi_p25_scanner/analog_channels.py"
@@ -224,34 +224,33 @@ install -D -m 0644 \
   "$STAGE/config/receiver_roles.example.json" \
   "$ANALOG_ROOT/config/receiver_roles.example.json"
 install -D -m 0755 \
-  "$STAGE/tools/pi5_vhf_phase_smoke.sh" \
-  "$ANALOG_ROOT/tools/pi5_vhf_phase_smoke.sh"
+  "$STAGE/tools/pi5_uhf_phase_smoke.sh" \
+  "$ANALOG_ROOT/tools/pi5_uhf_phase_smoke.sh"
 install -D -m 0644 \
-  "$STAGE/docs/VHF_FFT_SCANNER.md" \
-  "$ANALOG_ROOT/docs/VHF_FFT_SCANNER.md"
-rm -f "$ANALOG_ROOT/src/pi_p25_scanner/persistent_vhf_fft_scanner.py"
+  "$STAGE/docs/UHF_FFT_SCANNER.md" \
+  "$ANALOG_ROOT/docs/UHF_FFT_SCANNER.md"
 
 sudo install -m 0644 \
-  "$STAGE/systemd/pi-scanner-vhf-worker.service" \
-  "$SYSTEMD_DIR/pi-scanner-vhf-worker.service"
+  "$STAGE/systemd/pi-scanner-uhf-worker.service" \
+  "$SYSTEMD_DIR/pi-scanner-uhf-worker.service"
 sudo install -D -m 0644 \
-  "$STAGE/systemd/pi-scanner-vhf-worker.service.d/10-usbfs-memory.conf" \
-  "$SYSTEMD_DIR/pi-scanner-vhf-worker.service.d/10-usbfs-memory.conf"
+  "$STAGE/systemd/pi-scanner-uhf-worker.service.d/10-usbfs-memory.conf" \
+  "$SYSTEMD_DIR/pi-scanner-uhf-worker.service.d/10-usbfs-memory.conf"
 sudo rm -f \
-  "$SYSTEMD_DIR/pi-scanner-vhf-worker.service.d/90-persistent-fft.conf"
+  "$SYSTEMD_DIR/pi-scanner-uhf-worker.service.d/90-persistent-fft.conf"
 
 cd "$ANALOG_ROOT"
 export PYTHONPATH="$ANALOG_ROOT/src"
 python3 -m py_compile \
-  src/pi_p25_scanner/vhf_fft_scanner.py \
-  src/pi_p25_scanner/analog_vhf_worker.py \
+  src/pi_p25_scanner/uhf_fft_scanner.py \
+  src/pi_p25_scanner/analog_uhf_worker.py \
   src/pi_p25_scanner/analog_channels.py
-python3 -m pi_p25_scanner.analog_vhf_worker --self-test
-bash -n tools/pi5_vhf_phase_smoke.sh
+python3 -m pi_p25_scanner.analog_uhf_worker --self-test
+bash -n tools/pi5_uhf_phase_smoke.sh
 python3 -m json.tool config/analog_receivers.example.json >/dev/null
 
 sudo systemctl daemon-reload
-bash tools/pi5_vhf_phase_smoke.sh
+bash tools/pi5_uhf_phase_smoke.sh
 
 sudo systemctl restart "$SERVICE"
 sudo systemctl restart pi-p25-scanner.service
@@ -265,7 +264,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-status_path = Path("$ANALOG_ROOT/runtime/status/analog_2m.json")
+status_path = Path("$ANALOG_ROOT/runtime/status/analog_70cm.json")
 deadline = time.time() + 12
 status = {}
 while time.time() < deadline:
@@ -274,14 +273,14 @@ while time.time() < deadline:
     except Exception:
         status = {}
     if (
-        status.get("rtl_serial") == "00000144"
+        status.get("rtl_serial") == "00000440"
         and status.get("search_mode") == "fft_directed_nfm_v2"
         and status.get("state") not in {"error", "stopped", None}
     ):
         break
     time.sleep(0.5)
 else:
-    raise SystemExit(f"VHF service status validation failed: {status}")
+    raise SystemExit(f"UHF service status validation failed: {status}")
 
 with urllib.request.urlopen(
     "http://127.0.0.1:8070/api/analog/channels", timeout=5
@@ -292,10 +291,10 @@ if bindings.get("analog_2m") != "00000144":
     raise SystemExit(f"web API VHF binding is wrong: {bindings}")
 if bindings.get("analog_70cm") != "00000440":
     raise SystemExit(f"web API UHF binding is wrong: {bindings}")
-if int((channels.get("enabled_counts") or {}).get("analog_2m") or 0) < 1:
-    raise SystemExit(f"web API has no uploaded VHF channels: {channels}")
+if int((channels.get("enabled_counts") or {}).get("analog_70cm") or 0) < 1:
+    raise SystemExit(f"web API has no uploaded UHF channels: {channels}")
 
-print("PASS: VHF service FFT state and web channel API")
+print("PASS: UHF service FFT state and web channel API")
 PY
 
 trap - ERR

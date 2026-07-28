@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""FFT-directed VHF NFM scanner for the dedicated PI-SCANNER receiver.
+"""FFT-directed UHF NFM scanner for the dedicated PI-SCANNER receiver.
 
-The worker keeps one rtl_tcp process attached to RTL serial 00000144.  It
-surveys only configured VHF channels, validates candidates off the tuner DC
+The worker keeps one rtl_tcp process attached to RTL serial 00000440.  It
+surveys only configured UHF channels, validates candidates off the tuner DC
 spike, demodulates NFM in-process, and forwards 8 kHz mono PCM to the existing
-audio arbitrator on UDP 23458.
+audio arbitrator on UDP 23459.
 """
 
 from __future__ import annotations
@@ -31,13 +31,14 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PROJECT_ROOT / "runtime/settings/analog_receivers.json"
 DEFAULT_TEMPLATE = PROJECT_ROOT / "config/analog_receivers.example.json"
-DEFAULT_STATUS = PROJECT_ROOT / "runtime/status/analog_2m.json"
+DEFAULT_STATUS = PROJECT_ROOT / "runtime/status/analog_70cm.json"
 ANALOG_CONTROL_PATH = PROJECT_ROOT / "runtime/settings/analog_controls.json"
-ROLE = "analog_2m"
-REQUIRED_SERIAL = "00000144"
+ROLE = "analog_70cm"
+REQUIRED_SERIAL = "00000440"
 DEFAULT_UDP_HOST = "127.0.0.1"
-DEFAULT_UDP_PORT = 23458
+DEFAULT_UDP_PORT = 23459
 DEFAULT_NFM_AUDIO_OUTPUT_GAIN = 105_000.0
+DEFAULT_AUDIO_NOISE_MAX_FLATNESS = 0.65
 
 
 class ScannerError(RuntimeError):
@@ -113,8 +114,8 @@ def write_pcm_wav(path: Path, pcm: np.ndarray, sample_rate_hz: int = 8_000) -> N
     os.replace(temporary, path)
 
 
-def enabled_vhf_channels(worker: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return one enabled NFM entry per configured VHF frequency."""
+def enabled_uhf_channels(worker: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return one enabled NFM entry per configured UHF frequency."""
     by_frequency: dict[int, dict[str, Any]] = {}
     for raw in worker.get("channels") or []:
         if not isinstance(raw, dict) or not raw.get("enabled", True):
@@ -124,7 +125,7 @@ def enabled_vhf_channels(worker: dict[str, Any]) -> list[dict[str, Any]]:
         except (TypeError, ValueError):
             continue
         mode = str(raw.get("mode") or "nfm").strip().lower()
-        if not 136_000_000 <= frequency <= 174_000_000:
+        if not 400_000_000 <= frequency <= 520_000_000:
             continue
         if mode not in {"fm", "nfm", "narrowfm", "fmn"}:
             continue
@@ -408,9 +409,11 @@ def call_audio_is_present(
     audio: AudioMetrics,
     minimum_rms: int,
     strong_carrier_snr_db: float = 20.0,
+    voice_confirmed: bool = False,
 ) -> bool:
     return audio.active or (
-        carrier.snr_db >= strong_carrier_snr_db and audio.rms >= minimum_rms
+        carrier.snr_db >= strong_carrier_snr_db
+        and (voice_confirmed or audio.rms >= minimum_rms)
     )
 
 
@@ -418,11 +421,12 @@ def audio_chunk_should_forward(
     carrier: CarrierMetrics,
     audio: AudioMetrics,
     minimum_carrier_snr_db: float,
+    voice_confirmed: bool = False,
 ) -> bool:
-    """Forward only a voice-like chunk that still has carrier evidence."""
+    """Forward confirmed call audio only while carrier evidence remains."""
     return (
         carrier.snr_db >= minimum_carrier_snr_db
-        and audio.active
+        and (audio.active or voice_confirmed)
     )
 
 
@@ -618,7 +622,7 @@ class RtlTcpClient:
             pass
 
 
-class VhfFftScanner:
+class UhfFftScanner:
     def __init__(
         self,
         config_path: Path = DEFAULT_CONFIG,
@@ -667,7 +671,7 @@ class VhfFftScanner:
     def load_configuration(self, force: bool = False) -> bool:
         source = self.config_path if self.config_path.exists() else self.template_path
         if not source.exists():
-            raise ScannerError(f"VHF configuration missing: {self.config_path}")
+            raise ScannerError(f"UHF configuration missing: {self.config_path}")
         mtime = source.stat().st_mtime_ns
         if not force and source == self.config_source and mtime == self.config_mtime_ns:
             return False
@@ -678,11 +682,11 @@ class VhfFftScanner:
         serial = str(worker.get("rtl_serial") or "")
         if serial != REQUIRED_SERIAL:
             raise ScannerError(
-                f"VHF worker must own RTL serial {REQUIRED_SERIAL}; configured {serial!r}"
+                f"UHF worker must own RTL serial {REQUIRED_SERIAL}; configured {serial!r}"
             )
-        channels = enabled_vhf_channels(worker)
+        channels = enabled_uhf_channels(worker)
         if not channels:
-            raise ScannerError("VHF worker has no enabled NFM channels")
+            raise ScannerError("UHF worker has no enabled NFM channels")
         span = int(worker.get("fft_scan_usable_span_hz") or 1_800_000)
         self.worker = dict(worker)
         self.channels = channels
@@ -696,7 +700,7 @@ class VhfFftScanner:
         )
         self.udp_port = int(worker.get("audio_udp_port") or DEFAULT_UDP_PORT)
         if self.udp_port != DEFAULT_UDP_PORT:
-            raise ScannerError(f"VHF audio must use arbitrator UDP port {DEFAULT_UDP_PORT}")
+            raise ScannerError(f"UHF audio must use arbitrator UDP port {DEFAULT_UDP_PORT}")
         return True
 
     def status(self, state: str, channel: dict[str, Any] | None = None, **extra: Any) -> None:
@@ -735,12 +739,20 @@ class VhfFftScanner:
         atomic_json(self.status_path, payload)
 
     def start_receiver(self) -> None:
-        port = int(self.worker.get("rtl_tcp_port") or 12344)
+        # UHF and VHF workers run concurrently, so each persistent rtl_tcp
+        # receiver requires its own local control/data port.
+        port = int(self.worker.get("rtl_tcp_port") or 12345)
+        scan_rate = int(self.worker.get("fft_scan_sample_rate") or 2_400_000)
+        startup_frequency = segment_center_hz(self.segments[0], scan_rate)
         command = [
             "/usr/bin/rtl_tcp",
             "-a", "127.0.0.1",
             "-p", str(port),
             "-d", REQUIRED_SERIAL,
+            # This UHF receiver cannot PLL-lock at rtl_tcp's 100 MHz default.
+            # Start in-band so asynchronous IQ streaming comes up reliably.
+            "-f", str(startup_frequency),
+            "-s", str(scan_rate),
         ]
         self.rtl_process = subprocess.Popen(
             command,
@@ -771,7 +783,6 @@ class VhfFftScanner:
                 time.sleep(0.2)
         if self.rtl is None:
             raise ScannerError(f"could not connect to rtl_tcp: {last_error}")
-        scan_rate = int(self.worker.get("fft_scan_sample_rate") or 2_400_000)
         self.rtl.configure(
             scan_rate,
             float(self.worker.get("gain_db") or 49.6),
@@ -923,7 +934,10 @@ class VhfFftScanner:
         audio = audio_metrics(
             combined,
             minimum_rms=self._minimum_audio_rms(channel),
-            maximum_flatness=float(self.worker.get("audio_noise_max_flatness") or 0.45),
+            maximum_flatness=float(
+                self.worker.get("audio_noise_max_flatness")
+                or DEFAULT_AUDIO_NOISE_MAX_FLATNESS
+            ),
             minimum_voice_ratio=float(self.worker.get("audio_min_voice_band_ratio") or 0.85),
         )
         required_good_chunks = int(
@@ -1021,8 +1035,26 @@ class VhfFftScanner:
                 recorded_pcm.append(np.asarray(pcm, dtype="<i2").copy())
             self._send_pcm(pcm, pending)
 
+        minimum_audio_rms = self._minimum_audio_rms(channel)
+        maximum_flatness = float(
+            self.worker.get("audio_noise_max_flatness")
+            or DEFAULT_AUDIO_NOISE_MAX_FLATNESS
+        )
+        minimum_voice_ratio = float(
+            self.worker.get("audio_min_voice_band_ratio") or 0.85
+        )
+        voice_confirmed = initial_audio.active
         for pcm in prebuffer:
-            forward_pcm(pcm)
+            prebuffer_audio = audio_metrics(
+                pcm,
+                minimum_rms=minimum_audio_rms,
+                maximum_flatness=maximum_flatness,
+                minimum_voice_ratio=minimum_voice_ratio,
+            )
+            if prebuffer_audio.active:
+                voice_confirmed = True
+            if voice_confirmed:
+                forward_pcm(pcm)
         self.lock_count += 1
         self.last_lock = {
             "frequency_hz": frequency,
@@ -1083,13 +1115,6 @@ class VhfFftScanner:
             _, pcm = demodulator.process(iq)
             recent_pcm.append(pcm)
             combined = np.concatenate(tuple(recent_pcm))
-            minimum_audio_rms = self._minimum_audio_rms(channel)
-            maximum_flatness = float(
-                self.worker.get("audio_noise_max_flatness") or 0.45
-            )
-            minimum_voice_ratio = float(
-                self.worker.get("audio_min_voice_band_ratio") or 0.85
-            )
             audio = audio_metrics(
                 combined,
                 minimum_rms=minimum_audio_rms,
@@ -1102,6 +1127,8 @@ class VhfFftScanner:
                 maximum_flatness=maximum_flatness,
                 minimum_voice_ratio=minimum_voice_ratio,
             )
+            if forward_audio.active:
+                voice_confirmed = True
             now = time.monotonic()
             if carrier.snr_db >= carrier_release_snr:
                 last_carrier = now
@@ -1116,12 +1143,14 @@ class VhfFftScanner:
                         self.worker.get("strong_carrier_audio_hold_snr_db") or 20.0
                     )
                 ),
+                voice_confirmed=voice_confirmed,
             ):
                 last_audio = now
             if audio_chunk_should_forward(
                 carrier,
                 forward_audio,
                 carrier_release_snr,
+                voice_confirmed=voice_confirmed,
             ):
                 if pending_voice_pcm is not None:
                     forward_pcm(pending_voice_pcm)
@@ -1160,6 +1189,7 @@ class VhfFftScanner:
                     audio_metrics=asdict(audio),
                     forward_audio_metrics=asdict(forward_audio),
                     tail_chunks_suppressed=tail_chunks_suppressed,
+                    voice_confirmed=voice_confirmed,
                     lock_elapsed_seconds=round(now - started, 2),
                     release_reason=release_reason,
                 )
@@ -1176,7 +1206,7 @@ class VhfFftScanner:
         self.cooldown[frequency] = time.monotonic() + float(
             self.worker.get("post_call_cooldown_seconds") or 0.35
         )
-        recording = self.status_path.parent / "vhf_last_call.wav"
+        recording = self.status_path.parent / "uhf_last_call.wav"
         samples = (
             np.concatenate(recorded_pcm)[:maximum_recording_samples]
             if recorded_pcm
@@ -1187,6 +1217,7 @@ class VhfFftScanner:
         self.last_lock["recording_seconds"] = round(len(samples) / 8_000.0, 3)
         self.last_lock["release_reason"] = release_reason or "scanner_stopped"
         self.last_lock["tail_chunks_suppressed"] = tail_chunks_suppressed
+        self.last_lock["voice_confirmed"] = voice_confirmed
         self.last_lock["lock_elapsed_seconds"] = round(time.monotonic() - started, 3)
 
     def run(self, maximum_seconds: float | None = None) -> int:
@@ -1339,23 +1370,23 @@ class VhfFftScanner:
 
 def self_test() -> int:
     channels = [
-        {"name": "A", "frequency_hz": 146_520_000, "mode": "fm", "enabled": True},
-        {"name": "B", "frequency_hz": 154_340_000, "mode": "nfm", "enabled": True},
+        {"name": "A", "frequency_hz": 444_440_000, "mode": "fm", "enabled": True},
+        {"name": "B", "frequency_hz": 464_912_500, "mode": "nfm", "enabled": True},
     ]
-    if len(enabled_vhf_channels({"channels": channels})) != 2:
+    if len(enabled_uhf_channels({"channels": channels})) != 2:
         raise ScannerError("channel normalization failed")
     tone = (np.sin(2.0 * math.pi * 1_000.0 * np.arange(4_000) / 8_000.0) * 4_000).astype("<i2")
     if not audio_metrics(tone).active:
         raise ScannerError("audio activity classifier rejected a voice-band tone")
     if audio_metrics(np.zeros(4_000, dtype="<i2")).active:
         raise ScannerError("audio activity classifier accepted silence")
-    print("PASS: FFT-directed VHF NFM scanner self-test")
+    print("PASS: FFT-directed UHF NFM scanner self-test")
     print("FINAL: PASS")
     return 0
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="PI-SCANNER FFT-directed VHF NFM worker")
+    parser = argparse.ArgumentParser(description="PI-SCANNER FFT-directed UHF NFM worker")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE)
     parser.add_argument("--status-path", type=Path, default=DEFAULT_STATUS)
@@ -1365,7 +1396,7 @@ def main() -> int:
     args = parser.parse_args()
     if args.self_test:
         return self_test()
-    scanner = VhfFftScanner(args.config, args.template, args.status_path, args.no_forward)
+    scanner = UhfFftScanner(args.config, args.template, args.status_path, args.no_forward)
     signal.signal(signal.SIGTERM, scanner.request_stop)
     signal.signal(signal.SIGINT, scanner.request_stop)
     try:

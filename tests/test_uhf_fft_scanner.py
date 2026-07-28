@@ -11,13 +11,13 @@ from pathlib import Path
 import numpy as np
 
 from pi_p25_scanner.analog_channels import ROLE_DEFAULTS
-from pi_p25_scanner.vhf_fft_scanner import (
+from pi_p25_scanner.uhf_fft_scanner import (
     AudioMetrics,
     CarrierMetrics,
     DEFAULT_NFM_AUDIO_OUTPUT_GAIN,
     NfmDemodulator,
     REQUIRED_SERIAL,
-    VhfFftScanner,
+    UhfFftScanner,
     audio_metrics,
     audio_chunk_should_forward,
     candidate_validation_passes,
@@ -25,7 +25,7 @@ from pi_p25_scanner.vhf_fft_scanner import (
     call_audio_is_present,
     carrier_release_hang_seconds,
     cooldown_allows_candidate,
-    enabled_vhf_channels,
+    enabled_uhf_channels,
     fade_pcm_tail,
     group_channels,
     segment_center_hz,
@@ -35,10 +35,10 @@ from pi_p25_scanner.vhf_fft_scanner import (
     strong_carrier_probation_passes,
     write_pcm_wav,
 )
-from pi_p25_scanner import vhf_fft_scanner
+from pi_p25_scanner import uhf_fft_scanner
 
 
-class VhfFftScannerTests(unittest.TestCase):
+class UhfFftScannerTests(unittest.TestCase):
     def test_tail_gate_requires_voice_and_live_carrier(self) -> None:
         voice = AudioMetrics(
             rms=2_000,
@@ -59,8 +59,15 @@ class VhfFftScannerTests(unittest.TestCase):
 
         self.assertTrue(audio_chunk_should_forward(carrier, voice, 6.0))
         self.assertFalse(audio_chunk_should_forward(carrier, static, 6.0))
+        self.assertTrue(
+            audio_chunk_should_forward(
+                carrier, static, 6.0, voice_confirmed=True
+            )
+        )
         self.assertFalse(
-            audio_chunk_should_forward(ended_carrier, voice, 6.0)
+            audio_chunk_should_forward(
+                ended_carrier, voice, 6.0, voice_confirmed=True
+            )
         )
 
     def test_tail_fade_ends_at_zero_without_mutating_input(self) -> None:
@@ -73,10 +80,52 @@ class VhfFftScannerTests(unittest.TestCase):
         self.assertLess(abs(int(faded[-40])), abs(int(faded[-120])))
 
     def test_receiver_serial_contract_is_not_reversed(self) -> None:
-        self.assertEqual(REQUIRED_SERIAL, "00000144")
+        self.assertEqual(REQUIRED_SERIAL, "00000440")
         self.assertEqual(DEFAULT_NFM_AUDIO_OUTPUT_GAIN, 105_000.0)
-        self.assertEqual(ROLE_DEFAULTS["analog_2m"]["rtl_serial"], "00000144")
         self.assertEqual(ROLE_DEFAULTS["analog_70cm"]["rtl_serial"], "00000440")
+        self.assertEqual(ROLE_DEFAULTS["analog_2m"]["rtl_serial"], "00000144")
+
+    def test_rtl_tcp_starts_in_uhf_band_on_dedicated_port(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = root / "analog.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "workers": {
+                            "analog_70cm": {
+                                "rtl_serial": "00000440",
+                                "audio_udp_port": 23459,
+                                "channels": [
+                                    {
+                                        "frequency_hz": 444_440_000,
+                                        "mode": "nfm",
+                                        "enabled": True,
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            scanner = UhfFftScanner(config, config, root / "status.json", True)
+            try:
+                with patch.object(subprocess, "Popen") as process, patch.object(
+                    uhf_fft_scanner, "RtlTcpClient"
+                ) as client:
+                    process.return_value.poll.return_value = None
+                    process.return_value.stderr = None
+                    scanner.start_receiver()
+                    command = process.call_args.args[0]
+                    self.assertEqual(command[command.index("-p") + 1], "12345")
+                    startup_hz = int(command[command.index("-f") + 1])
+                    self.assertTrue(400_000_000 <= startup_hz <= 520_000_000)
+                    client.return_value.configure.assert_called_once()
+                    scanner.rtl = None
+                    scanner.rtl_process = None
+            finally:
+                scanner.close()
 
     def test_channel_upload_uses_configured_analog_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -107,9 +156,9 @@ class VhfFftScannerTests(unittest.TestCase):
                 json.dumps(
                     {
                         "roles": {
-                            "analog_2m": {
-                                "blocked_frequencies_hz": [154_340_000],
-                                "skip_until_epoch": {"155000000": 200.0},
+                            "analog_70cm": {
+                                "blocked_frequencies_hz": [464_912_500],
+                                "skip_until_epoch": {"453812500": 200.0},
                                 "squelch_offset_rms": 100,
                             }
                         }
@@ -117,37 +166,37 @@ class VhfFftScannerTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with patch.object(vhf_fft_scanner, "ANALOG_CONTROL_PATH", control_path):
+            with patch.object(uhf_fft_scanner, "ANALOG_CONTROL_PATH", control_path):
                 self.assertEqual(
-                    vhf_fft_scanner.analog_channel_suppression(154_340_000),
+                    uhf_fft_scanner.analog_channel_suppression(464_912_500),
                     ("blocked", None),
                 )
                 self.assertEqual(
-                    vhf_fft_scanner.analog_channel_suppression(
-                        155_000_000, now_epoch=100.0
+                    uhf_fft_scanner.analog_channel_suppression(
+                        453_812_500, now_epoch=100.0
                     ),
                     ("skipped", 200.0),
                 )
-                self.assertEqual(vhf_fft_scanner.analog_squelch_offset(), 100)
+                self.assertEqual(uhf_fft_scanner.analog_squelch_offset(), 100)
 
     def test_channels_are_deduplicated_and_non_nfm_entries_are_ignored(self) -> None:
-        channels = enabled_vhf_channels(
+        channels = enabled_uhf_channels(
             {
                 "channels": [
-                    {"frequency_hz": 154_340_000, "mode": "FM", "enabled": True},
-                    {"frequency_hz": 154_340_000, "mode": "NFM", "enabled": True},
-                    {"frequency_hz": 155_000_000, "mode": "AM", "enabled": True},
-                    {"frequency_hz": 446_000_000, "mode": "NFM", "enabled": True},
+                    {"frequency_hz": 464_912_500, "mode": "FM", "enabled": True},
+                    {"frequency_hz": 464_912_500, "mode": "NFM", "enabled": True},
+                    {"frequency_hz": 453_812_500, "mode": "AM", "enabled": True},
+                    {"frequency_hz": 390_000_000, "mode": "NFM", "enabled": True},
                 ]
             }
         )
-        self.assertEqual([item["frequency_hz"] for item in channels], [154_340_000])
+        self.assertEqual([item["frequency_hz"] for item in channels], [464_912_500])
         self.assertEqual(channels[0]["mode"], "nfm")
 
     def test_fft_finds_only_matching_configured_frequency(self) -> None:
         sample_rate = 2_400_000
         sample_count = 65_536
-        center = 154_000_000
+        center = 464_572_500
         positions = np.arange(sample_count, dtype=np.float64)
         rng = np.random.default_rng(144)
         iq = (
@@ -157,8 +206,8 @@ class VhfFftScannerTests(unittest.TestCase):
             * np.exp(2j * math.pi * 340_000 * positions / sample_rate)
         ).astype(np.complex64)
         channels = [
-            {"name": "active", "frequency_hz": 154_340_000, "priority": 0},
-            {"name": "quiet", "frequency_hz": 154_890_000, "priority": 0},
+            {"name": "active", "frequency_hz": 464_912_500, "priority": 0},
+            {"name": "quiet", "frequency_hz": 464_112_500, "priority": 0},
         ]
         found = spectrum_candidates(iq, center, sample_rate, channels, 8.0)
         self.assertEqual([item.channel["name"] for item in found], ["active"])
@@ -240,11 +289,11 @@ class VhfFftScannerTests(unittest.TestCase):
 
     def test_priority_hit_short_circuits_remaining_fft_survey(self) -> None:
         candidates = [
-            vhf_fft_scanner.SpectrumCandidate(
-                {"frequency_hz": 146_600_000, "priority": 100}, 20.0, 1.0, 0.0
+            uhf_fft_scanner.SpectrumCandidate(
+                {"frequency_hz": 446_000_000, "priority": 100}, 20.0, 1.0, 0.0
             ),
-            vhf_fft_scanner.SpectrumCandidate(
-                {"frequency_hz": 146_520_000, "priority": 0}, 40.0, 1.0, 0.0
+            uhf_fft_scanner.SpectrumCandidate(
+                {"frequency_hz": 444_440_000, "priority": 0}, 40.0, 1.0, 0.0
             ),
         ]
         self.assertEqual(priority_candidates(candidates, 15.0), [candidates[0]])
@@ -287,12 +336,20 @@ class VhfFftScannerTests(unittest.TestCase):
         self.assertFalse(
             call_audio_is_present(CarrierMetrics(48.0, -50_000.0, 0.0), silent, 250)
         )
+        self.assertTrue(
+            call_audio_is_present(
+                CarrierMetrics(48.0, -50_000.0, 0.0),
+                silent,
+                250,
+                voice_confirmed=True,
+            )
+        )
 
     def test_segments_keep_channels_in_capture_span_and_avoid_dc(self) -> None:
         channels = [
-            {"frequency_hz": 146_520_000},
-            {"frequency_hz": 147_015_000},
-            {"frequency_hz": 154_340_000},
+            {"frequency_hz": 444_440_000},
+            {"frequency_hz": 446_000_000},
+            {"frequency_hz": 464_912_500},
         ]
         segments = group_channels(channels, 1_800_000)
         self.assertEqual(len(segments), 2)
@@ -310,12 +367,12 @@ class VhfFftScannerTests(unittest.TestCase):
                 json.dumps(
                     {
                         "workers": {
-                            "analog_2m": {
-                                "rtl_serial": "00000440",
-                                "audio_udp_port": 23458,
+                            "analog_70cm": {
+                                "rtl_serial": "00000144",
+                                "audio_udp_port": 23459,
                                 "channels": [
                                     {
-                                        "frequency_hz": 154_340_000,
+                                        "frequency_hz": 464_912_500,
                                         "mode": "nfm",
                                         "enabled": True,
                                     }
@@ -326,8 +383,8 @@ class VhfFftScannerTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(Exception, "00000144"):
-                VhfFftScanner(config, config, root / "status.json", True)
+            with self.assertRaisesRegex(Exception, "00000440"):
+                UhfFftScanner(config, config, root / "status.json", True)
 
     def test_status_preserves_dashboard_compatibility_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -338,12 +395,12 @@ class VhfFftScannerTests(unittest.TestCase):
                 json.dumps(
                     {
                         "workers": {
-                            "analog_2m": {
-                                "rtl_serial": "00000144",
-                                "audio_udp_port": 23458,
+                            "analog_70cm": {
+                                "rtl_serial": "00000440",
+                                "audio_udp_port": 23459,
                                 "channels": [
                                     {
-                                        "frequency_hz": 154_340_000,
+                                        "frequency_hz": 464_912_500,
                                         "mode": "nfm",
                                         "enabled": True,
                                     }
@@ -354,13 +411,13 @@ class VhfFftScannerTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            scanner = VhfFftScanner(config, config, status_path, True)
+            scanner = UhfFftScanner(config, config, status_path, True)
             try:
                 scanner.status("fft_scanning")
                 payload = json.loads(status_path.read_text(encoding="utf-8"))
             finally:
                 scanner.close()
-            self.assertEqual(payload["rtl_serial"], "00000144")
+            self.assertEqual(payload["rtl_serial"], "00000440")
             self.assertEqual(payload["channel_count"], 1)
             self.assertEqual(payload["scan_cycles"], 0)
             self.assertEqual(payload["threshold_rms"], 250)
@@ -376,12 +433,12 @@ class VhfFftScannerTests(unittest.TestCase):
                 json.dumps(
                     {
                         "workers": {
-                            "analog_2m": {
-                                "rtl_serial": "00000144",
-                                "audio_udp_port": 23458,
+                            "analog_70cm": {
+                                "rtl_serial": "00000440",
+                                "audio_udp_port": 23459,
                                 "channels": [
                                     {
-                                        "frequency_hz": 154_340_000,
+                                        "frequency_hz": 464_912_500,
                                         "mode": "nfm",
                                         "enabled": True,
                                     }
@@ -392,7 +449,7 @@ class VhfFftScannerTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            scanner = VhfFftScanner(config, config, status_path, True)
+            scanner = UhfFftScanner(config, config, status_path, True)
             scanner.status("smoke_passed")
             scanner.close()
             payload = json.loads(status_path.read_text(encoding="utf-8"))
