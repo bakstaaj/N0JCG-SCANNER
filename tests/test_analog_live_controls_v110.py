@@ -14,7 +14,15 @@ def test_analog_controls_are_runtime_backed_and_always_visible() -> None:
     assert 'path == "/api/analog/control"' in backend
     assert "time.time() + 600.0" in backend
     assert "blocked_frequencies_hz" in backend
+    assert 'action == "clear_lock"' in backend
+    assert "clear_lock_generation" in backend
     assert "analog_channel_suppression" in worker
+    assert "analog_clear_lock_generation" in worker
+    assert 'release_reason="operator_clear_lock"' in worker
+    vhf_worker = Path(
+        "src/pi_p25_scanner/vhf_fft_scanner.py"
+    ).read_text(encoding="utf-8")
+    assert 'release_reason = f"operator_{suppression}"' in vhf_worker
     assert "analog_squelch_offset" in worker
 
     root_position = worker.index(
@@ -27,6 +35,7 @@ def test_analog_controls_are_runtime_backed_and_always_visible() -> None:
 
     assert 'id="analogLiveControls"' in index
     assert 'id="analogSkipBtn"' in index
+    assert 'id="analogClearLockBtn"' in index
     assert 'hidden' not in index.split(
         'id="analogLiveControls"',
         1,

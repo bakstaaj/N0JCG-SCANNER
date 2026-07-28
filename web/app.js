@@ -1149,6 +1149,7 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   const channelActionIds = [
     'analogSkipBtn',
     'analogBlockBtn',
+    'analogClearLockBtn',
   ];
 
   function setButtonsDisabled(ids, disabled) {
@@ -1396,6 +1397,10 @@ function p25RemoveDashboardAutostartTuningRemnants() {
     'click',
     () => analogControlAction('block')
   );
+  field('analogClearLockBtn')?.addEventListener(
+    'click',
+    () => analogControlAction('clear_lock')
+  );
   field('analogClearBlockBtn')?.addEventListener(
     'click',
     () => analogControlAction('clear_blocks')
@@ -1540,12 +1545,14 @@ function p25RemoveDashboardAutostartTuningRemnants() {
     const up = button('analogSquelchUpBtn');
     const skip = button('analogSkipBtn');
     const block = button('analogBlockBtn');
+    const clearLock = button('analogClearLockBtn');
     const clear = button('analogClearBlockBtn');
 
     if (down) down.disabled = !anyAvailable || busy;
     if (up) up.disabled = !anyAvailable || busy;
     if (skip) skip.disabled = !activeRole || busy;
     if (block) block.disabled = !activeRole || busy;
+    if (clearLock) clearLock.disabled = !activeRole || busy;
     if (clear) {
       clear.disabled = !hasSuppressions(
         newControlsPayload
@@ -1579,6 +1586,7 @@ function p25RemoveDashboardAutostartTuningRemnants() {
         'analogSquelchUpBtn',
         'analogSkipBtn',
         'analogBlockBtn',
+        'analogClearLockBtn',
         'analogClearBlockBtn',
       ]) {
         const item = button(id);
@@ -1600,16 +1608,23 @@ function p25RemoveDashboardAutostartTuningRemnants() {
     await refresh();
 
     try {
+      let result = null;
+
       if (
         action === 'skip'
         || action === 'block'
+        || action === 'clear_lock'
       ) {
         if (!activeRole) return;
-        await post(activeRole, action);
+        result = await post(activeRole, action);
       } else if (action === 'clear_blocks') {
-        await Promise.all(
+        const results = await Promise.all(
           roles.map((role) => post(role, action))
         );
+        result = {
+          message: 'Cleared all VHF and UHF skips and blocks',
+          results,
+        };
       } else if (
         action === 'squelch_up'
         || action === 'squelch_down'
@@ -1618,11 +1633,16 @@ function p25RemoveDashboardAutostartTuningRemnants() {
           ? [activeRole]
           : roles;
 
-        await Promise.all(
+        const results = await Promise.all(
           targetRoles.map((role) => post(role, action))
         );
+        result = { results };
       }
 
+      setText(
+        'lastEvent',
+        result?.message || `Analog action: ${action}`
+      );
       await refresh();
     } finally {
       busy = false;
@@ -1635,6 +1655,7 @@ function p25RemoveDashboardAutostartTuningRemnants() {
     analogSquelchUpBtn: 'squelch_up',
     analogSkipBtn: 'skip',
     analogBlockBtn: 'block',
+    analogClearLockBtn: 'clear_lock',
     analogClearBlockBtn: 'clear_blocks',
   };
 
@@ -1656,4 +1677,3 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   refresh();
   window.setInterval(refresh, 500);
 })();
-

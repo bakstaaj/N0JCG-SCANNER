@@ -52,6 +52,20 @@ VHF runtime configuration contains a different serial or audio port.
    measurement dips without fragmenting one transmission into repeated locks;
    ordinary weak candidates retain the 0.45-second hang.
 
+## Live channel controls
+
+- **Skip 10 Min** suppresses the currently locked analog frequency for exactly
+  600 seconds, releases the lock, and then makes the frequency eligible again.
+- **Block Channel** suppresses the currently locked frequency with no expiry and
+  releases the lock. **Clear Blocks** restores all skipped and blocked analog
+  frequencies across VHF and UHF.
+- **Clear Lock** releases the current analog carrier immediately without adding
+  a skip or block, allowing the scanner to resume its normal search.
+
+Skip and block require an identified active lock; a stale last-lock status is
+never used as the target. The backend and both analog workers share the atomic
+`runtime/settings/analog_controls.json` control file.
+
 The runtime channel file is checked between sweeps, so a successful channel
 upload becomes active without restarting the worker.
 

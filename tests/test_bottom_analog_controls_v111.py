@@ -11,14 +11,18 @@ def test_bottom_controls_and_always_enabled_clear() -> None:
     radio_setup_pos = index.index('id="radioSetupScreen"')
 
     assert stats_pos < controls_pos < radio_setup_pos
-    assert "Clear All Blocks" in index
+    assert "Clear Lock" in index
+    assert 'id="analogClearLockBtn"' in index
+    assert "Clear Blocks" in index
     assert 'id="analogClearBlockBtn"' in index
 
     assert "clearAllAnalogBlocks" in app
     assert "analog_2m" in app
     assert "analog_70cm" in app
     assert "clearButton.disabled = !hasAnyBlocksOrSkips" in app
+    assert "analogClearLockBtn: 'clear_lock'" in app
 
     assert "grid-template-columns" in css
+    assert "repeat(4, minmax(0, 1fr))" in css
     assert "min-height: 3.6rem" in css
     assert "width: 100%" in css

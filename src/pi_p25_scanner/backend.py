@@ -1303,7 +1303,11 @@ def _write_analog_controls(payload: dict[str, Any]) -> None:
     temporary.replace(_ANALOG_CONTROL_FILE)
 
 
-def _active_analog_channel(role: str) -> dict[str, Any]:
+def _active_analog_channel(
+    role: str,
+    *,
+    require_frequency: bool = True,
+) -> dict[str, Any]:
     metadata = _ANALOG_DASHBOARD_ROLES.get(role)
     if metadata is None:
         raise ConfigError(f"unsupported analog role: {role}")
@@ -1314,20 +1318,22 @@ def _active_analog_channel(role: str) -> dict[str, Any]:
         / metadata["status_file"]
     )
     payload = json.loads(path.read_text(encoding="utf-8"))
+    state = str(payload.get("state") or "").strip().lower()
+    if state != "locked":
+        raise ConfigError(f"{metadata['label']} is not currently locked")
+
     current = payload.get("current_channel") or {}
-    lock = payload.get("last_lock") or {}
+    frequency = current.get("frequency_hz")
+    name = current.get("name")
 
-    frequency = current.get("frequency_hz") or lock.get("frequency_hz")
-    name = current.get("name") or lock.get("name")
-
-    if not frequency:
+    if require_frequency and not frequency:
         raise ConfigError(
-            f"{metadata['label']} has no identified channel"
+            f"{metadata['label']} lock has no identified frequency"
         )
 
     return {
-        "frequency_hz": int(frequency),
-        "name": str(name or frequency),
+        "frequency_hz": int(frequency) if frequency else None,
+        "name": str(name or frequency or f"{metadata['label']} channel"),
     }
 
 
@@ -1345,11 +1351,17 @@ def _analog_control_action(request: dict[str, Any]) -> dict[str, Any]:
         role_controls.setdefault("blocked_frequencies_hz", [])
         role_controls.setdefault("skip_until_epoch", {})
         role_controls.setdefault("squelch_offset_rms", 0)
+        role_controls.setdefault("clear_lock_generation", 0)
 
         channel = None
         if action in {"skip", "block"}:
             channel = _active_analog_channel(role)
             key = str(channel["frequency_hz"])
+        elif action == "clear_lock":
+            channel = _active_analog_channel(
+                role,
+                require_frequency=False,
+            )
 
         if action == "skip":
             until = time.time() + 600.0
@@ -1372,6 +1384,15 @@ def _analog_control_action(request: dict[str, Any]) -> dict[str, Any]:
                 "message": (
                     f"Blocked {channel['name']} until cleared"
                 )
+            }
+        elif action == "clear_lock":
+            generation = int(
+                role_controls.get("clear_lock_generation") or 0
+            ) + 1
+            role_controls["clear_lock_generation"] = generation
+            result = {
+                "message": f"Cleared lock on {channel['name']}",
+                "clear_lock_generation": generation,
             }
         elif action == "clear_blocks":
             role_controls["blocked_frequencies_hz"] = []

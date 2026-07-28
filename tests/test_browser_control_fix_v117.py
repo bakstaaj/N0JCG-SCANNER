@@ -10,4 +10,4 @@ def test_same_origin_control_override() -> None:
     assert "fetchJson('/api/analog/controls')" in app
     assert "stopImmediatePropagation" in app
     assert "chooseActiveRole" in app
-    assert "1.0.17-browser-control-fix" in html
+    assert "2.0.1-analog-lock-controls" in html

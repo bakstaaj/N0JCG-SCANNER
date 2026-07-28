@@ -82,6 +82,15 @@ def analog_squelch_offset() -> int:
         return 0
 
 
+def analog_clear_lock_generation() -> int:
+    try:
+        return int(
+            analog_role_controls().get("clear_lock_generation") or 0
+        )
+    except (TypeError, ValueError):
+        return 0
+
+
 def atomic_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -1010,13 +1019,29 @@ class VhfFftScanner:
         )
         heartbeat = 0.0
         release_reason: str | None = None
+        clear_lock_generation = analog_clear_lock_generation()
         initially_strong_carrier = initial_carrier.snr_db >= float(
             self.worker.get("strong_carrier_audio_hold_snr_db") or 20.0
         )
         while not self.stop_requested:
             suppression, skip_until = analog_channel_suppression(frequency)
             if suppression:
-                self.status(suppression, channel, skip_until_epoch=skip_until)
+                release_reason = f"operator_{suppression}"
+                self.status(
+                    suppression,
+                    channel,
+                    skip_until_epoch=skip_until,
+                    release_reason=release_reason,
+                )
+                break
+            if analog_clear_lock_generation() != clear_lock_generation:
+                release_reason = "operator_clear_lock"
+                self.status(
+                    "clearing_lock",
+                    channel,
+                    lock_confirmed=True,
+                    release_reason=release_reason,
+                )
                 break
             iq = self.rtl.read_iq(chunk_samples)
             carrier = carrier_metrics(iq, lock_rate, -float(demodulator.tuner_offset_hz))

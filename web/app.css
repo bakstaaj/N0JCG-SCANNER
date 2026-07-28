@@ -721,7 +721,7 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
 
 .analog-channel-action-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.7rem;
   width: 100%;
 }
@@ -743,7 +743,7 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
   }
 
   .analog-channel-action-row {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

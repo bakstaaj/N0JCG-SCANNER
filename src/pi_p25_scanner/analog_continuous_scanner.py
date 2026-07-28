@@ -129,6 +129,15 @@ def analog_squelch_offset(role: str) -> int:
     except (TypeError, ValueError):
         return 0
 
+
+def analog_clear_lock_generation(role: str) -> int:
+    try:
+        return int(
+            analog_role_controls(role).get("clear_lock_generation") or 0
+        )
+    except (TypeError, ValueError):
+        return 0
+
 DEFAULT_CONFIG = ROOT / "runtime/settings/analog_receivers.json"
 TEMPLATE_CONFIG = ROOT / "config/analog_receivers.example.json"
 DEFAULT_STATUS_DIR = ROOT / "runtime/status"
@@ -530,6 +539,7 @@ class ContinuousScanner:
         self.last_active_frames = 0
         demod_buffer = bytearray()
         live_status_at = time.monotonic()
+        clear_lock_generation = analog_clear_lock_generation(self.role)
 
         self.channel_tunes += 1
         self.status("tuning", channel, squelch_rms=threshold)
@@ -560,6 +570,18 @@ class ContinuousScanner:
                         channel,
                         skip_until_epoch=skip_until,
                         control_action=True,
+                    )
+                    return
+                if (
+                    locked
+                    and analog_clear_lock_generation(self.role)
+                    != clear_lock_generation
+                ):
+                    self.status(
+                        "clearing_lock",
+                        channel,
+                        control_action=True,
+                        release_reason="operator_clear_lock",
                     )
                     return
 
