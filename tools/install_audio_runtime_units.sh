@@ -33,6 +33,15 @@ do
     "$SYSTEMD_DIR/$unit"
 done
 
+test -d "$P25_ROOT/src/pi_p25_scanner" \
+  || fail "missing backend package directory: $P25_ROOT/src/pi_p25_scanner"
+
+# The web upload API runs from the P25 backend checkout but must resolve and
+# write the analog runtime configuration under ANALOG_ROOT.
+install -m 0644 \
+  "$REPO_ROOT/src/pi_p25_scanner/analog_channels.py" \
+  "$P25_ROOT/src/pi_p25_scanner/analog_channels.py"
+
 install -m 0644 \
   "$REPO_ROOT/web/audio_arbitrator_live.js" \
   "$P25_ROOT/web/audio_arbitrator_live.js"
@@ -42,12 +51,19 @@ install -m 0644 \
   "$P25_ROOT/web/index.html"
 
 chown pi:pi \
+  "$P25_ROOT/src/pi_p25_scanner/analog_channels.py" \
   "$P25_ROOT/web/audio_arbitrator_live.js" \
   "$P25_ROOT/web/index.html"
 
 rm -rf \
   "$SYSTEMD_DIR/pi-p25-raw-audio-bridge.service.d" \
   "$SYSTEMD_DIR/pi-p25-audio-pool.service.d"
+
+# v1.0.19 used a local override to launch the retired patched worker.
+# Remove only that exact override so the version-controlled base unit starts
+# the clean analog_vhf_worker entry point while preserving other drop-ins.
+rm -f \
+  "$SYSTEMD_DIR/pi-scanner-vhf-worker.service.d/90-persistent-fft.conf"
 
 systemctl daemon-reload
 

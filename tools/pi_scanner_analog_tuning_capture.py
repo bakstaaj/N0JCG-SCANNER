@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = ROOT / "runtime/settings/analog_receivers.json"
 TEMPLATE = ROOT / "config/analog_receivers.example.json"
 
-SERIALS = {"analog_2m": "00000440", "analog_70cm": "00000144"}
+SERIALS = {"analog_2m": "00000144", "analog_70cm": "00000440"}
 RETRY_DELAYS = (0.75, 2.0, 4.0, 7.0, 10.0)
 TRANSIENT = (
     "usb_claim_interface error -6",
@@ -224,8 +224,8 @@ def run(args: argparse.Namespace) -> int:
 
 
 def self_test() -> int:
-    fm = build_command("00000440", {"frequency_hz": 162500000, "mode": "fm"}, 49.6, 0)
-    am = build_command("00000440", {"frequency_hz": 128525000, "mode": "am"}, 49.6, 0)
+    fm = build_command("00000144", {"frequency_hz": 162500000, "mode": "fm"}, 49.6, 0)
+    am = build_command("00000144", {"frequency_hz": 128525000, "mode": "am"}, 49.6, 0)
     assert fm[fm.index("-s") + 1] == "240000"
     assert fm[fm.index("-r") + 1] == "24000"
     assert "deemp" in fm

@@ -6,6 +6,7 @@ from pi_p25_scanner.chirp_csv_import import ChirpCsvError, normalize_chirp_rows
 import csv
 import io
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -13,7 +14,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(
+    os.environ.get("PI_SCANNER_ANALOG_ROOT")
+    or Path(__file__).resolve().parents[2]
+)
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "runtime" / "settings" / "analog_receivers.json"
 DEFAULT_TEMPLATE_PATH = PROJECT_ROOT / "config" / "analog_receivers.example.json"
 MAX_CSV_BYTES = 512 * 1024
@@ -21,14 +25,14 @@ MAX_ROWS = 2000
 
 ROLE_DEFAULTS = {
     "analog_2m": {
-        "enabled": False, "rtl_serial": "00000440", "modulation": "fm",
+        "enabled": False, "rtl_serial": "00000144", "modulation": "fm",
         "gain_db": 40.2, "ppm": 0, "sample_rate_hz": 24000,
         "audio_rate_hz": 8000, "audio_udp_port": 23458, "frame_bytes": 320,
         "dwell_seconds": 1.0, "hang_seconds": 0.9,
         "resume_delay_seconds": 1.2, "squelch_rms": 1800, "channels": [],
     },
     "analog_70cm": {
-        "enabled": False, "rtl_serial": "00000144", "modulation": "fm",
+        "enabled": False, "rtl_serial": "00000440", "modulation": "fm",
         "gain_db": 40.2, "ppm": 0, "sample_rate_hz": 24000,
         "audio_rate_hz": 8000, "audio_udp_port": 23459, "frame_bytes": 320,
         "dwell_seconds": 1.0, "hang_seconds": 0.9,

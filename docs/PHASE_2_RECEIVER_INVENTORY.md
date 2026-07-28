@@ -14,8 +14,8 @@ read-only hardware inventory API/UI.
 | NOAA / airband | 00000162 | Reserved |
 | ADS-B 1090 | 00001090 | Reserved |
 | UAT 978 | 00000978 | Reserved |
-| Analog 2 m | 00000440 | Disabled; Phase 3 target |
-| Analog 70 cm | 00000144 | Disabled; Phase 3 target |
+| Analog 2 m | 00000144 | Disabled; Phase 3 target |
+| Analog 70 cm | 00000440 | Disabled; Phase 3 target |
 
 ## API
 

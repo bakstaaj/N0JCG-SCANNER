@@ -50,6 +50,7 @@ for required in \
   src/pi_p25_scanner/backend.py \
   src/pi_p25_scanner/config_model.py src/pi_p25_scanner/config_store.py \
   src/pi_p25_scanner/decoder_discovery.py \
+  src/pi_p25_scanner/vhf_fft_scanner.py \
   src/pi_p25_scanner/op25_config.py; do
   if [[ -f "$required" ]]; then
     pass "required file exists: $required"
@@ -71,6 +72,7 @@ done
 if command -v python3 >/dev/null 2>&1; then
   while IFS= read -r pyfile; do
     [[ -z "$pyfile" ]] && continue
+    [[ -f "$pyfile" ]] || continue
     if python3 -m py_compile "$pyfile"; then
       pass "python compile valid: $pyfile"
     else

@@ -310,7 +310,6 @@
       "spectrum_minimum_span_hz": 250000,
       "spectrum_segment_timeout_seconds": 8.0,
       "spectrum_capture_seconds": 2.0,
-      "spectrum_disabled_reason": "rtl_power PLL does not lock on receiver serial 00000440",
       "lock_squelch_rms": 900,
       "lock_window_frames": 4,
       "lock_confirm_frames": 2,

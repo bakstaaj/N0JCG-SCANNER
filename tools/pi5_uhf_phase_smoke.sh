@@ -106,11 +106,11 @@ pass "UHF bridge UDP-to-HTTP status path passed"
 cleanup
 BRIDGE_PID=""
 
-if pgrep -af rtl_fm 2>/dev/null | grep -F -- "00000144" >/dev/null; then
-  fail "RTL serial 00000144 is already in use"
+if pgrep -af rtl_fm 2>/dev/null | grep -F -- "00000440" >/dev/null; then
+  fail "UHF RTL serial 00000440 is already in use"
   exit 1
 fi
-pass "RTL serial 00000144 is not already in use"
+pass "UHF RTL serial 00000440 is not already in use"
 
 rm -f "$STATUS_PATH"
 timeout 20 python3 -m pi_p25_scanner.analog_uhf_worker \
@@ -130,7 +130,7 @@ if not path.exists():
 status = json.loads(path.read_text(encoding="utf-8"))
 checks = {
     "state": status.get("state") == "smoke_passed",
-    "serial": status.get("rtl_serial") == "00000144",
+    "serial": status.get("rtl_serial") == "00000440",
     "channels": int(status.get("channel_count") or 0) == 7,
     "bytes": int(status.get("bytes_received") or 0) > 0,
     "frames": int(status.get("frames_received") or 0) > 0,

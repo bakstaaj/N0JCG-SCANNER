@@ -6,7 +6,7 @@ audio path.
 ## Bound hardware
 
 - Role: `analog_2m` (the project's VHF receiver role)
-- RTL-SDR serial: `00000440`
+- RTL-SDR serial: `00000144`
 - Channel source: the 31 enabled VHF rows in the cabin CSV configuration
 - Worker PCM output: `127.0.0.1:23458`
 - Separate browser audio: `http://DEVICE-IP:8073/audio.wav`
@@ -16,15 +16,17 @@ The existing P25 browser stream remains on port 8072.
 
 ## Scanner behavior
 
-The worker invokes `rtl_fm` by serial number, visits enabled channels in
-priority/frequency order, ignores the initial tuner-settle interval, computes
-PCM RMS squelch, holds on active audio, observes the configured reply delay,
-and then resumes scanning. It writes atomic runtime status to
-`runtime/status/analog_2m.json`.
+The worker keeps one `rtl_tcp` process attached by serial number. It groups the
+uploaded VHF channel list into FFT survey segments and evaluates energy only at
+those configured frequencies. A candidate is retuned off-center, checked for
+carrier SNR, frequency error, and real NFM audio activity, then demodulated in
+the worker and forwarded as 8 kHz PCM to the unified audio arbitrator. When the
+carrier or audio ends, the worker returns to FFT survey mode. Noise-only and
+silent carriers are rejected temporarily so scanning can continue. Atomic
+runtime status is written to `runtime/status/analog_2m.json`.
 
-CTCSS and DCS values are preserved as channel metadata in this phase. Tone
-gating is intentionally deferred until basic tuning, squelch, and audio quality
-have passed on the cabin hardware.
+CTCSS and DCS values remain channel metadata. Tone gating is deferred until
+the FFT, NFM audio, and noise-rejection path has passed on the cabin hardware.
 
 ## Safety boundary
 

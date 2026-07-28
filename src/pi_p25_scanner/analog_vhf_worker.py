@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-from .analog_continuous_scanner import main
+"""Stable module entry point for the FFT-directed VHF NFM worker."""
+
+from .vhf_fft_scanner import main
+
 
 if __name__ == "__main__":
-    raise SystemExit(main("analog_2m"))
+    raise SystemExit(main())

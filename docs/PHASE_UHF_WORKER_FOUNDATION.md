@@ -6,7 +6,7 @@ audio path.
 ## Bound hardware
 
 - Role: `analog_70cm` (the project's UHF receiver role)
-- RTL-SDR serial: `00000144`
+- RTL-SDR serial: `00000440`
 - Channel source: the 7 enabled UHF rows in the cabin CSV configuration
 - Worker PCM output: `127.0.0.1:23459`
 - Separate browser audio: `http://DEVICE-IP:8074/audio.wav`
