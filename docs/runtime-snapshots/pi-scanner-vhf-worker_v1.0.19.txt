@@ -1,0 +1,34 @@
+# /etc/systemd/system/pi-scanner-vhf-worker.service
+[Unit]
+Description=PI-SCANNER Isolated VHF Analog Scanner
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/PI-SCANNER
+Environment=PYTHONPATH=/home/pi/PI-SCANNER/src
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m pi_p25_scanner.analog_vhf_worker --config /home/pi/PI-SCANNER/runtime/settings/analog_receivers.json --status-path /home/pi/PI-SCANNER/runtime/status/analog_2m.json
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
+
+# /etc/systemd/system/pi-scanner-vhf-worker.service.d/10-usbfs-memory.conf
+[Unit]
+Requires=pi-scanner-usbfs-memory.service
+After=pi-scanner-usbfs-memory.service
+
+# /etc/systemd/system/pi-scanner-vhf-worker.service.d/90-persistent-fft.conf
+[Service]
+ExecStart=
+ExecStart=/usr/bin/python3 /home/pi/PI-SCANNER/src/pi_p25_scanner/persistent_vhf_fft_scanner.py
+Environment=PI_SCANNER_ROOT=/home/pi/PI-SCANNER
+Restart=always
+RestartSec=2

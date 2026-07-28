@@ -1,0 +1,1 @@
+{ path=/usr/bin/python3 ; argv[]=/usr/bin/python3 /home/pi/PI-SCANNER/src/pi_p25_scanner/persistent_vhf_fft_scanner.py ; ignore_errors=no ; start_time=[Mon 2026-07-27 21:35:50 MST] ; stop_time=[n/a] ; pid=585022 ; code=(null) ; status=0/0 }

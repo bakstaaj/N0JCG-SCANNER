@@ -1,0 +1,19 @@
+{
+  "audio_frame_bytes": 320,
+  "audio_sample_rate_hz": 8000,
+  "current_channel": null,
+  "frames_forwarded": 0,
+  "last_candidate": null,
+  "lock_count": 0,
+  "receiver_serial": "00000144",
+  "search_mode": "persistent_fft_rtl_tcp",
+  "segment_count": 5,
+  "spectrum_failures": 0,
+  "spectrum_sweeps": 0,
+  "started_epoch": 1785213338.4278288,
+  "state": "stopped",
+  "udp_target": "127.0.0.1:23458",
+  "updated_epoch": 1785213348.444205,
+  "voice_demodulator": "separate_vhf_rtl_fm_dc_deemp",
+  "worker": "analog_2m"
+}
