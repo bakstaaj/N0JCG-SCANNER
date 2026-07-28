@@ -988,13 +988,38 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   let decoderRunning = false;
   let activeSource = null;
   let audioReachable = false;
+  let audioStatus = null;
 
   setBadge = function accurateStatusBadgeGuard(id, text, kind) {
     if (id === 'connectionStatus' || id === 'stateBadge') return;
     originalSetBadge(id, text, kind);
   };
 
+  function renderAudioArbitratorStatus() {
+    const muteButton = field('arbitratorMuteBtn');
+    const muted = muteButton?.getAttribute('aria-pressed') === 'true';
+    let text;
+
+    if (!audioReachable) {
+      text = 'Offline';
+    } else if (muted) {
+      text = `Muted · ${activeSource || 'Idle'}`;
+    } else if (activeSource) {
+      text = audioStatus?.playback_started
+        ? `${activeSource} Playing`
+        : `${activeSource} Buffering`;
+    } else if (Number(audioStatus?.clients || 0) > 0) {
+      text = 'Idle · Connected';
+    } else {
+      text = 'Idle · No Listener';
+    }
+
+    browserAudioLastEvent = text;
+    setText('browserAudioLastEvent', text);
+  }
+
   function renderAccurateStatus() {
+    renderAudioArbitratorStatus();
     if (!backendReachable) {
       originalSetBadge('connectionStatus', 'Offline', 'bad');
       originalSetBadge('stateBadge', 'Unavailable', 'bad');
@@ -1033,6 +1058,7 @@ function p25RemoveDashboardAutostartTuningRemnants() {
       decoderRunning = false;
       activeSource = null;
       audioReachable = false;
+      audioStatus = null;
       renderAccurateStatus();
       return;
     }
@@ -1042,9 +1068,11 @@ function p25RemoveDashboardAutostartTuningRemnants() {
       if (!audioResponse.ok) throw new Error(`audio HTTP ${audioResponse.status}`);
       const audio = await audioResponse.json();
       audioReachable = Boolean(audio?.ok);
+      audioStatus = audioReachable ? audio : null;
       activeSource = audioReachable && audio.active_source ? String(audio.active_source).toUpperCase() : null;
     } catch (_error) {
       audioReachable = false;
+      audioStatus = null;
       activeSource = null;
     }
     renderAccurateStatus();
