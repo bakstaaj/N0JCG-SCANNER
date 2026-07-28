@@ -413,6 +413,31 @@ def call_audio_is_present(
     )
 
 
+def audio_chunk_should_forward(
+    carrier: CarrierMetrics,
+    audio: AudioMetrics,
+    minimum_carrier_snr_db: float,
+) -> bool:
+    """Forward only a voice-like chunk that still has carrier evidence."""
+    return (
+        carrier.snr_db >= minimum_carrier_snr_db
+        and audio.active
+    )
+
+
+def fade_pcm_tail(pcm: np.ndarray, fade_samples: int = 160) -> np.ndarray:
+    """Return a copy with a linear fade on the final samples."""
+    samples = np.asarray(pcm, dtype="<i2").copy()
+    count = min(max(int(fade_samples), 0), len(samples))
+    if count <= 0:
+        return samples
+    gain = np.linspace(1.0, 0.0, count, endpoint=True)
+    samples[-count:] = np.rint(
+        samples[-count:].astype(np.float64) * gain
+    ).astype("<i2")
+    return samples
+
+
 def priority_candidates(
     candidates: list[SpectrumCandidate],
     minimum_snr_db: float = 25.0,
@@ -980,14 +1005,20 @@ class VhfFftScanner:
         last_audio = started
         pending = bytearray()
         recent_pcm: deque[np.ndarray] = deque(maxlen=4)
+        pending_voice_pcm: np.ndarray | None = None
+        tail_chunks_suppressed = 0
         recorded_pcm: list[np.ndarray] = []
         maximum_recording_samples = 8_000 * int(
             self.worker.get("diagnostic_last_call_max_seconds") or 30
         )
-        for pcm in prebuffer:
+
+        def forward_pcm(pcm: np.ndarray) -> None:
             if sum(len(item) for item in recorded_pcm) < maximum_recording_samples:
-                recorded_pcm.append(pcm.copy())
+                recorded_pcm.append(np.asarray(pcm, dtype="<i2").copy())
             self._send_pcm(pcm, pending)
+
+        for pcm in prebuffer:
+            forward_pcm(pcm)
         self.lock_count += 1
         self.last_lock = {
             "frequency_hz": frequency,
@@ -1046,15 +1077,26 @@ class VhfFftScanner:
             iq = self.rtl.read_iq(chunk_samples)
             carrier = carrier_metrics(iq, lock_rate, -float(demodulator.tuner_offset_hz))
             _, pcm = demodulator.process(iq)
-            if sum(len(item) for item in recorded_pcm) < maximum_recording_samples:
-                recorded_pcm.append(pcm.copy())
             recent_pcm.append(pcm)
             combined = np.concatenate(tuple(recent_pcm))
+            minimum_audio_rms = self._minimum_audio_rms(channel)
+            maximum_flatness = float(
+                self.worker.get("audio_noise_max_flatness") or 0.45
+            )
+            minimum_voice_ratio = float(
+                self.worker.get("audio_min_voice_band_ratio") or 0.85
+            )
             audio = audio_metrics(
                 combined,
-                minimum_rms=self._minimum_audio_rms(channel),
-                maximum_flatness=float(self.worker.get("audio_noise_max_flatness") or 0.45),
-                minimum_voice_ratio=float(self.worker.get("audio_min_voice_band_ratio") or 0.85),
+                minimum_rms=minimum_audio_rms,
+                maximum_flatness=maximum_flatness,
+                minimum_voice_ratio=minimum_voice_ratio,
+            )
+            forward_audio = audio_metrics(
+                pcm,
+                minimum_rms=minimum_audio_rms,
+                maximum_flatness=maximum_flatness,
+                minimum_voice_ratio=minimum_voice_ratio,
             )
             now = time.monotonic()
             if carrier.snr_db >= carrier_release_snr:
@@ -1062,7 +1104,7 @@ class VhfFftScanner:
             if call_audio_is_present(
                 carrier,
                 audio,
-                self._minimum_audio_rms(channel),
+                minimum_audio_rms,
                 (
                     carrier_release_snr
                     if initially_strong_carrier
@@ -1072,7 +1114,28 @@ class VhfFftScanner:
                 ),
             ):
                 last_audio = now
-            self._send_pcm(pcm, pending)
+            if audio_chunk_should_forward(
+                carrier,
+                forward_audio,
+                carrier_release_snr,
+            ):
+                if pending_voice_pcm is not None:
+                    forward_pcm(pending_voice_pcm)
+                pending_voice_pcm = pcm.copy()
+            else:
+                if pending_voice_pcm is not None:
+                    fade_samples = round(
+                        8_000
+                        * float(
+                            self.worker.get("audio_tail_fade_ms") or 20.0
+                        )
+                        / 1_000.0
+                    )
+                    forward_pcm(
+                        fade_pcm_tail(pending_voice_pcm, fade_samples)
+                    )
+                    pending_voice_pcm = None
+                tail_chunks_suppressed += 1
             release_reason = None
             if now - last_carrier >= carrier_hang:
                 release_reason = "carrier_ended"
@@ -1091,12 +1154,21 @@ class VhfFftScanner:
                     frequency_error_hz=carrier.frequency_error_hz,
                     rms=audio.rms,
                     audio_metrics=asdict(audio),
+                    forward_audio_metrics=asdict(forward_audio),
+                    tail_chunks_suppressed=tail_chunks_suppressed,
                     lock_elapsed_seconds=round(now - started, 2),
                     release_reason=release_reason,
                 )
                 heartbeat = now + 0.25
             if release_reason:
                 break
+        if pending_voice_pcm is not None:
+            fade_samples = round(
+                8_000
+                * float(self.worker.get("audio_tail_fade_ms") or 20.0)
+                / 1_000.0
+            )
+            forward_pcm(fade_pcm_tail(pending_voice_pcm, fade_samples))
         self.cooldown[frequency] = time.monotonic() + float(
             self.worker.get("post_call_cooldown_seconds") or 0.35
         )
@@ -1110,6 +1182,7 @@ class VhfFftScanner:
         self.last_lock["recording_path"] = str(recording)
         self.last_lock["recording_seconds"] = round(len(samples) / 8_000.0, 3)
         self.last_lock["release_reason"] = release_reason or "scanner_stopped"
+        self.last_lock["tail_chunks_suppressed"] = tail_chunks_suppressed
         self.last_lock["lock_elapsed_seconds"] = round(time.monotonic() - started, 3)
 
     def run(self, maximum_seconds: float | None = None) -> int:

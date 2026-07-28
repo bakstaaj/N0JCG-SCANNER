@@ -52,6 +52,13 @@ VHF runtime configuration contains a different serial or audio port.
    measurement dips without fragmenting one transmission into repeated locks;
    ordinary weak candidates retain the 0.45-second hang.
 
+The receive path keeps one 100 ms voice chunk pending. A chunk is forwarded
+only while both live-carrier and voice-like audio evidence remain present. When
+the next chunk is static or the carrier ends, the pending voice chunk receives
+a 20 ms fade and the noise-only chunk is discarded. The longer combined audio
+window still controls call hold, so tail cleanup does not shorten the carrier
+lock or fragment a transmission.
+
 ## Live channel controls
 
 - **Skip 10 Min** suppresses the currently locked analog frequency for exactly

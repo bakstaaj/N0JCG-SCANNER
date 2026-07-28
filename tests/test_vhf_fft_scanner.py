@@ -18,12 +18,14 @@ from pi_p25_scanner.vhf_fft_scanner import (
     REQUIRED_SERIAL,
     VhfFftScanner,
     audio_metrics,
+    audio_chunk_should_forward,
     candidate_validation_passes,
     candidate_is_available,
     call_audio_is_present,
     carrier_release_hang_seconds,
     cooldown_allows_candidate,
     enabled_vhf_channels,
+    fade_pcm_tail,
     group_channels,
     segment_center_hz,
     signal_rise_score,
@@ -36,6 +38,39 @@ from pi_p25_scanner import vhf_fft_scanner
 
 
 class VhfFftScannerTests(unittest.TestCase):
+    def test_tail_gate_requires_voice_and_live_carrier(self) -> None:
+        voice = AudioMetrics(
+            rms=2_000,
+            rms_dbfs=-24.0,
+            spectral_flatness=0.2,
+            voice_band_ratio=0.9,
+            active=True,
+        )
+        static = AudioMetrics(
+            rms=4_000,
+            rms_dbfs=-18.0,
+            spectral_flatness=0.9,
+            voice_band_ratio=0.9,
+            active=False,
+        )
+        carrier = CarrierMetrics(30.0, 0.0, 0.0)
+        ended_carrier = CarrierMetrics(2.0, 0.0, 0.0)
+
+        self.assertTrue(audio_chunk_should_forward(carrier, voice, 6.0))
+        self.assertFalse(audio_chunk_should_forward(carrier, static, 6.0))
+        self.assertFalse(
+            audio_chunk_should_forward(ended_carrier, voice, 6.0)
+        )
+
+    def test_tail_fade_ends_at_zero_without_mutating_input(self) -> None:
+        original = np.full(800, 10_000, dtype="<i2")
+        faded = fade_pcm_tail(original, 160)
+
+        self.assertTrue(np.all(original == 10_000))
+        self.assertTrue(np.all(faded[:-160] == 10_000))
+        self.assertEqual(int(faded[-1]), 0)
+        self.assertLess(abs(int(faded[-40])), abs(int(faded[-120])))
+
     def test_receiver_serial_contract_is_not_reversed(self) -> None:
         self.assertEqual(REQUIRED_SERIAL, "00000144")
         self.assertEqual(ROLE_DEFAULTS["analog_2m"]["rtl_serial"], "00000144")

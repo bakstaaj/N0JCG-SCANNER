@@ -9,6 +9,7 @@ ANALOG_ROOT="${ANALOG_ROOT:-/home/pi/PI-SCANNER}"
 P25_ROOT="${P25_ROOT:-/home/pi/PI-P25-SCANNER}"
 REMOTE_ARCHIVE="/tmp/pi-scanner-vhf-fft-deploy.tar.gz"
 LOCAL_ARCHIVE="${TMPDIR:-/tmp}/pi-scanner-vhf-fft-deploy.tar.gz"
+PYTHON_BIN="${PYTHON_BIN:-/ucrt64/bin/python.exe}"
 PASS_COUNT=0
 FAIL_COUNT=0
 
@@ -39,18 +40,20 @@ set +a
 : "${PI_PASSWORD:?PI_PASSWORD missing from .env}"
 export SSHPASS="$PI_PASSWORD"
 
-for command_name in sshpass ssh scp tar python3; do
+for command_name in sshpass ssh scp tar; do
   command -v "$command_name" >/dev/null 2>&1 \
     || { fail "missing local command: $command_name"; exit 1; }
 done
+[[ -x "$PYTHON_BIN" ]] \
+  || { fail "missing UCRT64 Python: $PYTHON_BIN"; exit 1; }
 pass "local deployment commands available"
 
 cd "$ROOT"
 export PYTHONPATH="$ROOT/src"
 
-python3 -m pi_p25_scanner.analog_vhf_worker --self-test >/dev/null
-python3 -m unittest discover -s tests -p 'test_vhf_fft_scanner.py' >/dev/null
-python3 -m py_compile \
+"$PYTHON_BIN" -m pi_p25_scanner.analog_vhf_worker --self-test >/dev/null
+"$PYTHON_BIN" -m unittest discover -s tests -p 'test_vhf_fft_scanner.py' >/dev/null
+"$PYTHON_BIN" -m py_compile \
   src/pi_p25_scanner/vhf_fft_scanner.py \
   src/pi_p25_scanner/analog_vhf_worker.py \
   src/pi_p25_scanner/analog_channels.py

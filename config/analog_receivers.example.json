@@ -15,6 +15,7 @@
       "hang_seconds": 0.9,
       "resume_delay_seconds": 1.2,
       "squelch_rms": 1800,
+      "audio_tail_fade_ms": 20,
       "channels": [
         {
           "name": "2 m National Simplex",
