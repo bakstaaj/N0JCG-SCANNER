@@ -11,7 +11,6 @@ receiver,name,frequency_mhz,mode,ctcss_hz,dcs_code,enabled,priority
 2m,Mtn Comuni VFD,154.9875,FM,167.9,,TRUE,0
 2m,Four Mile Fire,155.13,FM,107.2,,TRUE,0
 2m,Teller SAR,155.175,FM,179.9,,TRUE,0
-2m,Teller Sheriff 1,155.58,FM,107.2,,TRUE,0
 2m,Teller Shrf Tac,155.64,FM,131.8,,TRUE,0
 2m,Teller Shrf c2c,155.91,FM,131.8,,TRUE,0
 2m,Divide Fire,155.985,FM,131.8,,TRUE,0

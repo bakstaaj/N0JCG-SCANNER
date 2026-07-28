@@ -11,7 +11,6 @@ Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPola
 9,Mtn Comuni VFD,154.987500,off,0.000000,TSQL,167.9,167.9,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
 10,Four Mile Fire,155.130000,off,0.000000,TSQL,107.2,107.2,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
 11,Teller SAR,155.175000,off,0.000000,TSQL,179.9,179.9,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
-12,Teller Sheriff 1,155.580000,off,0.000000,TSQL,107.2,107.2,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
 13,Teller Shrf Tac,155.640000,off,0.000000,TSQL,131.8,131.8,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
 14,Teller Shrf c2c,155.910000,off,0.000000,TSQL,131.8,131.8,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,
 15,Divide Fire,155.985000,off,0.000000,TSQL,131.8,131.8,023,NN,023,Tone->Tone,NFM,5.00,,,Receiver: 2m,,,,

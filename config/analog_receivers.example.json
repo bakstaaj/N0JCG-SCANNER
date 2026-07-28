@@ -111,15 +111,6 @@
           "ctcss_hz": 179.9
         },
         {
-          "name": "Teller Sheriff 1",
-          "frequency_hz": 155580000,
-          "mode": "fm",
-          "enabled": true,
-          "priority": 0,
-          "squelch_rms": 900,
-          "ctcss_hz": 107.2
-        },
-        {
           "name": "Teller Shrf Tac",
           "frequency_hz": 155640000,
           "mode": "fm",
