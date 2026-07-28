@@ -89,6 +89,25 @@ def test_voice_call_counts_again_after_quiet_gap() -> None:
     assert tracker.snapshot()["distinct_voice_calls"] == 2
 
 
+def test_distinct_voice_calls_survive_tracker_and_scanner_restart(tmp_path) -> None:
+    state_path = tmp_path / "runtime_activity.json"
+    update = RuntimeStatusUpdate(
+        line="voice update: tg(4540), freq(853.300000)",
+        tgid=4540,
+        voice_frequency_hz=853_300_000,
+        voice_call=True,
+    )
+    tracker = RuntimeActivityTracker(state_path=state_path)
+    tracker.record(update)
+
+    restarted = RuntimeActivityTracker(state_path=state_path)
+    assert restarted.snapshot()["distinct_voice_calls"] == 1
+
+    snapshot = restarted.reset(preserve_distinct_voice_calls=True)
+    assert snapshot["distinct_voice_calls"] == 1
+    assert snapshot["voice_call_events"] == 0
+
+
 def test_different_voice_channel_counts_immediately() -> None:
     tracker = RuntimeActivityTracker()
     first = RuntimeStatusUpdate(

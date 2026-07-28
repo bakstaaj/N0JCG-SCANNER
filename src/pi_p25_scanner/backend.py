@@ -120,6 +120,12 @@ OP25_HTTP_PORT_RE = re.compile(r"http:(?:\[[^\]]+\]|[^:\s]+):(?P<port>\d{1,5})")
 OP25_AUDIO_UDP_HOST = "127.0.0.1"
 OP25_AUDIO_UDP_PORT = int(os.environ.get("P25_SCANNER_AUDIO_UDP_PORT", "23456"))
 AUDIO_BRIDGE_PORT = int(os.environ.get("P25_SCANNER_AUDIO_BRIDGE_PORT", "8072"))
+ACTIVITY_STATE_PATH = Path(
+    os.environ.get(
+        "P25_SCANNER_ACTIVITY_STATE",
+        str(PROJECT_ROOT / "runtime" / "settings" / "runtime_activity.json"),
+    )
+)
 
 
 def iter_status_strings(value: Any):
@@ -271,7 +277,7 @@ class ScannerManager:
         self.process: subprocess.Popen[str] | None = None
         self.log_lines: deque[str] = deque(maxlen=LOG_TAIL_LIMIT)
         self.runtime_parser = RuntimeStatusParser()
-        self.activity_tracker = RuntimeActivityTracker()
+        self.activity_tracker = RuntimeActivityTracker(state_path=ACTIVITY_STATE_PATH)
         self.talkgroup_labels: dict[int, str] = {}
         self.blocked_talkgroup_ids: set[int] = set()
         self._display_suppressed_tgid_until: dict[int, float] = {}
@@ -766,7 +772,9 @@ class ScannerManager:
             return self.status_payload(), HTTPStatus.ACCEPTED
 
         with self.lock:
-            self.status.activity_summary = self.activity_tracker.reset()
+            self.status.activity_summary = self.activity_tracker.reset(
+                preserve_distinct_voice_calls=True
+            )
             self._set_event("Runtime activity counters reset for scanner start")
 
         try:

@@ -7,10 +7,13 @@ or decrypt encrypted audio.
 
 from __future__ import annotations
 
+import json
+import os
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 if __package__ in (None, ""):
@@ -28,6 +31,7 @@ VOICE_CALL_DEDUP_SECONDS = 2.5
 class RuntimeActivityTracker:
     """Track lightweight activity counters for the current backend process."""
 
+    state_path: Path | None = None
     started_utc: float = field(default_factory=time.time)
     updated_utc: float = field(default_factory=time.time)
     parsed_status_lines: int = 0
@@ -65,7 +69,47 @@ class RuntimeActivityTracker:
         compare=False,
     )
 
-    def reset(self) -> dict[str, Any]:
+    def __post_init__(self) -> None:
+        if self.state_path is None:
+            return
+        self.state_path = Path(self.state_path)
+        try:
+            payload = json.loads(self.state_path.read_text(encoding="utf-8"))
+            saved_calls = int(payload.get("distinct_voice_calls", 0))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return
+        self.distinct_voice_calls = max(0, saved_calls)
+
+    def _persist_distinct_voice_calls_unlocked(self) -> None:
+        if self.state_path is None:
+            return
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.state_path.with_name(
+                f".{self.state_path.name}.{os.getpid()}.tmp"
+            )
+            temporary.write_text(
+                json.dumps(
+                    {
+                        "distinct_voice_calls": self.distinct_voice_calls,
+                        "updated_utc": self.updated_utc,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            os.replace(temporary, self.state_path)
+        except OSError:
+            # Counter persistence must never interrupt live scanner processing.
+            return
+
+    def reset(
+        self,
+        *,
+        preserve_distinct_voice_calls: bool = False,
+    ) -> dict[str, Any]:
         """Reset counters and return a fresh snapshot."""
 
         with self._lock:
@@ -76,7 +120,8 @@ class RuntimeActivityTracker:
             self.voice_frequency_updates = 0
             self.talkgroup_updates = 0
             self.voice_call_events = 0
-            self.distinct_voice_calls = 0
+            if not preserve_distinct_voice_calls:
+                self.distinct_voice_calls = 0
             self.encrypted_events = 0
             self.muted_events = 0
             self.clear_voice_events = 0
@@ -85,6 +130,7 @@ class RuntimeActivityTracker:
             self.unique_tgids.clear()
             self.unique_tgid_order.clear()
             self.recent_events.clear()
+            self._persist_distinct_voice_calls_unlocked()
             return self._snapshot_unlocked()
 
     def _record_unique_tgid(self, tgid: int) -> None:
@@ -147,6 +193,7 @@ class RuntimeActivityTracker:
                     > VOICE_CALL_DEDUP_SECONDS
                 ):
                     self.distinct_voice_calls += 1
+                    self._persist_distinct_voice_calls_unlocked()
 
                 self._last_voice_call_signature = signature
                 self._last_voice_call_utc = self.updated_utc
