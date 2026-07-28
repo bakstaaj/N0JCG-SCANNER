@@ -34,6 +34,7 @@ if __package__ in (None, ""):
         list_named_configs,
         load_active_project_config,
         load_named_config as store_load_named_config,
+        read_named_config_bundle,
         read_active_config_payload,
         save_named_config as store_save_named_config,
         validate_config_payload,
@@ -49,6 +50,10 @@ if __package__ in (None, ""):
     from pi_p25_scanner.runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from pi_p25_scanner.runtime_activity import RuntimeActivityTracker
     from pi_p25_scanner.p25_csv_import import P25CsvError, import_p25_csv_request
+    from pi_p25_scanner.csv_profile_tools import (
+        analog_channels_to_chirp_csv,
+        p25_config_to_csv,
+    )
     from pi_p25_scanner.receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
     try:
         from pi_p25_scanner.radioreference_import import (
@@ -73,6 +78,7 @@ else:
         list_named_configs,
         load_active_project_config,
         load_named_config as store_load_named_config,
+        read_named_config_bundle,
         read_active_config_payload,
         save_named_config as store_save_named_config,
         validate_config_payload,
@@ -88,6 +94,7 @@ else:
     from .runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from .runtime_activity import RuntimeActivityTracker
     from .p25_csv_import import P25CsvError, import_p25_csv_request
+    from .csv_profile_tools import analog_channels_to_chirp_csv, p25_config_to_csv
     from .receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
     try:
         from .radioreference_import import (
@@ -614,6 +621,36 @@ class ScannerManager:
         with self.lock:
             self._set_event(f"Deleted named config: {result.get('id', config_id)}")
         return {"ok": True, **result, "named_configs": self.named_configs_payload(), "status": self.status_payload()}
+
+    def export_named_config(self, request: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(request, dict):
+            raise ConfigError("named config export payload must be an object")
+        config_id = str(
+            request.get("name")
+            or request.get("id")
+            or request.get("config_id")
+            or request.get("slug")
+            or ""
+        ).strip()
+        kind = str(request.get("kind") or "").strip().lower()
+        if kind not in {"analog", "p25"}:
+            raise ConfigError("named config export kind must be analog or p25")
+        bundle = read_named_config_bundle(config_id)
+        slug = str(bundle["id"])
+        if kind == "analog":
+            csv_text = analog_channels_to_chirp_csv(bundle["analog_channels"])
+            filename = f"{slug}_analog_chirp.csv"
+        else:
+            csv_text = p25_config_to_csv(bundle["config"])
+            filename = f"{slug}_p25.csv"
+        return {
+            "ok": True,
+            "name": bundle["name"],
+            "id": slug,
+            "kind": kind,
+            "filename": filename,
+            "csv_text": csv_text,
+        }
 
     def _reader_thread(self, process: subprocess.Popen[str]) -> None:
         assert process.stdout is not None
@@ -1589,6 +1626,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             if path in ("/api/config/named/delete", "/api/config/delete-named"):
                 self._send_json(MANAGER.delete_named_config(self._read_json()), HTTPStatus.ACCEPTED)
+                return
+            if path == "/api/config/named/export":
+                self._send_json(MANAGER.export_named_config(self._read_json()))
                 return
             if path == "/api/radioreference/save-credentials":
                 if save_radioreference_credentials is None:

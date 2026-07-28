@@ -149,7 +149,7 @@ def write_runtime_config(payload: dict[str, Any], backup: bool = True) -> dict[s
     RUNTIME_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     backup_path = None
     if backup and RUNTIME_CONFIG_PATH.exists():
-        backup_dir = PROJECT_ROOT / "runtime" / "settings" / "backups"
+        backup_dir = RUNTIME_CONFIG_PATH.parent / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         backup_path = backup_dir / f"p25_systems_{stamp}.json"
@@ -186,6 +186,72 @@ def _unwrap_named_payload(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]
     return "", payload
 
 
+def _normalized_analog_channels(value: Any) -> dict[str, list[dict[str, Any]]]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, list[dict[str, Any]]] = {}
+    for role in ("analog_2m", "analog_70cm"):
+        channels = value.get(role)
+        if not isinstance(channels, list):
+            continue
+        result[role] = [dict(item) for item in channels if isinstance(item, dict)]
+    return result
+
+
+def _current_analog_channels() -> dict[str, list[dict[str, Any]]]:
+    from . import analog_channels
+
+    config = analog_channels.load_config(
+        analog_channels.DEFAULT_CONFIG_PATH,
+        analog_channels.DEFAULT_TEMPLATE_PATH,
+    )
+    workers = config.get("workers") if isinstance(config, dict) else {}
+    return _normalized_analog_channels(
+        {
+            role: (workers.get(role) or {}).get("channels", [])
+            for role in ("analog_2m", "analog_70cm")
+        }
+    )
+
+
+def _apply_analog_channels(
+    channels_by_role: dict[str, list[dict[str, Any]]],
+    profile_name: str,
+) -> dict[str, Any]:
+    from . import analog_channels
+
+    config = analog_channels.load_config(
+        analog_channels.DEFAULT_CONFIG_PATH,
+        analog_channels.DEFAULT_TEMPLATE_PATH,
+    )
+    workers = config["workers"]
+    for role, channels in channels_by_role.items():
+        if role not in workers:
+            continue
+        workers[role]["channels"] = json.loads(json.dumps(channels))
+        workers[role]["enabled"] = bool(channels)
+    config["source"] = "named_profile"
+    config["last_import"] = {
+        "filename": profile_name,
+        "imported_utc": time.time(),
+        "replace_mode": "named_profile",
+        "row_count": sum(len(items) for items in channels_by_role.values()),
+        "roles": sorted(channels_by_role),
+    }
+    backup = analog_channels.write_config_payload(
+        config,
+        analog_channels.DEFAULT_CONFIG_PATH,
+    )
+    return {
+        "applied": True,
+        "backup_path": str(backup) if backup else None,
+        "channel_counts": {
+            role: len((workers.get(role) or {}).get("channels", []))
+            for role in ("analog_2m", "analog_70cm")
+        },
+    }
+
+
 def named_config_count() -> int:
     if not NAMED_CONFIG_DIR.exists():
         return 0
@@ -209,6 +275,10 @@ def list_named_configs(include_invalid: bool = False) -> dict[str, Any]:
             stored_name, config_payload = _unwrap_named_payload(stored)
             item["name"] = stored_name or path.stem
             item["validation"] = validate_config_payload(config_payload)
+            analog = _normalized_analog_channels(stored.get("analog_channels"))
+            item["analog_channel_counts"] = {
+                role: len(channels) for role, channels in analog.items()
+            }
             item["valid"] = True
         except Exception as exc:
             item["error"] = str(exc)
@@ -232,9 +302,25 @@ def save_named_config(name: str, payload: dict[str, Any] | None = None) -> dict[
         "id": slug,
         "saved_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "config": payload,
+        "analog_channels": _current_analog_channels(),
     }
+    backup_path = None
+    if path.exists():
+        backup_dir = NAMED_CONFIG_DIR / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        backup_path = backup_dir / f"{path.stem}_{stamp}.json"
+        shutil.copy2(path, backup_path)
     path.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
-    return {"ok": True, "id": slug, "slug": slug, "name": body["name"], "path": str(path), "validation": validation}
+    return {
+        "ok": True,
+        "id": slug,
+        "slug": slug,
+        "name": body["name"],
+        "path": str(path),
+        "backup_path": str(backup_path) if backup_path else None,
+        "validation": validation,
+    }
 
 
 def load_named_config(name_or_id: str, apply_to_runtime: bool = True, backup: bool = True) -> dict[str, Any]:
@@ -252,12 +338,46 @@ def load_named_config(name_or_id: str, apply_to_runtime: bool = True, backup: bo
     }
     if apply_to_runtime:
         result["applied"] = write_runtime_config(config_payload, backup=backup)
+        analog = _normalized_analog_channels(stored.get("analog_channels"))
+        if analog:
+            result["analog"] = _apply_analog_channels(
+                analog,
+                stored_name or path.stem,
+            )
     return result
+
+
+def read_named_config_bundle(name_or_id: str) -> dict[str, Any]:
+    """Return one validated named profile for an explicit export action."""
+
+    path = _named_config_path(name_or_id)
+    stored = read_json_file(path)
+    stored_name, config_payload = _unwrap_named_payload(stored)
+    validate_config_payload(config_payload)
+    return {
+        "id": path.stem,
+        "name": stored_name or path.stem,
+        "config": config_payload,
+        "analog_channels": _normalized_analog_channels(
+            stored.get("analog_channels")
+        ),
+    }
 
 
 def delete_named_config(name_or_id: str) -> dict[str, Any]:
     path = _named_config_path(name_or_id)
     if not path.exists():
         raise ConfigError(f"named config not found: {name_or_id}")
-    path.unlink()
-    return {"ok": True, "id": path.stem, "slug": path.stem, "deleted": True, "path": str(path)}
+    backup_dir = NAMED_CONFIG_DIR / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    recoverable_path = backup_dir / f"{path.stem}_deleted_{stamp}.json"
+    shutil.move(path, recoverable_path)
+    return {
+        "ok": True,
+        "id": path.stem,
+        "slug": path.stem,
+        "deleted": True,
+        "path": str(path),
+        "recoverable_path": str(recoverable_path),
+    }

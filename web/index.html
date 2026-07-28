@@ -102,65 +102,54 @@
 
       <section id="radioSetupScreen" class="screen" aria-label="radio setup">
         <div class="screen-title">
-          <h1>Radio Setup</h1>
-          <p>One workflow: choose a saved profile or import a RadioReference system/site, filter talkgroups, calibrate if needed, then save as a named profile.</p>
+          <h1>Radio Profiles</h1>
+          <p>Select a complete saved profile, or upload standard CSV files to create a new one.</p>
         </div>
 
-        <section class="rr-panel" data-v05d-section="profiles">
-          <div class="section-row"><div><strong>1. Saved Profiles</strong><p>Reload a known-good profile or save the current active setup for future use.</p></div><span id="profileStatusBadge" class="pill warn">Profiles</span></div>
-          <div class="wizard-grid">
+        <section class="profile-panel">
+          <div class="section-row"><div><strong>Saved Profiles</strong><p>Loading a profile restores its P25 systems and analog VHF/UHF channel lists.</p></div><span id="profileStatusBadge" class="pill warn">Profiles</span></div>
+          <div class="profile-fields">
             <label>Saved Profile<select id="profileSelect"></select></label>
-            <label>Profile Name<input id="profileName" type="text" placeholder="TOPAZ Mesa Fire"></label>
+            <label>New Profile Name<input id="profileName" type="text" placeholder="Teller County Public Safety"></label>
           </div>
-          <div class="wizard-actions compact-actions">
+          <div class="profile-actions">
             <button id="refreshProfilesBtn" type="button">Refresh Profiles</button>
             <button id="loadProfileBtn" type="button">Load Selected Profile</button>
             <button id="saveProfileBtn" type="button" class="primary">Save Current</button>
+            <button id="deleteProfileBtn" type="button" class="danger-lite">Delete Selected</button>
           </div>
           <pre id="profileStatusText">Profiles not loaded yet.</pre>
         </section>
 
-        <section class="rr-panel" data-v05d-section="rr-login">
-          <div class="section-row"><div><strong>2. RadioReference Login</strong><p>Credentials stay local on this Pi. Blank API key/password fields preserve saved secrets.</p></div><span id="rrStatusBadge" class="pill warn">Checking</span></div>
-          <div class="wizard-grid">
-            <label>RR API Key<input id="rrAppKey" type="password" autocomplete="off"></label>
-            <label>RR Username<input id="rrUsername" type="text" autocomplete="username"></label>
-            <label>RR Password<input id="rrPassword" type="password" autocomplete="current-password"></label>
-          </div>
-          <div class="wizard-actions compact-actions">
-            <button id="saveRrCredentialsBtn" type="button">Save Login</button>
-            <button id="testRrLoginBtn" type="button">Test Login</button>
-          </div>
-          <pre id="rrStatusText">RadioReference status not loaded.</pre>
-        </section>
+        <div class="csv-profile-grid">
+          <section class="profile-panel csv-profile-card">
+            <div class="section-row">
+              <div><strong>Analog VHF / UHF</strong><p>Upload a standard CHIRP CSV. Frequencies are assigned to the dedicated VHF or UHF scanner automatically.</p></div>
+              <span id="analogCsvStatusBadge" class="pill warn">Ready</span>
+            </div>
+            <label>CHIRP CSV File<input id="analogCsvFile" type="file" accept=".csv,text/csv"></label>
+            <div class="csv-actions">
+              <button id="importAnalogCsvBtn" type="button" class="primary">Upload &amp; Save Profile</button>
+              <button id="exportAnalogCsvBtn" type="button">Export Selected</button>
+              <a class="button-link" href="/chirp_analog_template.csv" download="chirp_analog_template.csv">Download Template</a>
+            </div>
+            <pre id="analogCsvStatusText">Choose a CHIRP CSV file to upload.</pre>
+          </section>
 
-        <section class="rr-panel" data-v05d-section="rr-import">
-          <div class="section-row"><div><strong>3. Location, System, Site, Talkgroups</strong><p>Enter location, select system/site, choose talkgroup categories, then import and save.</p></div><span id="importStatusBadge" class="pill warn">Ready</span></div>
-          <div class="wizard-grid">
-            <label>State<input id="wizardState" type="text" value="AZ" autocomplete="off"></label>
-            <label>Counties<input id="wizardCounty" type="text" value="Maricopa" placeholder="Teller, El Paso" autocomplete="off"></label>
-            <label>Cities<input id="wizardCity" type="text" value="Mesa" placeholder="Cripple Creek, Woodland Park" autocomplete="off"></label>
-          </div>
-          <div class="wizard-actions compact-actions">
-            <button id="findRrSystemsBtn" type="button" class="primary">Find RR Systems</button>
-          </div>
-          <div class="wizard-grid">
-            <label>RR System<select id="rrSystemSelect"></select></label>
-            <label>RR Site<select id="rrSiteSelect"></select></label>
-          </div>
-          <div class="wizard-actions compact-actions">
-            <button id="loadRrSitesBtn" type="button">Load RR Sites</button>
-          </div>
-          <div class="category-panel">
-            <span class="label">Talkgroup Category Filters</span>
-            <div id="categoryChoices" class="checkbox-grid"></div>
-          </div>
-          <div class="wizard-actions compact-actions">
-            <button id="autoCalibratePpmBtn" type="button">Auto Calibrate PPM</button>
-            <button id="importAndSaveRrBtn" type="button" class="primary">Import and Save Named Config</button>
-          </div>
-          <pre id="wizardPreview">Find systems to begin.</pre>
-        </section>
+          <section class="profile-panel csv-profile-card">
+            <div class="section-row">
+              <div><strong>P25 Systems &amp; Talkgroups</strong><p>Upload control, voice, and talkgroup rows using the PI Scanner P25 template.</p></div>
+              <span id="p25CsvStatusBadge" class="pill warn">Ready</span>
+            </div>
+            <label>P25 CSV File<input id="p25CsvFile" type="file" accept=".csv,text/csv"></label>
+            <div class="csv-actions">
+              <button id="importP25CsvBtn" type="button" class="primary">Upload &amp; Save Profile</button>
+              <button id="exportP25CsvBtn" type="button">Export Selected</button>
+              <a class="button-link" href="/p25_import_template.csv" download="p25_import_template.csv">Download Template</a>
+            </div>
+            <pre id="p25CsvStatusText">Choose a P25 CSV file to upload.</pre>
+          </section>
+        </div>
       </section>
 
       <section id="logsScreen" class="screen" aria-label="logs">
@@ -179,7 +168,7 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=2.0.3-audio-arbitrator-status"></script>
+  <script src="/app.js?v=2.0.3-audio-arbitrator-status-2.1.0-csv-radio-profiles"></script>
   <script src="/audio_arbitrator_live.js?v=1.0.6-controls-only"></script>
 </body>
 </html>

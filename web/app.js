@@ -43,14 +43,8 @@ function p25AllowManualStart(event) {
 
 let latestStatus = null;
 let currentConfig = null;
-let rrSystems = [];
-let rrSites = [];
+let latestProfilesPayload = null;
 let browserAudioLastEvent = 'Ready';
-
-const CATEGORY_DEFAULTS = [
-  'Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Utilities', 'Transportation',
-  'Interop', 'Emergency Management', 'Corrections', 'Schools', 'Federal', 'Other',
-];
 
 function field(id) { return document.getElementById(id); }
 function setText(id, value) { const el = field(id); if (el) el.textContent = value ?? '-'; }
@@ -61,7 +55,6 @@ function commandText(command) { return Array.isArray(command) ? command.join(' '
 function audioStreamUrl() { return `http://${window.location.hostname}:8072/audio.wav`; }
 function testToneUrl() { return `http://${window.location.hostname}:8072/test-tone.wav`; }
 function safeJson(value) { try { return JSON.stringify(value, null, 2); } catch { return String(value); } }
-function numberOrNull(value) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : null; }
 
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, { cache: 'no-store', ...options });
@@ -245,62 +238,21 @@ async function stopScanner() {
   await refreshStatus();
 }
 
-function renderCategoryChoices(categories = CATEGORY_DEFAULTS) {
-  const target = field('categoryChoices');
-  if (!target) return;
-  target.innerHTML = '';
-  categories.forEach((category) => {
-    const label = document.createElement('label');
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.value = category;
-    input.checked = ['Fire', 'EMS', 'Law Enforcement', 'Interop'].includes(category);
-    label.append(input, document.createTextNode(category));
-    target.append(label);
-  });
-}
-
-function selectedCategories() {
-  return Array.from(document.querySelectorAll('#categoryChoices input[type="checkbox"]:checked')).map((el) => el.value);
-}
-
-function locationPayload() {
-  const selectedSite = selectedSiteRecord();
-  return {
-    state: String(field('wizardState')?.value || '').trim(),
-    county: String(field('wizardCounty')?.value || '').trim(),
-    city: String(field('wizardCity')?.value || '').trim(),
-    categories: selectedCategories(),
-    system_id: selectedSystemId(),
-    site_id: selectedSiteId(),
-    site: selectedSite?.name || selectedSite?.site_description || '',
-    site_label: selectedSite?.label || '',
-    name: String(field('profileName')?.value || '').trim(),
-  };
-}
-
-function selectedSystemId() { return numberOrNull(field('rrSystemSelect')?.value); }
-function selectedSiteId() { return numberOrNull(field('rrSiteSelect')?.value); }
-function selectedSiteRecord() {
-  const option = field('rrSiteSelect')?.selectedOptions?.[0];
-  const index = Number.parseInt(String(option?.dataset?.index ?? ''), 10);
-  return Number.isInteger(index) && index >= 0 ? rrSites[index] : null;
-}
-
 function compactProfileSummary(payload, message = '') {
   const configs = Array.isArray(payload?.configs) ? payload.configs : [];
   const lines = [];
   if (message) lines.push(message);
   if (configs.length) {
-    lines.push(`${configs.length} saved profile${configs.length === 1 ? '' : 's'}:`);
-    configs.forEach((item) => {
-      const system = item?.validation?.first_enabled_system || {};
-      const talkgroupCount = Array.isArray(system.talkgroups) ? system.talkgroups.length : 0;
-      const profileName = item?.name || item?.id || 'Unnamed profile';
-      const systemName = system.name || 'Unknown system';
-      const siteName = system.site || 'Unknown site';
-      lines.push(`- ${profileName}: ${systemName} / ${siteName} / ${talkgroupCount} talkgroups`);
-    });
+    lines.push(`${configs.length} saved profile${configs.length === 1 ? '' : 's'}. Choose one above to load or export.`);
+    const selectedId = field('profileSelect')?.value || '';
+    const selected = configs.find((item) => (item.id || item.name) === selectedId) || configs[0];
+    const system = selected?.validation?.first_enabled_system || {};
+    const talkgroupCount = Array.isArray(system.talkgroups) ? system.talkgroups.length : 0;
+    const analogCounts = selected?.analog_channel_counts;
+    const analogSummary = analogCounts && Object.keys(analogCounts).length
+      ? `${Number(analogCounts.analog_2m || 0)} VHF / ${Number(analogCounts.analog_70cm || 0)} UHF`
+      : 'analog unchanged when loaded';
+    lines.push(`Selected: ${selected?.name || selected?.id} · ${system.name || 'Unknown system'} · ${talkgroupCount} talkgroups · ${analogSummary}`);
   } else if (!message) {
     lines.push('No saved profiles found.');
   }
@@ -310,8 +262,10 @@ function compactProfileSummary(payload, message = '') {
 async function refreshProfiles() {
   try {
     const payload = await fetchJson('/api/config/named');
+    latestProfilesPayload = payload;
     const select = field('profileSelect');
     if (select) {
+      const selected = select.value;
       select.innerHTML = '';
       (payload.configs || []).forEach((item) => {
         const option = document.createElement('option');
@@ -319,6 +273,9 @@ async function refreshProfiles() {
         option.textContent = `${item.name || item.id}${item.active ? ' (active)' : ''}`;
         select.append(option);
       });
+      if (selected && Array.from(select.options).some((option) => option.value === selected)) {
+        select.value = selected;
+      }
     }
     setBadge('profileStatusBadge', `${payload.count || 0} profiles`, 'ok');
     setText('profileStatusText', compactProfileSummary(payload));
@@ -335,7 +292,9 @@ async function loadSelectedProfile() {
     const payload = await postJson('/api/config/named/load', { id, apply: true });
     setBadge('profileStatusBadge', 'Loaded', 'ok');
     setText('profileStatusText', `Loaded profile: ${id}`);
+    if (field('profileName')) field('profileName').value = payload.name || id;
     await refreshConfig();
+    await refreshAnalogChannels();
     await refreshStatus();
   } catch (error) {
     setBadge('profileStatusBadge', 'Load failed', 'bad');
@@ -354,6 +313,20 @@ async function saveCurrentProfile() {
   } catch (error) {
     setBadge('profileStatusBadge', 'Save failed', 'bad');
     setText('profileStatusText', `Save failed: ${error.message}`);
+  }
+}
+
+async function deleteSelectedProfile() {
+  const id = field('profileSelect')?.value || '';
+  if (!id) { setText('profileStatusText', 'Select a profile first.'); return; }
+  try {
+    await postJson('/api/config/named/delete', { id });
+    setBadge('profileStatusBadge', 'Deleted', 'warn');
+    await refreshProfiles();
+    setText('profileStatusText', `Deleted profile: ${id}`);
+  } catch (error) {
+    setBadge('profileStatusBadge', 'Delete failed', 'bad');
+    setText('profileStatusText', `Delete failed: ${error.message}`);
   }
 }
 
@@ -648,6 +621,134 @@ async function autoCalibratePpm() {
   }
 }
 
+function profileNameForFile(file) {
+  const entered = String(field('profileName')?.value || '').trim();
+  const fallback = String(file?.name || 'Imported Profile')
+    .replace(/\.csv$/i, '')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+  const name = entered || fallback || 'Imported Profile';
+  if (field('profileName')) field('profileName').value = name;
+  return name;
+}
+
+async function saveImportedProfile(name) {
+  const result = await postJson('/api/config/named/save', { name, apply: false });
+  await refreshProfiles();
+  if (field('profileSelect')) field('profileSelect').value = result.id || result.slug || name;
+  return result;
+}
+
+async function refreshAnalogChannels() {
+  try {
+    const result = await fetchJson('/api/analog/channels');
+    const counts = result?.channel_counts || {};
+    const vhf = Number(counts.analog_2m || 0);
+    const uhf = Number(counts.analog_70cm || 0);
+    setBadge('analogCsvStatusBadge', `${vhf} VHF / ${uhf} UHF`, (vhf + uhf) ? 'ok' : 'warn');
+    setText('analogCsvStatusText', `Current radio: ${vhf} VHF channels and ${uhf} UHF channels.`);
+  } catch (error) {
+    setBadge('analogCsvStatusBadge', 'Load failed', 'bad');
+    setText('analogCsvStatusText', `Analog channel status failed: ${error.message}`);
+  }
+}
+
+async function importAnalogCsv() {
+  const file = field('analogCsvFile')?.files?.[0];
+  if (!file) {
+    setBadge('analogCsvStatusBadge', 'Choose file', 'warn');
+    setText('analogCsvStatusText', 'Choose a CHIRP CSV file first.');
+    return;
+  }
+  const button = field('importAnalogCsvBtn');
+  if (button) button.disabled = true;
+  setBadge('analogCsvStatusBadge', 'Uploading', 'warn');
+  try {
+    const name = profileNameForFile(file);
+    const result = await postJson('/api/analog/channels/import', {
+      filename: file.name,
+      csv_text: await file.text(),
+      replace_mode: 'roles_in_file',
+    });
+    await saveImportedProfile(name);
+    const counts = result.channel_counts || {};
+    setBadge('analogCsvStatusBadge', 'Saved', 'ok');
+    setText('analogCsvStatusText', `Saved profile “${name}” with ${Number(counts.analog_2m || 0)} VHF and ${Number(counts.analog_70cm || 0)} UHF channels.`);
+  } catch (error) {
+    setBadge('analogCsvStatusBadge', 'Upload failed', 'bad');
+    setText('analogCsvStatusText', `Analog CSV upload failed: ${error.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function importP25CsvFile() {
+  const file = field('p25CsvFile')?.files?.[0];
+  if (!file) {
+    setBadge('p25CsvStatusBadge', 'Choose file', 'warn');
+    setText('p25CsvStatusText', 'Choose a P25 CSV file first.');
+    return;
+  }
+  const button = field('importP25CsvBtn');
+  if (button) button.disabled = true;
+  setBadge('p25CsvStatusBadge', 'Uploading', 'warn');
+  try {
+    const name = profileNameForFile(file);
+    const result = await postJson('/api/p25/csv/import', {
+      filename: file.name,
+      csv_text: await file.text(),
+      replace_mode: 'systems_in_file',
+    });
+    await refreshConfig();
+    await saveImportedProfile(name);
+    const systems = Array.isArray(result.systems) ? result.systems.join(', ') : 'P25 system';
+    setBadge('p25CsvStatusBadge', 'Saved', 'ok');
+    setText('p25CsvStatusText', `Saved profile “${name}” from ${result.imported_rows || 0} rows: ${systems}.`);
+  } catch (error) {
+    setBadge('p25CsvStatusBadge', 'Upload failed', 'bad');
+    setText('p25CsvStatusText', `P25 CSV upload failed: ${error.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function downloadCsv(filename, csvText) {
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function exportSelectedProfile(kind) {
+  const id = field('profileSelect')?.value || '';
+  const statusPrefix = kind === 'analog' ? 'analogCsv' : 'p25Csv';
+  if (!id) {
+    setBadge(`${statusPrefix}StatusBadge`, 'Select profile', 'warn');
+    setText(`${statusPrefix}StatusText`, 'Select a saved profile first.');
+    return;
+  }
+  try {
+    const result = await postJson('/api/config/named/export', { id, kind });
+    downloadCsv(result.filename, result.csv_text);
+    setBadge(`${statusPrefix}StatusBadge`, 'Exported', 'ok');
+    setText(`${statusPrefix}StatusText`, `Downloaded ${result.filename}.`);
+  } catch (error) {
+    setBadge(`${statusPrefix}StatusBadge`, 'Export failed', 'bad');
+    setText(`${statusPrefix}StatusText`, `CSV export failed: ${error.message}`);
+  }
+}
+
+function suggestProfileName(event) {
+  if (String(field('profileName')?.value || '').trim()) return;
+  const file = event.currentTarget?.files?.[0];
+  if (file) profileNameForFile(file);
+}
+
 function attachEventHandlers() {
   field('menuBtn')?.addEventListener('click', openDrawer);
   field('closeDrawerBtn')?.addEventListener('click', closeDrawer);
@@ -656,14 +757,18 @@ function attachEventHandlers() {
   field('startBtn')?.addEventListener('click', (event) => { if (p25AllowManualStart(event)) startScannerAndAudio(); });
   field('stopBtn')?.addEventListener('click', stopScanner);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
+  field('profileSelect')?.addEventListener('change', () => {
+    if (latestProfilesPayload) setText('profileStatusText', compactProfileSummary(latestProfilesPayload));
+  });
   field('loadProfileBtn')?.addEventListener('click', loadSelectedProfile);
   field('saveProfileBtn')?.addEventListener('click', saveCurrentProfile);
-  field('saveRrCredentialsBtn')?.addEventListener('click', saveRadioReferenceCredentials);
-  field('testRrLoginBtn')?.addEventListener('click', testRadioReferenceLogin);
-  field('findRrSystemsBtn')?.addEventListener('click', findRrSystems);
-  field('loadRrSitesBtn')?.addEventListener('click', loadRrSites);
-  field('importAndSaveRrBtn')?.addEventListener('click', importAndSaveRr);
-  field('autoCalibratePpmBtn')?.addEventListener('click', autoCalibratePpm);
+  field('deleteProfileBtn')?.addEventListener('click', deleteSelectedProfile);
+  field('importAnalogCsvBtn')?.addEventListener('click', importAnalogCsv);
+  field('importP25CsvBtn')?.addEventListener('click', importP25CsvFile);
+  field('exportAnalogCsvBtn')?.addEventListener('click', () => exportSelectedProfile('analog'));
+  field('exportP25CsvBtn')?.addEventListener('click', () => exportSelectedProfile('p25'));
+  field('analogCsvFile')?.addEventListener('change', suggestProfileName);
+  field('p25CsvFile')?.addEventListener('change', suggestProfileName);
   field('browserAudioPlayer')?.addEventListener('play', () => updateAudioPanel('Browser audio playing'));
   field('browserAudioPlayer')?.addEventListener('pause', () => updateAudioPanel('Browser audio paused'));
 }
@@ -671,10 +776,9 @@ function attachEventHandlers() {
 function boot() {
   attachEventHandlers();
 p25RemoveDashboardAutostartTuningRemnants();
-  renderCategoryChoices();
   updateAudioPanel();
   refreshProfiles();
-  refreshRadioReferenceStatus();
+  refreshAnalogChannels();
   refreshStatus();
   refreshConfig();
   setInterval(refreshStatus, 3000);

@@ -64,7 +64,7 @@ def _key(value: Any) -> str:
 
 
 def _text(value: Any) -> str:
-    return str(value or "").strip()
+    return "" if value is None else str(value).strip()
 
 
 def _bool(value: Any, default: bool = False) -> bool:
@@ -119,6 +119,18 @@ def _frequency(row: dict[str, str]) -> int:
     return hz
 
 
+def _role_for_frequency(hz: int) -> str:
+    """Assign a standard CHIRP receive channel to its dedicated scanner."""
+
+    if 136_000_000 <= hz <= 174_000_000:
+        return "analog_2m"
+    if 400_000_000 <= hz <= 520_000_000:
+        return "analog_70cm"
+    raise AnalogChannelError(
+        f"frequency {hz / 1_000_000:.6f} MHz is outside the VHF/UHF scanner bands"
+    )
+
+
 def default_config() -> dict[str, Any]:
     return {
         "schema_version": 5, "audio_udp_host": "127.0.0.1",
@@ -157,14 +169,10 @@ def parse_csv_text(text: str) -> dict[str, Any]:
         raise AnalogChannelError("csv_text must be a string")
     if len(text.encode("utf-8")) > MAX_CSV_BYTES:
         raise AnalogChannelError("CSV is too large")
-    reader = normalize_chirp_rows(csv.DictReader(io.StringIO(text.lstrip("\ufeff"))))
-    if not reader.fieldnames:
+    csv_reader = csv.DictReader(io.StringIO(text.lstrip("\ufeff")))
+    if not csv_reader.fieldnames:
         raise AnalogChannelError("CSV header row is missing")
-    headers = [_key(item) for item in reader.fieldnames]
-    if "receiver" not in headers:
-        raise AnalogChannelError("CSV requires receiver")
-    if "frequency_mhz" not in headers and "frequency_hz" not in headers:
-        raise AnalogChannelError("CSV requires frequency_mhz")
+    reader = normalize_chirp_rows(csv_reader)
 
     result = {role: [] for role in ROLE_DEFAULTS}
     warnings: list[str] = []
@@ -179,8 +187,8 @@ def parse_csv_text(text: str) -> dict[str, Any]:
         if not any(row.values()):
             continue
         try:
-            role = _role(row.get("receiver"))
             hz = _frequency(row)
+            role = _role_for_frequency(hz)
             name = _text(row.get("name")) or f"{hz / 1_000_000:.6f} MHz"
             ctcss = _optional_num(row.get("ctcss_hz"))
             if ctcss is not None and not 50.0 <= ctcss <= 300.0:
@@ -210,6 +218,9 @@ def parse_csv_text(text: str) -> dict[str, Any]:
                 "dcs_code": dcs, "dcs_gate": dcs_gate,
                 "recording_enabled": _bool(row.get("recording_enabled"), False),
             }
+            comment = _text(row.get("comment"))
+            if comment:
+                channel["comment"] = comment[:240]
             duplicate = (role, hz, name.lower(), ctcss, dcs)
             if duplicate in seen:
                 warnings.append(f"row {row_number}: skipped exact duplicate")
@@ -250,6 +261,26 @@ def _write(path: Path, data: dict[str, Any]) -> Path | None:
         handle.write("\n")
     temporary.replace(path)
     return backup
+
+
+def write_config_payload(
+    config: dict[str, Any],
+    config_path: Path = DEFAULT_CONFIG_PATH,
+) -> Path | None:
+    """Validate and atomically write an analog runtime configuration."""
+
+    if not isinstance(config, dict):
+        raise AnalogChannelError("analog config must be an object")
+    workers = config.get("workers")
+    if not isinstance(workers, dict):
+        raise AnalogChannelError("analog config workers must be an object")
+    for role in ROLE_DEFAULTS:
+        worker = workers.get(role)
+        if not isinstance(worker, dict):
+            raise AnalogChannelError(f"analog config is missing worker {role}")
+        if not isinstance(worker.get("channels"), list):
+            raise AnalogChannelError(f"analog worker {role} channels must be a list")
+    return _write(Path(config_path), config)
 
 
 def import_csv_request(request: dict[str, Any], config_path: Path = DEFAULT_CONFIG_PATH) -> dict[str, Any]:

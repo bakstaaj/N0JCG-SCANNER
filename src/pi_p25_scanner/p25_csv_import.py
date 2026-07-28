@@ -219,7 +219,7 @@ def import_p25_csv_request(request: dict[str, Any]) -> dict[str, Any]:
     if replace_mode not in {"systems_in_file", "all", "append"}:
         raise P25CsvError("invalid replace_mode")
 
-    payload = read_active_config_payload()
+    payload, _config_path = read_active_config_payload()
     existing_systems = list(payload.get("systems") or [])
     existing_by_name = {
         _text(item.get("name")).lower(): item
