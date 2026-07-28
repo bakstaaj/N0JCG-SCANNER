@@ -21,6 +21,7 @@ else:
 
 RECENT_EVENT_LIMIT = 25
 UNIQUE_TGID_LIMIT = 1024
+VOICE_CALL_DEDUP_SECONDS = 2.5
 
 
 @dataclass
@@ -34,6 +35,7 @@ class RuntimeActivityTracker:
     voice_frequency_updates: int = 0
     talkgroup_updates: int = 0
     voice_call_events: int = 0
+    distinct_voice_calls: int = 0
     encrypted_events: int = 0
     muted_events: int = 0
     clear_voice_events: int = 0
@@ -43,6 +45,18 @@ class RuntimeActivityTracker:
     )
     recent_events: deque[dict[str, Any]] = field(
         default_factory=lambda: deque(maxlen=RECENT_EVENT_LIMIT)
+    )
+    _last_voice_call_signature: tuple[int | None, int | None] | None = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+    _last_voice_call_utc: float = field(
+        default=0.0,
+        init=False,
+        repr=False,
+        compare=False,
     )
     _lock: threading.RLock = field(
         default_factory=threading.RLock,
@@ -62,9 +76,12 @@ class RuntimeActivityTracker:
             self.voice_frequency_updates = 0
             self.talkgroup_updates = 0
             self.voice_call_events = 0
+            self.distinct_voice_calls = 0
             self.encrypted_events = 0
             self.muted_events = 0
             self.clear_voice_events = 0
+            self._last_voice_call_signature = None
+            self._last_voice_call_utc = 0.0
             self.unique_tgids.clear()
             self.unique_tgid_order.clear()
             self.recent_events.clear()
@@ -114,6 +131,25 @@ class RuntimeActivityTracker:
                 self._record_unique_tgid(update.tgid)
             if update.voice_call:
                 self.voice_call_events += 1
+                signature = (update.tgid, update.voice_frequency_hz)
+                if self._last_voice_call_signature is not None:
+                    previous_tgid, previous_frequency = self._last_voice_call_signature
+                    signature = (
+                        update.tgid if update.tgid is not None else previous_tgid,
+                        update.voice_frequency_hz
+                        if update.voice_frequency_hz is not None
+                        else previous_frequency,
+                    )
+
+                if (
+                    signature != self._last_voice_call_signature
+                    or self.updated_utc - self._last_voice_call_utc
+                    > VOICE_CALL_DEDUP_SECONDS
+                ):
+                    self.distinct_voice_calls += 1
+
+                self._last_voice_call_signature = signature
+                self._last_voice_call_utc = self.updated_utc
             if update.encrypted is True:
                 self.encrypted_events += 1
             if update.encrypted is False:
@@ -133,6 +169,7 @@ class RuntimeActivityTracker:
             "voice_frequency_updates": self.voice_frequency_updates,
             "talkgroup_updates": self.talkgroup_updates,
             "voice_call_events": self.voice_call_events,
+            "distinct_voice_calls": self.distinct_voice_calls,
             "encrypted_events": self.encrypted_events,
             "muted_events": self.muted_events,
             "clear_voice_events": self.clear_voice_events,
