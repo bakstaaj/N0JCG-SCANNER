@@ -1012,3 +1012,90 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* PI_SCANNER_DASHBOARD_LAYOUT_V202 */
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.control-strip {
+  grid-template-columns:
+    minmax(0, 1.35fr)
+    minmax(84px, 96px)
+    minmax(150px, 1fr)
+    minmax(84px, 96px);
+  align-items: stretch;
+  gap: 5px;
+}
+
+.audio-controls-only {
+  display: contents;
+}
+
+.control-strip #startBtn {
+  max-width: none;
+}
+
+.control-strip .audio-mute-button,
+.control-strip #stopBtn {
+  width: 100%;
+  height: 100%;
+  align-self: stretch;
+  padding: 0 8px;
+  border-radius: 12px;
+  font-size: clamp(13px, 2.1vw, 16px);
+}
+
+.control-strip .arbitrator-volume-label {
+  display: grid;
+  grid-template-columns: auto minmax(90px, 1fr);
+  align-items: center;
+  align-self: center;
+  justify-self: center;
+  gap: 7px;
+  width: min(240px, 100%);
+  min-width: 0;
+  font-size: 11px;
+}
+
+.control-strip .arbitrator-volume-label span {
+  display: inline;
+  white-space: nowrap;
+}
+
+.control-strip .arbitrator-volume-label input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0;
+}
+
+@media (max-width: 680px) {
+  .topbar-status {
+    gap: 4px;
+  }
+
+  .topbar-status .pill {
+    padding-inline: 7px;
+    font-size: 10px;
+  }
+
+  .control-strip {
+    grid-template-columns:
+      minmax(0, 1.35fr)
+      minmax(70px, 80px)
+      minmax(110px, 1fr)
+      minmax(70px, 80px);
+  }
+
+  .control-strip .arbitrator-volume-label {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .control-strip .arbitrator-volume-label span {
+    display: none;
+  }
+}

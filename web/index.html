@@ -3,18 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>PI P25 Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=2.0.1-analog-lock-controls">
+  <title>PI Scanner</title>
+  <link rel="stylesheet" href="/app.css?v=2.0.2-dashboard-layout">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <button id="menuBtn" class="icon-button" type="button" aria-label="Open menu">☰</button>
       <div class="title-block">
-        <strong>PI P25 Scanner</strong>
-        <span id="dashboardSummary">Loading scanner state...</span>
+        <strong>PI Scanner</strong>
       </div>
-      <span id="connectionStatus" class="pill warn">Connecting</span>
+      <div class="topbar-status" aria-label="scanner and connection status">
+        <span id="stateBadge" class="pill">-</span>
+        <span id="connectionStatus" class="pill warn">Connecting</span>
+      </div>
     </header>
 
     <aside id="drawer" class="drawer" aria-hidden="true">
@@ -33,14 +35,12 @@
       <section id="dashboardScreen" class="screen active" aria-label="dashboard">
         <div class="control-strip">
           <button id="startBtn" type="button" class="big-action start">Start Scanner + Audio</button>
-<section class="audio-controls-only" aria-label="browser audio controls">
-  <button id="arbitratorMuteBtn" type="button" class="audio-mute-button" aria-pressed="false">Mute</button>
-  <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
-    <span>Volume</span>
-    <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
-  </label>
-</section>
-<button id="stopBtn" type="button" class="big-action stop">Stop</button>
+          <button id="arbitratorMuteBtn" type="button" class="big-action audio-mute-button" aria-pressed="false">Mute</button>
+          <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
+            <span>Volume</span>
+            <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
+          </label>
+          <button id="stopBtn" type="button" class="big-action stop">Stop</button>
         </div>
 <section class="activity-card">
           <div class="activity-topline">
@@ -49,7 +49,6 @@
               <strong id="activeTalkgroupLabel">Waiting for activity</strong>
               <strong id="activeTgid" class="active-tgid-inline">-</strong>
             </div>
-<span id="stateBadge" class="pill">-</span>
           </div>
 <div class="activity-grid">
             <div><span>Voice</span><strong id="voiceFrequency">-</strong></div>
@@ -72,27 +71,6 @@
           aria-label="analog scanner controls"
           aria-disabled="true"
         >
-          <div class="analog-squelch-row">
-            <span class="analog-squelch-label">Squelch</span>
-            <button
-              id="analogSquelchDownBtn"
-              type="button"
-              title="Lower squelch"
-              disabled
-            >−</button>
-            <strong
-              id="analogSquelchValue"
-              class="analog-squelch-value"
-              aria-live="polite"
-            >—</strong>
-            <button
-              id="analogSquelchUpBtn"
-              type="button"
-              title="Raise squelch"
-              disabled
-            >+</button>
-          </div>
-
           <div class="analog-channel-action-row">
             <button
               id="analogSkipBtn"

@@ -10,7 +10,7 @@ def test_compact_800x480_layout_exists() -> None:
     assert "min-height: 108px" in css
     assert "min-height: 46px" in css
     assert "min-height: 42px" in css
-    assert "1.0.16-responsive-top-row" in html
+    assert "2.0.2-dashboard-layout" in html
 
     stats = html.index('class="stats-grid"')
     controls = html.index('id="analogLiveControls"')
