@@ -1,6 +1,10 @@
 receiver,name,frequency_mhz,mode,ctcss_hz,dcs_code,enabled,priority
 2m,2 m National Simplex,146.52,FM,,,TRUE,0
+2m,K0ESD,146.97,FM,,,TRUE,0
 70cm,70 cm National Simplex,446,FM,,,TRUE,0
+70cm,K0ESD,448.45,FM,,,TRUE,0
+70cm,KA4EPS,449.325,FM,,,TRUE,0
+70cm,KC0CVU,449.7,FM,,,TRUE,0
 70cm,Example 70 cm Repeater,449.5,FM,100,,TRUE,0
 2m,Crpl Crk EMS,154.34,FM,,,TRUE,0
 2m,Crpl Crk Police,154.89,FM,,,TRUE,0
