@@ -49,6 +49,10 @@ if __package__ in (None, ""):
     from pi_p25_scanner.op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
     from pi_p25_scanner.runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from pi_p25_scanner.runtime_activity import RuntimeActivityTracker
+    from pi_p25_scanner.scanner_service_control import (
+        AnalogScannerServiceController,
+        ScannerServiceControlError,
+    )
     from pi_p25_scanner.p25_csv_import import P25CsvError, import_p25_csv_request
     from pi_p25_scanner.csv_profile_tools import (
         analog_channels_to_chirp_csv,
@@ -93,6 +97,10 @@ else:
     from .op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
     from .runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from .runtime_activity import RuntimeActivityTracker
+    from .scanner_service_control import (
+        AnalogScannerServiceController,
+        ScannerServiceControlError,
+    )
     from .p25_csv_import import P25CsvError, import_p25_csv_request
     from .csv_profile_tools import analog_channels_to_chirp_csv, p25_config_to_csv
     from .receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
@@ -188,6 +196,13 @@ class ScannerStatus:
         }
     )
     decoder_capability: dict[str, Any] = field(default_factory=dict)
+    coordinated_scanners: dict[str, Any] = field(
+        default_factory=lambda: {
+            "p25": "stopped",
+            "vhf": "stopped",
+            "uhf": "stopped",
+        }
+    )
     receiver_roles: dict[str, Any] = field(
         default_factory=lambda: {
             "p25_control": {"rtl_serial": "", "runtime_index": None},
@@ -278,6 +293,7 @@ class ScannerManager:
         self.log_lines: deque[str] = deque(maxlen=LOG_TAIL_LIMIT)
         self.runtime_parser = RuntimeStatusParser()
         self.activity_tracker = RuntimeActivityTracker(state_path=ACTIVITY_STATE_PATH)
+        self.analog_service_controller = AnalogScannerServiceController()
         self.talkgroup_labels: dict[int, str] = {}
         self.blocked_talkgroup_ids: set[int] = set()
         self._display_suppressed_tgid_until: dict[int, float] = {}
@@ -709,10 +725,40 @@ class ScannerManager:
     def start(self) -> tuple[dict[str, Any], HTTPStatus]:
         with self.lock:
             if self.process is not None and self.process.poll() is None:
+                process = self.process
+            else:
+                process = None
+
+        if process is not None:
+            try:
+                analog_state = self.analog_service_controller.start()
+            except (OSError, subprocess.SubprocessError, ScannerServiceControlError) as exc:
+                _stop_process_safely(process)
+                with self.lock:
+                    self.process = None
+                    self.status.ok = False
+                    self.status.scanner_state = "coordinated_start_failed"
+                    self.status.decoder_process["running"] = False
+                    self.status.decoder_process["pid"] = None
+                    self.status.coordinated_scanners = {
+                        "p25": "stopped",
+                        "vhf": "error",
+                        "uhf": "error",
+                    }
+                    self._append_warning(str(exc))
+                    self._set_event(f"Coordinated scanner start failed: {exc}")
+                return self.status_payload(), HTTPStatus.INTERNAL_SERVER_ERROR
+            with self.lock:
+                self.status.ok = True
                 self.status.scanner_state = "running"
                 self.status.decoder_process["running"] = True
-                self.status.decoder_process["pid"] = self.process.pid
-                self._set_event("Scanner already running")
+                self.status.decoder_process["pid"] = process.pid
+                self.status.coordinated_scanners = {
+                    "p25": "running",
+                    "vhf": analog_state["vhf"],
+                    "uhf": analog_state["uhf"],
+                }
+                self._set_event("P25, VHF, and UHF scanners already running")
                 return self.status_payload(), HTTPStatus.ACCEPTED
 
         self.refresh_config_summary()
@@ -803,8 +849,38 @@ class ScannerManager:
             self.status.control_channel_locked = False
             self.status.decoder_process["running"] = True
             self.status.decoder_process["pid"] = process.pid
-            self._set_event(f"Scanner started pid={process.pid}")
+            self.status.coordinated_scanners["p25"] = "running"
+            self._set_event(f"P25 scanner started pid={process.pid}; starting VHF and UHF")
         threading.Thread(target=self._reader_thread, args=(process,), daemon=True).start()
+
+        try:
+            analog_state = self.analog_service_controller.start()
+        except (OSError, subprocess.SubprocessError, ScannerServiceControlError) as exc:
+            _stop_process_safely(process)
+            with self.lock:
+                self.process = None
+                self.status.ok = False
+                self.status.scanner_state = "coordinated_start_failed"
+                self.status.control_channel_state = "idle"
+                self.status.control_channel_locked = False
+                self.status.decoder_process["running"] = False
+                self.status.decoder_process["pid"] = None
+                self.status.coordinated_scanners = {
+                    "p25": "stopped",
+                    "vhf": "error",
+                    "uhf": "error",
+                }
+                self._append_warning(str(exc))
+                self._set_event(f"Coordinated scanner start failed: {exc}")
+            return self.status_payload(), HTTPStatus.INTERNAL_SERVER_ERROR
+
+        with self.lock:
+            self.status.coordinated_scanners = {
+                "p25": "running",
+                "vhf": analog_state["vhf"],
+                "uhf": analog_state["uhf"],
+            }
+            self._set_event("P25, VHF, and UHF scanners started")
         return self.status_payload(), HTTPStatus.ACCEPTED
 
     def stop(self) -> tuple[dict[str, Any], HTTPStatus]:
@@ -813,6 +889,11 @@ class ScannerManager:
         stop_result = None
         if process is not None:
             stop_result = _stop_process_safely(process)
+        analog_error = None
+        try:
+            self.analog_service_controller.stop()
+        except (OSError, subprocess.SubprocessError, ScannerServiceControlError) as exc:
+            analog_error = exc
         with self.lock:
             self.process = None
             self.status.scanner_state = "stopped"
@@ -820,8 +901,21 @@ class ScannerManager:
             self.status.control_channel_locked = False
             self.status.decoder_process["running"] = False
             self.status.decoder_process["pid"] = None
-            self._set_event("Scanner stopped")
-        return self.status_payload(), HTTPStatus.ACCEPTED
+            self.status.coordinated_scanners = {
+                "p25": "stopped",
+                "vhf": "error" if analog_error else "stopped",
+                "uhf": "error" if analog_error else "stopped",
+            }
+            if analog_error:
+                self.status.ok = False
+                self._append_warning(str(analog_error))
+                self._set_event(f"P25 stopped; VHF/UHF stop failed: {analog_error}")
+            else:
+                self.status.ok = True
+                self._set_event("P25, VHF, and UHF scanners stopped")
+        return self.status_payload(), (
+            HTTPStatus.INTERNAL_SERVER_ERROR if analog_error else HTTPStatus.ACCEPTED
+        )
 
     def audio_status(self, request_host: str = "") -> dict[str, Any]:
         host = (request_host or "").split(":", 1)[0].strip() or socket.gethostname()

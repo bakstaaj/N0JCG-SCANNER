@@ -2,8 +2,8 @@
 
 // V0.5F_DESKTOP_LAUNCHER_NO_PAGE_AUTOSTART
 // Normal browser page loads must not start the scanner automatically.
-// The Pi desktop launcher starts the scanner intentionally by calling the backend API,
-// then opens this page. Manual browser starts still work from the Start Scanner + Audio button.
+// Opening the dashboard never starts a receiver. Only a trusted press of the
+// Start Scanning + Audio button may request coordinated scanner startup.
 window.__P25_REQUIRE_USER_START__ = true;
 window.__P25_USER_START_REQUESTED__ = false;
 window.__P25_DESKTOP_LAUNCHER_MODE__ = false;
@@ -29,7 +29,7 @@ function p25AllowManualStart(event) {
         blocked: true,
         autostart_disabled: true,
         marker: 'V0.5F_DESKTOP_LAUNCHER_NO_PAGE_AUTOSTART',
-        error: 'Page-load scanner auto-start is disabled. Use the desktop launcher or the Start Scanner + Audio button.'
+        error: 'Page-load scanner auto-start is disabled. Use the Start Scanning + Audio button.'
       });
       return Promise.resolve(new Response(body, {
         status: 409,
@@ -211,7 +211,7 @@ async function refreshConfig() {
 
 async function startScannerAndAudio() {
   if (window.__P25_REQUIRE_USER_START__ && !window.__P25_USER_START_REQUESTED__) {
-    setText('lastEvent', 'Page-load scanner auto-start is disabled. Use the desktop launcher or Start Scanner + Audio.');
+    setText('lastEvent', 'Page-load scanner auto-start is disabled. Use Start Scanning + Audio.');
     return;
   }
 
@@ -222,7 +222,7 @@ async function startScannerAndAudio() {
     const status = await postJson('/api/scanner/start');
     renderDashboard(status);
     await playPromise;
-    updateAudioPanel('Scanner started; browser audio attached');
+    updateAudioPanel('P25, VHF, and UHF started; browser audio attached');
   } catch (error) {
     setText('lastEvent', `Start error: ${error.message}`);
     updateAudioPanel(`Start/audio error: ${error.message}`);
@@ -233,7 +233,7 @@ async function startScannerAndAudio() {
 async function stopScanner() {
   const audio = field('browserAudioPlayer');
   if (audio) { audio.pause(); audio.src = audioStreamUrl(); }
-  updateAudioPanel('Browser audio stopped');
+  updateAudioPanel('Stopping P25, VHF, UHF, and browser audio');
   try {
     const status = await postJson('/api/scanner/stop');
     renderDashboard(status);
@@ -792,100 +792,6 @@ if (document.readyState === 'loading') {
 } else {
   boot();
 }
-
-/* V0_5K_AUTO_START_RTL_POOL_BEGIN */
-(function installV05KAutoStartScannerAudio() {
-  'use strict';
-
-  window.PI_P25_V05K_MARKER = 'V0_5K_AUTO_START_RTL_POOL';
-  window.PI_P25_ALLOWED_RTL_SERIAL_POOL = '0000025X';
-
-  function byId(id) {
-    return document.getElementById(id);
-  }
-
-  function setUiText(id, text) {
-    const target = byId(id);
-    if (target) target.textContent = text;
-  }
-
-  function audioUrl() {
-    return `http://${window.location.hostname}:8072/audio.wav`;
-  }
-
-  async function jsonFetch(url, options = {}) {
-    const response = await fetch(url, { cache: 'no-store', ...options });
-    const bodyText = await response.text();
-    let payload = {};
-    try {
-      payload = bodyText ? JSON.parse(bodyText) : {};
-    } catch (error) {
-      throw new Error(`Invalid JSON from ${url}: ${error.message}`);
-    }
-    if (!response.ok) {
-      throw new Error(payload.error || `HTTP ${response.status}`);
-    }
-    return payload;
-  }
-
-  async function startScannerIfNeeded() {
-    const status = await jsonFetch('/api/status');
-    if (status?.decoder_process?.running) return status;
-    return jsonFetch('/api/scanner/start', { method: 'POST' });
-  }
-
-  async function tryStartAudio(reason) {
-    const audio = byId('browserAudioPlayer');
-    if (!audio) return false;
-
-    if (audio.src !== audioUrl()) audio.src = audioUrl();
-
-    try {
-      await audio.play();
-      setUiText('browserAudioLastEvent', reason || 'Browser audio started');
-      window.__p25AutoAudioBlocked = false;
-      return true;
-    } catch (error) {
-      setUiText('browserAudioLastEvent', 'Scanner started; tap/click once to enable audio');
-      window.__p25AutoAudioBlocked = true;
-      return false;
-    }
-  }
-
-  async function autoStart() {
-    if (window.__p25V05KAutoStartAttempted) return;
-    window.__p25V05KAutoStartAttempted = true;
-
-    try {
-      setUiText('lastEvent', 'Auto-starting scanner and browser audio...');
-      await startScannerIfNeeded();
-      await tryStartAudio('Scanner and browser audio auto-started');
-      setUiText('lastEvent', 'Scanner auto-start requested.');
-    } catch (error) {
-      setUiText('lastEvent', `Auto-start failed: ${error.message}`);
-      setUiText('browserAudioLastEvent', `Auto-start failed: ${error.message}`);
-    }
-  }
-
-  function retryAudioAfterUserGesture() {
-    if (!window.__p25AutoAudioBlocked) return;
-    tryStartAudio('Browser audio enabled after tap/click');
-  }
-
-  function install() {
-    window.setTimeout(autoStart, 400);
-    document.addEventListener('pointerdown', retryAudioAfterUserGesture, { passive: true });
-    document.addEventListener('keydown', retryAudioAfterUserGesture);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', install, { once: true });
-  } else {
-    install();
-  }
-})();
-/* V0_5K_AUTO_START_RTL_POOL_END */
-
 
 function p25RemoveDashboardAutostartTuningRemnants() {
   document.querySelectorAll('button').forEach((button) => {

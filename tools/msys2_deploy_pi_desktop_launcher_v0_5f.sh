@@ -98,7 +98,6 @@ cat > tools/start_p25_scanner_desktop.sh <<'STARTER'
 #!/usr/bin/env bash
 set -euo pipefail
 URL="http://127.0.0.1:8070/"
-API="http://127.0.0.1:8070/api/scanner/start"
 STATUS="http://127.0.0.1:8070/api/status"
 LOG_DIR="$HOME/PI-P25-SCANNER/runtime/logs"
 mkdir -p "$LOG_DIR"
@@ -109,9 +108,7 @@ LOG="$LOG_DIR/desktop_launcher.log"
     echo "Backend status endpoint is not reachable at $STATUS"
     echo "Open the PI-P25-SCANNER service/backend first, then retry this launcher."
   else
-    echo "Backend reachable; requesting scanner start."
-    curl -fsS --max-time 12 -X POST "$API" || true
-    echo
+    echo "Backend reachable; opening the stopped dashboard."
   fi
   if command -v chromium-browser >/dev/null 2>&1; then
     nohup chromium-browser --new-window "$URL" >/dev/null 2>&1 &
@@ -131,7 +128,7 @@ cat > /home/pi/Desktop/P25-Scanner.desktop <<'DESKTOP'
 [Desktop Entry]
 Type=Application
 Name=P25 Scanner
-Comment=Start the PI P25 Scanner and open the dashboard
+Comment=Open PI Scanner; use Start Scanning and Audio to begin reception
 Exec=/home/pi/PI-P25-SCANNER/tools/start_p25_scanner_desktop.sh
 Path=/home/pi/PI-P25-SCANNER
 Icon=network-wireless

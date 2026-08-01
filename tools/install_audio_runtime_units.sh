@@ -74,25 +74,37 @@ systemctl disable --now \
 
 systemctl enable \
   pi-p25-raw-audio-bridge.service \
-  pi-p25-audio-pool.service \
+  pi-p25-audio-pool.service
+
+# Receiver workers must remain stopped after boot. The backend starts and stops
+# both units together with P25 in response to the dashboard controls.
+systemctl disable --now \
   pi-scanner-vhf-worker.service \
   pi-scanner-uhf-worker.service
 
 systemctl restart pi-p25-raw-audio-bridge.service
 systemctl restart pi-p25-audio-pool.service
-systemctl restart pi-scanner-vhf-worker.service
-systemctl restart pi-scanner-uhf-worker.service
 systemctl restart pi-p25-scanner.service
 
 for unit in \
   pi-p25-raw-audio-bridge.service \
   pi-p25-audio-pool.service \
-  pi-scanner-vhf-worker.service \
-  pi-scanner-uhf-worker.service \
   pi-p25-scanner.service
 do
   systemctl is-active --quiet "$unit" \
     || fail "$unit is not active"
+done
+
+for unit in \
+  pi-scanner-vhf-worker.service \
+  pi-scanner-uhf-worker.service
+do
+  if systemctl is-active --quiet "$unit"; then
+    fail "$unit is unexpectedly active before Start Scanning + Audio"
+  fi
+  if systemctl is-enabled --quiet "$unit"; then
+    fail "$unit is unexpectedly enabled for boot"
+  fi
 done
 
 for unit in \

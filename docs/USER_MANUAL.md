@@ -300,8 +300,8 @@ Enable the core services at boot:
 sudo systemctl enable --now pi-p25-scanner.service
 sudo systemctl enable --now pi-p25-raw-audio-bridge.service
 sudo systemctl enable --now pi-p25-audio-pool.service
-sudo systemctl enable --now pi-scanner-vhf-worker.service
-sudo systemctl enable --now pi-scanner-uhf-worker.service
+sudo systemctl disable --now pi-scanner-vhf-worker.service
+sudo systemctl disable --now pi-scanner-uhf-worker.service
 ```
 
 Find the Pi address:
@@ -321,10 +321,10 @@ The current installation is normally available at
 `http://192.168.68.137:8070`, but DHCP may change that address. A DHCP
 reservation is recommended.
 
-Press **Start Scanner + Audio** once. The button starts the P25 scanner and
-connects that browser tab to the audio stream. Browsers require a real tap or
-click before audio can begin. The VHF and UHF workers are independent services
-and normally scan continuously whenever their services are active.
+After boot, P25, VHF, and UHF scanning are all stopped. Press **Start Scanning +
+Audio** once to start all three scanners together and connect that browser tab
+to the audio stream. Browsers require a real tap or click before audio can
+begin.
 
 ## 10. Use the Dashboard
 
@@ -338,15 +338,14 @@ and normally scan continuously whenever their services are active.
 
 ### Main controls
 
-- **Start Scanner + Audio:** starts or confirms P25 scanning and connects
-  low-latency browser audio.
+- **Start Scanning + Audio:** starts P25, VHF, and UHF scanning together and
+  connects low-latency browser audio.
 - **Mute / Unmute:** mutes only this browser tab. It does not stop the scanners
   or mute another browser.
 - **Volume:** controls only this browser tab. Moving it while muted also
   unmutes the tab.
-- **Stop:** stops P25 scanning and disconnects audio in this browser. The
-  systemd-managed VHF/UHF workers continue scanning unless their services are
-  stopped separately.
+- **Stop:** stops P25, VHF, and UHF scanning together and disconnects audio in
+  this browser.
 
 ### Activity information
 
@@ -409,7 +408,7 @@ changed when a profile is loaded.
 1. Select it under **Saved Profile**.
 2. Press **Load Selected Profile**.
 3. For a P25 system change, press **Stop**, load the profile, then press
-   **Start Scanner + Audio** so OP25 regenerates and uses the selected system.
+   **Start Scanning + Audio** so OP25 regenerates and uses the selected system.
 
 Analog workers re-read their channel file between FFT sweeps, so updated analog
 lists normally become active without restarting the workers.
@@ -601,7 +600,7 @@ journalctl -u pi-p25-scanner.service -n 100 --no-pager
 
 ### No browser audio
 
-- Tap **Start Scanner + Audio**; browser autoplay requires a user gesture.
+- Tap **Start Scanning + Audio**; browser autoplay requires a user gesture.
 - Confirm the button says **Mute**, not **Unmute**, and raise the volume.
 - Check whether **Active Source** shows P25, VHF, or UHF.
 - Confirm port 8072 is reachable and the arbitrator service is active.
@@ -700,7 +699,7 @@ Use this checklist after initial setup, a power cycle, or a major update:
 - [ ] Port 8070 loads the dashboard and shows **Online**.
 - [ ] Port 8072 reports `"ok": true`.
 - [ ] VHF and UHF report healthy FFT-scanning states and nonzero channel counts.
-- [ ] **Start Scanner + Audio** connects browser audio.
+- [ ] **Start Scanning + Audio** starts P25, VHF, and UHF and connects browser audio.
 - [ ] A known P25 call updates talkgroup information and Voice Calls.
 - [ ] A known VHF transmission produces a VHF lock and complete audio.
 - [ ] A known UHF transmission produces a UHF lock and complete audio.

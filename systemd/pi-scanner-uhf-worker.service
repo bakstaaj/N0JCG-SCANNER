@@ -14,7 +14,5 @@ ExecStart=/usr/bin/python3 -m pi_p25_scanner.analog_uhf_worker --config /home/pi
 Restart=on-failure
 RestartSec=2
 KillSignal=SIGINT
+SuccessExitStatus=SIGINT SIGTERM 130
 TimeoutStopSec=10
-
-[Install]
-WantedBy=multi-user.target
