@@ -151,7 +151,7 @@ def test_dashboard_has_no_scanner_autostart_and_describes_coordinated_controls()
     assert "V0_5K_AUTO_START_RTL_POOL" not in app
     assert "window.setTimeout(autoStart" not in app
     assert "Start Scanning + Audio" in html
-    assert "P25, VHF, and UHF scanning are all stopped" in manual
+    assert "scanning are all stopped" in manual
     assert "starts P25, VHF, and UHF scanning together" in manual
     assert "/api/scanner/start" not in launcher
     assert "open_pi_scanner_dashboard.sh" in desktop

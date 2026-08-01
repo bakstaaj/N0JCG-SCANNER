@@ -29,7 +29,8 @@ installation and normal daily operation.
 
 ## 1. What PI Scanner does
 
-PI Scanner combines three receivers in one touch-friendly web application:
+PI Scanner combines three scanning paths, using four dedicated RTL-SDR
+receivers, in one touch-friendly web application:
 
 - **P25:** follows permitted, clear P25 talkgroups using dedicated control and
   voice RTL-SDR receivers.
@@ -242,7 +243,7 @@ Confirm that the four PI Scanner roles have the serials shown above and that no
 scanner receiver is missing or duplicated. A shared Pi may list receivers owned
 by other applications; those devices are outside the scope of this manual.
 
-### 7.3 Verify the active analog worker map
+### 7.3 Verify the analog worker map
 
 The analog runtime configuration is separate from the inventory registry:
 
@@ -261,7 +262,10 @@ Confirm:
 
 - `analog_2m.rtl_serial` is `00000144`.
 - `analog_70cm.rtl_serial` is `00000440`.
-- Both roles report `fft_scanning`, `locked`, or another healthy running state.
+- Before **Start Scanning + Audio** is pressed, both workers are expected to be
+  stopped.
+- After **Start Scanning + Audio** is pressed, both roles report
+  `fft_scanning`, `locked`, or another healthy running state.
 
 ## 8. Application files and services
 
@@ -279,11 +283,11 @@ Main services:
 
 | Service | Purpose |
 |---|---|
-| `pi-p25-scanner.service` | Web UI/API on port 8070 and OP25 process control |
-| `pi-p25-raw-audio-bridge.service` | Three-source audio arbitrator and browser stream on port 8072 |
-| `pi-p25-audio-pool.service` | Collects audio from P25 voice receivers |
-| `pi-scanner-vhf-worker.service` | VHF FFT scanner using serial `00000144` |
-| `pi-scanner-uhf-worker.service` | UHF FFT scanner using serial `00000440` |
+| `pi-p25-scanner.service` | Boot-enabled web UI/API on port 8070 and coordinated scanner control |
+| `pi-p25-raw-audio-bridge.service` | Boot-enabled three-source audio arbitrator and browser stream on port 8072 |
+| `pi-p25-audio-pool.service` | Boot-enabled collector for P25 voice-receiver audio |
+| `pi-scanner-vhf-worker.service` | On-demand VHF FFT scanner using serial `00000144`; started and stopped by the dashboard |
+| `pi-scanner-uhf-worker.service` | On-demand UHF FFT scanner using serial `00000440`; started and stopped by the dashboard |
 
 Install or refresh the analog/audio runtime units from the analog root:
 
@@ -294,7 +298,8 @@ sudo ./tools/install_audio_runtime_units.sh
 
 ## 9. Start PI Scanner and open the web application
 
-Enable the core services at boot:
+Enable the UI and audio infrastructure at boot, while keeping the receiver
+workers out of the boot target:
 
 ```bash
 sudo systemctl enable --now pi-p25-scanner.service
@@ -321,10 +326,14 @@ The current installation is normally available at
 `http://192.168.68.137:8070`, but DHCP may change that address. A DHCP
 reservation is recommended.
 
-After boot, P25, VHF, and UHF scanning are all stopped. Press **Start Scanning +
-Audio** once to start all three scanners together and connect that browser tab
-to the audio stream. Browsers require a real tap or click before audio can
-begin.
+After boot, the dashboard and audio infrastructure are available, but P25, VHF,
+and UHF scanning are all stopped. Opening the web page or the desktop shortcut
+does not start a receiver. Press **Start Scanning + Audio** once to start all
+three scanners together and connect that browser tab to the audio stream.
+Browsers require a real tap or click before audio can begin.
+
+If any one of the three scanners cannot start, the coordinated start is treated
+as failed and the application returns the other scanners to the stopped state.
 
 ## 10. Use the Dashboard
 
@@ -346,6 +355,10 @@ begin.
   unmutes the tab.
 - **Stop:** stops P25, VHF, and UHF scanning together and disconnects audio in
   this browser.
+
+After pressing **Stop**, the dashboard and audio services remain online so a
+later press of **Start Scanning + Audio** can resume reception without rebooting
+the Pi.
 
 ### Activity information
 
@@ -410,8 +423,9 @@ changed when a profile is loaded.
 3. For a P25 system change, press **Stop**, load the profile, then press
    **Start Scanning + Audio** so OP25 regenerates and uses the selected system.
 
-Analog workers re-read their channel file between FFT sweeps, so updated analog
-lists normally become active without restarting the workers.
+When scanning is running, the analog workers re-read their channel file between
+FFT sweeps. When scanning is stopped, an updated analog list becomes active the
+next time **Start Scanning + Audio** is pressed.
 
 ### Delete a profile
 
@@ -460,7 +474,9 @@ Use the **P25 Systems & Talkgroups** card on the Radio Setup screen.
 2. Enter one row per control frequency, optional voice frequency, or talkgroup.
 3. Enter a **New Profile Name**.
 4. Choose the CSV and press **Upload & Save Profile**.
-5. Stop and restart P25 scanning after applying a different system profile.
+5. Press **Stop**, apply the different system profile, and then press **Start
+   Scanning + Audio**. The coordinated controls restart P25, VHF, and UHF
+   together.
 
 Important columns:
 
@@ -523,6 +539,16 @@ systemctl --no-pager --full status pi-scanner-vhf-worker.service
 systemctl --no-pager --full status pi-scanner-uhf-worker.service
 ```
 
+Interpret the results according to the dashboard state:
+
+- Before **Start Scanning + Audio**, the backend, audio bridge, and audio pool
+  should be active; the VHF and UHF workers should be inactive.
+- While scanning, all five services should be active and `/api/status` should
+  report P25 `running`, VHF `active`, and UHF `active` under
+  `coordinated_scanners`.
+- After **Stop**, the VHF and UHF workers should again be inactive while the
+  three core services remain active.
+
 ### Back up operator data
 
 At minimum, preserve:
@@ -548,16 +574,25 @@ lists, skips, and blocks are under the analog runtime settings directory.
 
 ### Restart after maintenance
 
+First press **Stop** in the dashboard. If the dashboard is unavailable, stop
+the analog workers directly before maintenance:
+
+```bash
+sudo systemctl stop pi-scanner-vhf-worker.service
+sudo systemctl stop pi-scanner-uhf-worker.service
+```
+
+Restart only the boot-enabled application infrastructure:
+
 ```bash
 sudo systemctl restart pi-p25-raw-audio-bridge.service
 sudo systemctl restart pi-p25-audio-pool.service
-sudo systemctl restart pi-scanner-vhf-worker.service
-sudo systemctl restart pi-scanner-uhf-worker.service
 sudo systemctl restart pi-p25-scanner.service
 ```
 
-Worker and backend counters may restart, except the persistent P25 **Voice
-Calls** total.
+Leave VHF and UHF stopped. Open the dashboard and press **Start Scanning +
+Audio** when reception should resume. Worker and backend counters may restart,
+except the persistent P25 **Voice Calls** total.
 
 ## 17. Troubleshooting
 
@@ -572,9 +607,10 @@ service is running. Do not reinstall drivers first.
    ps -ef | grep -E 'rtl_tcp|rtl_fm|rx.py|multi_rx|readsb|dump978'
    ```
 
-2. Stop the service for that receiver.
+2. Press **Stop** so P25, VHF, and UHF release their receivers together. If the
+   dashboard is unavailable, stop both analog worker services directly.
 3. Run the bounded hardware test again.
-4. Restart the service when finished.
+4. Press **Start Scanning + Audio** when finished.
 
 ### A PI Scanner receiver is missing
 
@@ -588,7 +624,8 @@ service is running. Do not reinstall drivers first.
 
 Check both the inventory registry and analog runtime status. VHF must be
 `00000144`; UHF must be `00000440`. Reapply the canonical role map and correct
-`analog_receivers.json` before restarting the workers.
+`analog_receivers.json`, then use **Stop** followed by **Start Scanning +
+Audio**. Do not enable either analog worker for boot.
 
 ### Dashboard says Offline
 
@@ -601,6 +638,8 @@ journalctl -u pi-p25-scanner.service -n 100 --no-pager
 ### No browser audio
 
 - Tap **Start Scanning + Audio**; browser autoplay requires a user gesture.
+- Confirm `/api/status` reports P25 `running`, VHF `active`, and UHF `active`
+  under `coordinated_scanners`.
 - Confirm the button says **Mute**, not **Unmute**, and raise the volume.
 - Check whether **Active Source** shows P25, VHF, or UHF.
 - Confirm port 8072 is reachable and the arbitrator service is active.
@@ -608,6 +647,8 @@ journalctl -u pi-p25-scanner.service -n 100 --no-pager
 
 ### VHF or UHF never locks
 
+- Confirm **Start Scanning + Audio** has been pressed and the applicable worker
+  service is active.
 - Confirm the frequency is enabled in the active analog profile.
 - Confirm the correct band assignment and serial.
 - Check antenna, feed line, filters, and receiver gain.
@@ -686,6 +727,11 @@ POST /api/scanner/start
 POST /api/scanner/stop
 ```
 
+`POST /api/scanner/start` is the coordinated Start action for P25, VHF, and
+UHF. `POST /api/scanner/stop` is the coordinated Stop action. The
+`GET /api/status` response includes `coordinated_scanners`, which reports the
+last known P25, VHF, and UHF state.
+
 ## 19. Acceptance checklist
 
 Use this checklist after initial setup, a power cycle, or a major update:
@@ -695,15 +741,21 @@ Use this checklist after initial setup, a power cycle, or a major update:
 - [ ] P25 control is `00000251`; P25 voice is `00000252`.
 - [ ] VHF is `00000144`; UHF is `00000440`.
 - [ ] Receiver inventory reports no missing, duplicate, or unassigned serials.
-- [ ] Backend, audio bridge, audio pool, VHF, and UHF services are active.
+- [ ] Immediately after boot, the backend, audio bridge, and audio pool are
+      active, while P25, VHF, and UHF scanning are stopped.
+- [ ] VHF and UHF worker services are not enabled for boot.
 - [ ] Port 8070 loads the dashboard and shows **Online**.
 - [ ] Port 8072 reports `"ok": true`.
+- [ ] **Start Scanning + Audio** starts P25, VHF, and UHF and connects browser
+      audio.
+- [ ] While scanning, `/api/status` reports P25 `running`, VHF `active`, and UHF
+      `active` under `coordinated_scanners`.
 - [ ] VHF and UHF report healthy FFT-scanning states and nonzero channel counts.
-- [ ] **Start Scanning + Audio** starts P25, VHF, and UHF and connects browser audio.
 - [ ] A known P25 call updates talkgroup information and Voice Calls.
 - [ ] A known VHF transmission produces a VHF lock and complete audio.
 - [ ] A known UHF transmission produces a UHF lock and complete audio.
 - [ ] Skip, Block, Clear Lock, and Clear Blocks behave as expected.
+- [ ] **Stop** stops P25, VHF, and UHF while leaving the dashboard online.
 - [ ] A named profile can be saved, exported, loaded, and restored.
 
 When every applicable item passes, the scanner is ready for normal operation.
