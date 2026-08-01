@@ -70,30 +70,6 @@ canonical = {
         "protected": True,
         "notes": "Dedicated P25 voice-follow receiver",
     },
-    "noaa_airband": {
-        "label": "NOAA / Airband",
-        "service": "noaa_airband",
-        "rtl_serial": "00000162",
-        "enabled": False,
-        "protected": True,
-        "notes": "Reserved for NOAA and airband reception",
-    },
-    "adsb_1090": {
-        "label": "ADS-B 1090",
-        "service": "adsb",
-        "rtl_serial": "00001090",
-        "enabled": False,
-        "protected": True,
-        "notes": "Reserved for the 1090 MHz ADS-B receiver",
-    },
-    "uat_978": {
-        "label": "UAT 978",
-        "service": "uat",
-        "rtl_serial": "00000978",
-        "enabled": False,
-        "protected": True,
-        "notes": "Reserved for the 978 MHz UAT receiver",
-    },
     "analog_2m": {
         "label": "Analog 2 m",
         "service": "analog",
@@ -125,10 +101,9 @@ if path.exists():
 elif template.exists():
     payload = json.loads(template.read_text(encoding="utf-8"))
 else:
-    payload = {"schema_version": 1, "expected_rtl_count": 7, "roles": {}}
+    raise SystemExit(f"FAIL: neither {path} nor {template} exists")
 
 payload["schema_version"] = max(1, int(payload.get("schema_version") or 1))
-payload["expected_rtl_count"] = 7
 roles = payload.setdefault("roles", {})
 for role, entry in canonical.items():
     roles[role] = entry
@@ -150,7 +125,3 @@ if backup:
     print(f"BACKUP={backup}")
 print("FINAL: PASS")
 PY
-
-if [[ "$MODE" == apply ]]; then
-  python3 -m pi_p25_scanner.receiver_inventory --json
-fi

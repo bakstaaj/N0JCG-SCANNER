@@ -27,9 +27,6 @@ def test_manual_and_role_template_use_canonical_serial_map() -> None:
         "p25_voice": "00000252",
         "analog_2m": "00000144",
         "analog_70cm": "00000440",
-        "noaa_airband": "00000162",
-        "uat_978": "00000978",
-        "adsb_1090": "00001090",
     }
     manual = MANUAL.read_text(encoding="utf-8")
     template = json.loads(
@@ -43,3 +40,14 @@ def test_manual_and_role_template_use_canonical_serial_map() -> None:
         assert serial in manual
     assert template["roles"]["analog_2m"]["enabled"] is True
     assert template["roles"]["analog_70cm"]["enabled"] is True
+    for unrelated in (
+        "NOAA",
+        "Airband",
+        "airband",
+        "ADS-B",
+        "UAT",
+        "00000162",
+        "00000978",
+        "00001090",
+    ):
+        assert unrelated not in manual

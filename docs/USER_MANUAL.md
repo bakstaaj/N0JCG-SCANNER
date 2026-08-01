@@ -2,7 +2,7 @@
 
 This manual covers the PI Scanner v2.0.0 production layout: P25 trunked radio,
 FFT-directed VHF and UHF analog scanning, unified browser audio, radio profiles,
-and seven stable RTL-SDR receiver assignments. It is written for both initial
+and four dedicated RTL-SDR receiver assignments. It is written for both initial
 installation and normal daily operation.
 
 ## Contents
@@ -59,8 +59,7 @@ The validated production system uses:
 
 - Raspberry Pi 5 running 64-bit Debian 13 / Raspberry Pi OS Trixie.
 - Reliable Pi 5 power supply.
-- Seven uniquely serialized RTL-SDR receivers when all reserved services are
-  installed.
+- Four uniquely serialized RTL-SDR receivers dedicated to PI Scanner.
 - A powered USB hub suitable for the combined current draw of the receivers.
 - Appropriate antennas or a properly engineered receive-only distribution
   system.
@@ -68,9 +67,8 @@ The validated production system uses:
 - A modern browser with Web Audio support.
 
 For best RF performance, label every dongle physically after assigning its
-serial. Keep antenna leads and USB cables identifiable. VHF, UHF, 700/800 MHz
-P25, 978 MHz UAT, and 1090 MHz ADS-B benefit from band-appropriate antennas and
-filters.
+serial. Keep antenna leads and USB cables identifiable. VHF, UHF, and 700/800
+MHz P25 benefit from band-appropriate antennas and filters.
 
 ## 4. RTL-SDR role and serial-number plan
 
@@ -84,9 +82,6 @@ serial stored in each RTL-SDR EEPROM.
 | P25 voice | `00000252` | Follows P25 voice-channel grants |
 | VHF / analog 2 m | `00000144` | FFT-directed VHF NFM scanner |
 | UHF / analog 70 cm | `00000440` | FFT-directed UHF NFM scanner |
-| NOAA / airband | `00000162` | Reserved for the NOAA/airband application |
-| UAT | `00000978` | Reserved for 978 MHz aviation traffic |
-| ADS-B | `00001090` | Reserved for 1090 MHz aviation traffic |
 
 The two analog assignments are mandatory: VHF is `00000144` and UHF is
 `00000440`. Do not swap them. The VHF and UHF workers fail closed if their
@@ -151,9 +146,9 @@ sudo systemctl stop pi-scanner-vhf-worker.service
 sudo systemctl stop pi-scanner-uhf-worker.service
 ```
 
-Also stop NOAA, UAT, ADS-B, or other SDR services installed on the Pi. Confirm
-that no `rtl_tcp`, `rtl_fm`, OP25, readsb, or dump978 process still owns the
-receiver before changing its EEPROM.
+Also stop any other application that owns an SDR connected to the Pi. Confirm
+that no unrelated receiver process still owns the device before changing its
+EEPROM.
 
 ### 6.2 Disconnect all RTL-SDR receivers
 
@@ -192,7 +187,8 @@ Important rules:
 
 ### 6.4 Verify all receivers together
 
-Reconnect all receivers while the radio services remain stopped:
+Reconnect all four PI Scanner receivers while the scanner services remain
+stopped:
 
 ```bash
 rtl_test -t
@@ -211,7 +207,7 @@ only the printed serial is persistent.
 
 ## 7. Apply and verify receiver assignments
 
-### 7.1 Apply the canonical seven-receiver map
+### 7.1 Apply the canonical four-receiver map
 
 From the P25 application directory, preview the role map:
 
@@ -242,8 +238,9 @@ curl -fsS http://127.0.0.1:8070/api/receivers/inventory \
   | python3 -m json.tool
 ```
 
-Expected results are `"ok": true`, `"device_count": 7`, no duplicate serials,
-no missing configured serials, and no unassigned serials.
+Confirm that the four PI Scanner roles have the serials shown above and that no
+scanner receiver is missing or duplicated. A shared Pi may list receivers owned
+by other applications; those devices are outside the scope of this manual.
 
 ### 7.3 Verify the active analog worker map
 
@@ -580,7 +577,7 @@ service is running. Do not reinstall drivers first.
 3. Run the bounded hardware test again.
 4. Restart the service when finished.
 
-### Fewer than seven receivers are listed
+### A PI Scanner receiver is missing
 
 - Check the powered hub and Pi power supply.
 - Reseat one receiver at a time.
@@ -665,7 +662,7 @@ frequency.
 | File | Purpose |
 |---|---|
 | `/home/pi/PI-P25-SCANNER/runtime/settings/p25_systems.json` | Active P25 system and talkgroups |
-| `/home/pi/PI-P25-SCANNER/runtime/settings/receiver_roles.json` | Stable seven-receiver registry |
+| `/home/pi/PI-P25-SCANNER/runtime/settings/receiver_roles.json` | Stable PI Scanner receiver registry |
 | `/home/pi/PI-P25-SCANNER/runtime/settings/configs/` | Named radio profiles |
 | `/home/pi/PI-P25-SCANNER/runtime/settings/runtime_activity.json` | Persistent P25 Voice Calls total |
 | `/home/pi/PI-SCANNER/runtime/settings/analog_receivers.json` | Active VHF/UHF channels and worker settings |
@@ -695,10 +692,9 @@ POST /api/scanner/stop
 Use this checklist after initial setup, a power cycle, or a major update:
 
 - [ ] Pi boots without undervoltage or USB power warnings.
-- [ ] Seven unique RTL-SDR serials are visible when all expected receivers are connected.
+- [ ] Four unique PI Scanner RTL-SDR serials are visible.
 - [ ] P25 control is `00000251`; P25 voice is `00000252`.
 - [ ] VHF is `00000144`; UHF is `00000440`.
-- [ ] Reserved NOAA, UAT, and ADS-B serials match the role table.
 - [ ] Receiver inventory reports no missing, duplicate, or unassigned serials.
 - [ ] Backend, audio bridge, audio pool, VHF, and UHF services are active.
 - [ ] Port 8070 loads the dashboard and shows **Online**.
