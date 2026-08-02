@@ -1,3 +1,4 @@
+import json
 import subprocess
 import threading
 import time
@@ -12,6 +13,7 @@ from pi_p25_scanner.scanner_service_control import (
     AnalogScannerServiceController,
     ScannerServiceControlError,
 )
+from pi_p25_scanner import backend
 from pi_p25_scanner.backend import ScannerManager, ScannerStatus
 
 
@@ -95,6 +97,15 @@ class FakeP25Process:
         return self.returncode
 
 
+class FakeActivityTracker:
+    def __init__(self) -> None:
+        self.reset_calls: list[bool] = []
+
+    def reset(self, *, preserve_distinct_voice_calls=False):
+        self.reset_calls.append(preserve_distinct_voice_calls)
+        return {"distinct_voice_calls": 0}
+
+
 def manager_with_running_p25():
     manager = ScannerManager.__new__(ScannerManager)
     manager.status = ScannerStatus()
@@ -102,6 +113,7 @@ def manager_with_running_p25():
     manager.lock = threading.RLock()
     manager.control_lock = threading.Lock()
     manager.analog_service_controller = FakeAnalogController()
+    manager.activity_tracker = FakeActivityTracker()
     manager.status_payload = lambda: asdict(manager.status)
     return manager
 
@@ -127,6 +139,8 @@ def test_backend_stop_stops_p25_vhf_and_uhf() -> None:
 
     assert status == HTTPStatus.ACCEPTED
     assert manager.analog_service_controller.stop_calls == 1
+    assert manager.activity_tracker.reset_calls == [False]
+    assert payload["activity_summary"]["distinct_voice_calls"] == 0
     assert payload["coordinated_scanners"] == {
         "p25": "stopped",
         "vhf": "stopped",
@@ -190,12 +204,37 @@ def test_unexpected_p25_exit_stops_both_analog_scanners() -> None:
 
     assert manager.process is None
     assert manager.analog_service_controller.stop_calls == 1
+    assert manager.activity_tracker.reset_calls == [False]
     assert manager.status.scanner_state == "decoder_exited"
     assert manager.status.coordinated_scanners == {
         "p25": "stopped",
         "vhf": "stopped",
         "uhf": "stopped",
     }
+
+
+def test_stop_counter_reset_preserves_analog_status_details(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(backend, "_ANALOG_DASHBOARD_ROOT", tmp_path)
+    status_dir = tmp_path / "runtime" / "status"
+    status_dir.mkdir(parents=True)
+    for role, lock_count in (("analog_2m", 9), ("analog_70cm", 4)):
+        metadata = backend._ANALOG_DASHBOARD_ROLES[role]
+        (status_dir / metadata["status_file"]).write_text(
+            '{"lock_count": %d, "rtl_serial": "%s", "state": "stopped"}\n'
+            % (lock_count, metadata["expected_serial"]),
+            encoding="utf-8",
+        )
+
+    reset_roles = backend._reset_analog_dashboard_lock_counters()
+
+    assert reset_roles == ["analog_2m", "analog_70cm"]
+    for role in reset_roles:
+        metadata = backend._ANALOG_DASHBOARD_ROLES[role]
+        payload = json.loads(
+            (status_dir / metadata["status_file"]).read_text(encoding="utf-8")
+        )
+        assert payload["lock_count"] == 0
+        assert payload["rtl_serial"] == metadata["expected_serial"]
 
 
 def test_runtime_units_are_not_enabled_for_boot() -> None:

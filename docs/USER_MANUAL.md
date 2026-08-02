@@ -353,8 +353,9 @@ as failed and the application returns the other scanners to the stopped state.
   or mute another browser.
 - **Volume:** controls only this browser tab. Moving it while muted also
   unmutes the tab.
-- **Stop:** stops P25, VHF, and UHF scanning together and disconnects audio in
-  this browser.
+- **Stop:** stops P25, VHF, and UHF scanning together, resets **Voice Calls**,
+  **VHF Locks**, and **UHF Locks** to zero, and disconnects audio in this
+  browser.
 
 After pressing **Stop**, the dashboard and audio services remain online so a
 later press of **Start Scanning + Audio** can resume reception without rebooting
@@ -368,7 +369,8 @@ the Pi.
 - **Phase:** detected P25 phase when known.
 - **Audio Arbitrator:** browser connection and active-source status.
 - **Active Source:** P25, VHF, UHF, or None.
-- **Voice Calls:** persistent count of distinct P25 voice transmissions.
+- **Voice Calls:** count of distinct P25 voice transmissions since the last
+  press of **Stop**.
 - **Unique TGIDs:** number of unique P25 talkgroups observed in the current
   backend session.
 - **VHF Locks / UHF Locks:** accepted analog carrier locks; these service
@@ -516,9 +518,10 @@ sources are rejected while that call owns the output. After approximately 1.5
 seconds without frames, the arbitrator releases the source and can accept the
 next P25, VHF, or UHF call.
 
-The browser receives 8 kHz, mono, signed 16-bit PCM from port 8072. The browser
-keeps only a small queue to limit delay. Mute and volume operate in the browser,
-not in the radio workers.
+Each connected browser receives its own copy of the 8 kHz, mono, signed 16-bit
+PCM stream from port 8072. Browsers do not compete for audio frames. Each tab
+keeps only a small queue to limit delay; mute and volume operate in that browser,
+not in the radio workers or other tabs.
 
 Check audio status directly:
 

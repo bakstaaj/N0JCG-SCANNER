@@ -46,7 +46,8 @@ class State:
     sources: dict[int, Source]
     lock: threading.Lock = field(default_factory=threading.Lock)
     condition: threading.Condition = field(init=False)
-    queue: Deque[bytes] = field(init=False)
+    queue: Deque[tuple[int, bytes]] = field(init=False)
+    next_sequence: int = 0
     active_port: int | None = None
     active_since: float | None = None
     warmup_port: int | None = None
@@ -99,33 +100,61 @@ class State:
                 source.rejected += 1
                 return False
 
-            self.queue.append(payload)
+            self.queue.append((self.next_sequence, payload))
+            self.next_sequence += 1
             source.forwarded += 1
             self.condition.notify_all()
             return True
 
-    def pop(self, wait_seconds: float = 0.15) -> bytes | None:
+    def register_client(self) -> int:
+        with self.lock:
+            self.clients += 1
+            if not self.queue:
+                return self.next_sequence
+            oldest_sequence = self.queue[0][0]
+            return max(
+                oldest_sequence,
+                self.next_sequence - self.prebuffer_frames,
+            )
+
+    def unregister_client(self) -> None:
+        with self.lock:
+            self.clients = max(0, self.clients - 1)
+
+    def read_after(
+        self,
+        sequence: int,
+        wait_seconds: float = 0.15,
+    ) -> tuple[bytes | None, int]:
+        """Return one frame without consuming it for any other browser."""
         deadline = time.time() + wait_seconds
         with self.condition:
             while True:
                 self._release_stale(time.time())
                 if self.active_port is None:
                     self.playback_started = False
-                    return None
+                    return None, sequence
                 if not self.playback_started:
                     if len(self.queue) >= self.prebuffer_frames:
                         self.playback_started = True
                     else:
                         remaining = deadline - time.time()
                         if remaining <= 0:
-                            return None
+                            return None, sequence
                         self.condition.wait(remaining)
                         continue
                 if self.queue:
-                    return self.queue.popleft()
+                    oldest_sequence = self.queue[0][0]
+                    if sequence < oldest_sequence:
+                        sequence = oldest_sequence
+                    if sequence < self.next_sequence:
+                        offset = sequence - oldest_sequence
+                        if 0 <= offset < len(self.queue):
+                            frame_sequence, frame = self.queue[offset]
+                            return frame, frame_sequence + 1
                 remaining = deadline - time.time()
                 if remaining <= 0:
-                    return None
+                    return None, sequence
                 self.condition.wait(remaining)
 
     def snapshot(self) -> dict:
@@ -135,7 +164,7 @@ class State:
             active = self.sources.get(self.active_port)
             return {
                 "ok": True,
-                "mode": "three_scanner_audio_arbitrator_v2",
+                "mode": "three_scanner_audio_arbitrator_v3_fanout",
                 "active_source": active.name if active else None,
                 "active_port": self.active_port,
                 "release_seconds": self.release_seconds,
@@ -162,7 +191,7 @@ class State:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "PiScannerAudioArbitrator/0.2"
+    server_version = "PiScannerAudioArbitrator/0.3"
 
     @property
     def state(self) -> State:
@@ -201,11 +230,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/audio.wav":
             self.wfile.write(wav_header())
             self.wfile.flush()
-        with self.state.lock:
-            self.state.clients += 1
+        sequence = self.state.register_client()
         try:
             while True:
-                frame = self.state.pop()
+                frame, sequence = self.state.read_after(sequence)
                 if frame is None:
                     frame = SILENCE
                     with self.state.lock:
@@ -216,8 +244,7 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
         finally:
-            with self.state.lock:
-                self.state.clients = max(0, self.state.clients - 1)
+            self.state.unregister_client()
 
 
 def receive_loop(state: State, sockets: dict[socket.socket, int]) -> None:
@@ -251,7 +278,7 @@ def self_test() -> None:
     assert not state.process(23459, frame, t + 0.03)
     assert state.process(23459, frame, t + 0.04)
     assert state.snapshot()["active_source"] == "UHF"
-    print("PASS: audio arbitrator v2 self-test")
+    print("PASS: audio arbitrator v3 fan-out self-test")
 
 
 def main() -> int:
@@ -293,7 +320,11 @@ def main() -> int:
     threading.Thread(target=receive_loop, args=(state, sockets), daemon=True).start()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.audio_state = state  # type: ignore[attr-defined]
-    print(f"Unified scanner audio arbitrator v2 listening http://{args.host}:{args.port}/audio.wav", flush=True)
+    print(
+        f"Unified scanner audio arbitrator v3 fan-out listening "
+        f"http://{args.host}:{args.port}/audio.wav",
+        flush=True,
+    )
     server.serve_forever()
     return 0
 

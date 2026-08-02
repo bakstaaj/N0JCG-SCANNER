@@ -703,22 +703,36 @@ class ScannerManager:
             except (OSError, subprocess.SubprocessError, ScannerServiceControlError) as exc:
                 analog_error = exc
 
+            counter_error = None
+            try:
+                _reset_analog_dashboard_lock_counters()
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                counter_error = exc
+
             with self.lock:
+                self.status.activity_summary = self.activity_tracker.reset(
+                    preserve_distinct_voice_calls=False
+                )
                 self.status.coordinated_scanners["vhf"] = (
                     "error" if analog_error else "stopped"
                 )
                 self.status.coordinated_scanners["uhf"] = (
                     "error" if analog_error else "stopped"
                 )
-                if analog_error:
+                if analog_error or counter_error:
                     self.status.ok = False
-                    self._append_warning(str(analog_error))
+                    if analog_error:
+                        self._append_warning(str(analog_error))
+                    if counter_error:
+                        self._append_warning(
+                            f"Analog lock counter reset failed: {counter_error}"
+                        )
                     self._set_event(
-                        f"P25 decoder exited rc={rc}; VHF/UHF stop failed: {analog_error}"
+                        f"P25 decoder exited rc={rc}; scanner shutdown had errors"
                     )
                 else:
                     self._set_event(
-                        f"P25 decoder exited rc={rc}; VHF and UHF stopped"
+                        f"P25 decoder exited rc={rc}; VHF and UHF stopped; counters reset"
                     )
 
     def _build_command_from_template(self, manifest: dict[str, Any]) -> list[str]:
@@ -937,8 +951,16 @@ class ScannerManager:
             self.analog_service_controller.stop()
         except (OSError, subprocess.SubprocessError, ScannerServiceControlError) as exc:
             analog_error = exc
+        counter_error = None
+        try:
+            _reset_analog_dashboard_lock_counters()
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            counter_error = exc
         with self.lock:
             self.process = None
+            self.status.activity_summary = self.activity_tracker.reset(
+                preserve_distinct_voice_calls=False
+            )
             self.status.scanner_state = "stopped"
             self.status.control_channel_state = "idle"
             self.status.control_channel_locked = False
@@ -949,15 +971,24 @@ class ScannerManager:
                 "vhf": "error" if analog_error else "stopped",
                 "uhf": "error" if analog_error else "stopped",
             }
-            if analog_error:
+            if analog_error or counter_error:
                 self.status.ok = False
-                self._append_warning(str(analog_error))
-                self._set_event(f"P25 stopped; VHF/UHF stop failed: {analog_error}")
+                if analog_error:
+                    self._append_warning(str(analog_error))
+                if counter_error:
+                    self._append_warning(
+                        f"Analog lock counter reset failed: {counter_error}"
+                    )
+                self._set_event("Scanner stop completed with errors")
             else:
                 self.status.ok = True
-                self._set_event("P25, VHF, and UHF scanners stopped")
+                self._set_event(
+                    "P25, VHF, and UHF scanners stopped; voice and lock counters reset"
+                )
         return self.status_payload(), (
-            HTTPStatus.INTERNAL_SERVER_ERROR if analog_error else HTTPStatus.ACCEPTED
+            HTTPStatus.INTERNAL_SERVER_ERROR
+            if analog_error or counter_error
+            else HTTPStatus.ACCEPTED
         )
 
     def audio_status(self, request_host: str = "") -> dict[str, Any]:
@@ -1395,6 +1426,28 @@ _ANALOG_DASHBOARD_ROLES = {
     "analog_2m": {"label": "VHF", "status_file": "analog_2m.json", "audio_port": 8073, "expected_serial": "00000144"},
     "analog_70cm": {"label": "UHF", "status_file": "analog_70cm.json", "audio_port": 8074, "expected_serial": "00000440"},
 }
+
+
+def _reset_analog_dashboard_lock_counters() -> list[str]:
+    """Reset persisted VHF/UHF lock totals after their workers are stopped."""
+    status_dir = _ANALOG_DASHBOARD_ROOT / "runtime" / "status"
+    reset_roles: list[str] = []
+    for role, metadata in _ANALOG_DASHBOARD_ROLES.items():
+        path = status_dir / metadata["status_file"]
+        if not path.exists():
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError(f"{path}: status root is not an object")
+        payload["lock_count"] = 0
+        temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        temporary.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)
+        reset_roles.append(role)
+    return reset_roles
 
 
 def _analog_dashboard_status_payload(host_header: str = "") -> dict[str, Any]:
