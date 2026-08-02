@@ -326,6 +326,18 @@ The current installation is normally available at
 `http://192.168.68.137:8070`, but DHCP may change that address. A DHCP
 reservation is recommended.
 
+For the separate compact phone dashboard, open:
+
+```text
+http://PI-SDR.local:8070/mobile.html
+http://<pi-ip-address>:8070/mobile.html
+```
+
+The phone dashboard provides the coordinated Start and Stop controls, local
+Mute and Volume, current P25 or analog activity, Voice/VHF/UHF counters, and
+analog Skip, Block, Clear Lock, and Clear Blocks. Use **Full UI** when profile
+editing, logs, or detailed radio setup is required.
+
 After boot, the dashboard and audio infrastructure are available, but P25, VHF,
 and UHF scanning are all stopped. Opening the web page or the desktop shortcut
 does not start a receiver. Press **Start Scanning + Audio** once to start all

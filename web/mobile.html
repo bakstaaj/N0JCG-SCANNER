@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101820">
+  <title>PI Scanner Mobile</title>
+  <link rel="stylesheet" href="/mobile.css?v=1.0.0">
+</head>
+<body>
+  <main class="phone-shell">
+    <header class="phone-header">
+      <div>
+        <span class="eyebrow">PI Scanner</span>
+        <h1>Mobile Control</h1>
+      </div>
+      <a class="full-ui-link" href="/">Full UI</a>
+    </header>
+
+    <section class="status-row" aria-label="scanner status">
+      <span id="scannerBadge" class="badge idle">Stopped</span>
+      <span id="onlineBadge" class="badge pending">Connecting</span>
+    </section>
+
+    <section class="now-card" aria-live="polite">
+      <div class="now-topline">
+        <span>Now / Last Heard</span>
+        <strong id="activeSource">Idle</strong>
+      </div>
+      <h2 id="activeLabel">Waiting for activity</h2>
+      <p id="activeDetail">Start scanning to listen</p>
+    </section>
+
+    <section class="primary-controls" aria-label="scanner controls">
+      <button id="startBtn" class="control-button start" type="button">Start + Listen</button>
+      <button id="stopBtn" class="control-button stop" type="button" disabled>Stop</button>
+    </section>
+
+    <section class="audio-controls" aria-label="phone audio controls">
+      <button id="muteBtn" class="mute-button" type="button" aria-pressed="false">Mute</button>
+      <label for="volumeSlider">
+        <span>Volume</span>
+        <input id="volumeSlider" type="range" min="0" max="100" step="1" value="80">
+      </label>
+    </section>
+
+    <section class="counter-grid" aria-label="call counters">
+      <article><span>Voice Calls</span><strong id="voiceCalls">0</strong></article>
+      <article><span>VHF Locks</span><strong id="vhfLocks">0</strong></article>
+      <article><span>UHF Locks</span><strong id="uhfLocks">0</strong></article>
+    </section>
+
+    <section class="analog-card" aria-label="analog channel controls">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">Analog Channel</span>
+          <strong id="analogControlTarget">No active lock</strong>
+        </div>
+      </div>
+      <div class="analog-actions">
+        <button id="skipBtn" type="button" disabled>Skip 10 Min</button>
+        <button id="blockBtn" type="button" disabled>Block</button>
+        <button id="clearLockBtn" type="button" disabled>Clear Lock</button>
+        <button id="clearBlocksBtn" type="button" disabled>Clear Blocks</button>
+      </div>
+    </section>
+
+    <section class="scanner-summary" aria-label="individual scanner states">
+      <span>P25 <strong id="p25State">-</strong></span>
+      <span>VHF <strong id="vhfState">-</strong></span>
+      <span>UHF <strong id="uhfState">-</strong></span>
+    </section>
+
+    <p id="message" class="message" role="status">Ready</p>
+    <audio id="scannerAudio" preload="none"></audio>
+  </main>
+  <script src="/mobile.js?v=1.0.0"></script>
+</body>
+</html>
