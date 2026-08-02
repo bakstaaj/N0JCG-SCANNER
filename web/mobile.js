@@ -1,6 +1,10 @@
 'use strict';
 
 const ROLE_BY_SOURCE = { VHF: 'analog_2m', UHF: 'analog_70cm' };
+const SAMPLE_RATE = 8000;
+const FRAME_SAMPLES = 160;
+const FRAME_BYTES = FRAME_SAMPLES * 2;
+const MAX_QUEUED_SECONDS = 0.35;
 const state = {
   backend: null,
   analog: null,
@@ -9,6 +13,17 @@ const state = {
   activeRole: null,
   busy: false,
   polling: false,
+  audioAttached: false,
+  muted: false,
+};
+const pcm = {
+  context: null,
+  gain: null,
+  reader: null,
+  running: false,
+  stopping: false,
+  nextPlayTime: 0,
+  pending: new Uint8Array(0),
 };
 
 function byId(id) { return document.getElementById(id); }
@@ -35,6 +50,110 @@ function setBadge(id, label, style) {
   if (!badge) return;
   badge.textContent = label;
   badge.className = `badge ${style}`;
+}
+
+function applyAudioLevel() {
+  if (!pcm.gain) return;
+  const volume = Number(byId('volumeSlider').value) / 100;
+  pcm.gain.gain.value = state.muted ? 0 : Math.max(0, Math.min(1, volume));
+}
+
+async function ensureAudioContext() {
+  if (!pcm.context) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) throw new Error('Web Audio is not supported by this browser');
+    // Let the phone choose its hardware output rate. AudioBuffer resampling
+    // handles the 8 kHz scanner frames, and avoids mobile devices that reject
+    // a forced 8 kHz AudioContext.
+    pcm.context = new AudioContextClass({ latencyHint: 'interactive' });
+    pcm.gain = pcm.context.createGain();
+    pcm.gain.connect(pcm.context.destination);
+    applyAudioLevel();
+  }
+  if (pcm.context.state === 'suspended') await pcm.context.resume();
+}
+
+function appendBytes(first, second) {
+  const joined = new Uint8Array(first.length + second.length);
+  joined.set(first, 0);
+  joined.set(second, first.length);
+  return joined;
+}
+
+function scheduleFrame(bytes) {
+  if (!pcm.context || !pcm.gain) return;
+  const buffer = pcm.context.createBuffer(1, FRAME_SAMPLES, SAMPLE_RATE);
+  const channel = buffer.getChannelData(0);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let index = 0; index < FRAME_SAMPLES; index += 1) {
+    channel[index] = view.getInt16(index * 2, true) / 32768;
+  }
+  const now = pcm.context.currentTime;
+  if (pcm.nextPlayTime < now + 0.02 || pcm.nextPlayTime - now > MAX_QUEUED_SECONDS) {
+    pcm.nextPlayTime = now + 0.02;
+  }
+  const source = pcm.context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(pcm.gain);
+  source.start(pcm.nextPlayTime);
+  pcm.nextPlayTime += FRAME_SAMPLES / SAMPLE_RATE;
+}
+
+async function pumpPcmStream() {
+  try {
+    while (!pcm.stopping && pcm.reader) {
+      const result = await pcm.reader.read();
+      if (result.done) break;
+      pcm.pending = appendBytes(pcm.pending, result.value);
+      while (pcm.pending.length >= FRAME_BYTES) {
+        scheduleFrame(pcm.pending.slice(0, FRAME_BYTES));
+        pcm.pending = pcm.pending.slice(FRAME_BYTES);
+      }
+    }
+  } catch (error) {
+    if (!pcm.stopping) setText('message', `Audio stream error: ${error.message}`);
+  } finally {
+    pcm.reader = null;
+    pcm.running = false;
+    if (!pcm.stopping) {
+      state.audioAttached = false;
+      render();
+    }
+  }
+}
+
+async function attachAudio() {
+  await ensureAudioContext();
+  if (pcm.running) {
+    state.audioAttached = true;
+    setText('message', 'Phone audio connected');
+    return;
+  }
+  pcm.stopping = false;
+  pcm.pending = new Uint8Array(0);
+  pcm.nextPlayTime = 0;
+  const response = await fetch(
+    `http://${window.location.hostname}:8072/audio.pcm?_=${Date.now()}`,
+    { cache: 'no-store', mode: 'cors' },
+  );
+  if (!response.ok || !response.body) throw new Error(`PCM stream HTTP ${response.status}`);
+  pcm.reader = response.body.getReader();
+  pcm.running = true;
+  state.audioAttached = true;
+  setText('message', 'Phone audio connected');
+  pumpPcmStream();
+}
+
+async function stopAudio() {
+  pcm.stopping = true;
+  state.audioAttached = false;
+  if (pcm.reader) {
+    try { await pcm.reader.cancel(); } catch (_error) {}
+  }
+  pcm.reader = null;
+  pcm.running = false;
+  pcm.pending = new Uint8Array(0);
+  pcm.nextPlayTime = 0;
 }
 
 function scannersRunning() {
@@ -107,7 +226,7 @@ function renderNowPlaying() {
 
 function render() {
   const running = scannersRunning();
-  const audioPlaying = !byId('scannerAudio').paused;
+  const audioPlaying = state.audioAttached;
   const source = String(state.audio?.active_source || '').toUpperCase();
   setBadge('onlineBadge', state.backend ? 'Online' : 'Offline', state.backend ? 'online' : 'offline');
   if (source) setBadge('scannerBadge', `${source} On Air`, 'on-air');
@@ -156,17 +275,6 @@ async function poll() {
   }
 }
 
-async function attachAudio() {
-  const audio = byId('scannerAudio');
-  if (!audio.src) audio.src = `http://${window.location.hostname}:8072/audio.wav`;
-  try {
-    await audio.play();
-    setText('message', 'Phone audio connected');
-  } catch (error) {
-    setText('message', `Audio needs another tap: ${error.message}`);
-  }
-}
-
 async function startScanning(event) {
   if (event.isTrusted === false || state.busy) return;
   state.busy = true;
@@ -194,8 +302,7 @@ async function stopScanning() {
   state.busy = true;
   render();
   setText('message', 'Stopping all scanners...');
-  const audio = byId('scannerAudio');
-  audio.pause();
+  await stopAudio();
   try {
     state.backend = await postJson('/api/scanner/stop');
     setText('message', 'Stopped; all call counters reset');
@@ -208,11 +315,11 @@ async function stopScanning() {
 }
 
 function toggleMute() {
-  const audio = byId('scannerAudio');
-  audio.muted = !audio.muted;
+  state.muted = !state.muted;
   const button = byId('muteBtn');
-  button.setAttribute('aria-pressed', String(audio.muted));
-  button.textContent = audio.muted ? 'Unmute' : 'Mute';
+  button.setAttribute('aria-pressed', String(state.muted));
+  button.textContent = state.muted ? 'Unmute' : 'Mute';
+  applyAudioLevel();
 }
 
 async function analogAction(action) {
@@ -240,15 +347,13 @@ byId('startBtn').addEventListener('click', startScanning);
 byId('stopBtn').addEventListener('click', stopScanning);
 byId('muteBtn').addEventListener('click', toggleMute);
 byId('volumeSlider').addEventListener('input', (event) => {
-  const audio = byId('scannerAudio');
-  audio.volume = Number(event.target.value) / 100;
-  if (audio.muted && audio.volume > 0) toggleMute();
+  if (state.muted && Number(event.target.value) > 0) toggleMute();
+  applyAudioLevel();
 });
 byId('skipBtn').addEventListener('click', () => analogAction('skip'));
 byId('blockBtn').addEventListener('click', () => analogAction('block'));
 byId('clearLockBtn').addEventListener('click', () => analogAction('clear_lock'));
 byId('clearBlocksBtn').addEventListener('click', () => analogAction('clear_blocks'));
 
-byId('scannerAudio').volume = Number(byId('volumeSlider').value) / 100;
 poll();
 window.setInterval(poll, 1000);

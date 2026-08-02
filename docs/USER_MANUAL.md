@@ -333,6 +333,10 @@ http://PI-SDR.local:8070/mobile.html
 http://<pi-ip-address>:8070/mobile.html
 ```
 
+Supported phone browsers are redirected to this page automatically when they
+open the main dashboard address. The **Full UI** link bypasses that redirect
+for the current navigation when radio setup or logs are needed.
+
 The phone dashboard provides the coordinated Start and Stop controls, local
 Mute and Volume, current P25 or analog activity, Voice/VHF/UHF counters, and
 analog Skip, Block, Clear Lock, and Clear Blocks. Use **Full UI** when profile

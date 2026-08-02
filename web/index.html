@@ -3,6 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <script>
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('desktop') === '1') return;
+      const mobileHint = navigator.userAgentData?.mobile === true;
+      const phoneUserAgent = /Android.*Mobile|iPhone|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (mobileHint || phoneUserAgent) window.location.replace('/mobile.html');
+    })();
+  </script>
   <title>PI Scanner</title>
   <link rel="stylesheet" href="/app.css?v=2.0.2-dashboard-layout">
 </head>
