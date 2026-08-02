@@ -28,8 +28,8 @@ def test_squelch_controls_are_hidden_but_channel_actions_remain() -> None:
 def test_header_uses_compact_title_and_adjacent_status_badges() -> None:
     html = Path("web/index.html").read_text(encoding="utf-8")
 
-    assert "<title>PI Scanner</title>" in html
-    assert "<strong>PI Scanner</strong>" in html
+    assert "<title>N0JCG SCANNER</title>" in html
+    assert "<strong>N0JCG SCANNER</strong>" in html
     assert 'id="dashboardSummary"' not in html
 
     state = html.index('id="stateBadge"')

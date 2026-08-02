@@ -10,6 +10,8 @@ def test_mobile_dashboard_is_separate_and_phone_friendly() -> None:
 
     assert 'name="viewport"' in html
     assert 'viewport-fit=cover' in html
+    assert '<title>N0JCG SCANNER Mobile</title>' in html
+    assert '<span class="eyebrow">N0JCG SCANNER</span>' in html
     assert 'href="/?desktop=1"' in html
     assert 'id="startBtn"' in html
     assert 'id="stopBtn"' in html

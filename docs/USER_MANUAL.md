@@ -1,6 +1,6 @@
-# PI Scanner User Manual
+# N0JCG SCANNER User Manual
 
-This manual covers the PI Scanner v2.0.0 production layout: P25 trunked radio,
+This manual covers the N0JCG SCANNER v2.0.0 production layout: P25 trunked radio,
 FFT-directed VHF and UHF analog scanning, unified browser audio, radio profiles,
 and four dedicated RTL-SDR receiver assignments. It is written for both initial
 installation and normal daily operation.

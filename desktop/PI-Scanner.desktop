@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=PI Scanner
-Comment=Open PI Scanner; use Start Scanning and Audio to begin reception
+Name=N0JCG SCANNER
+Comment=Open N0JCG SCANNER; use Start Scanning and Audio to begin reception
 Exec=/home/pi/PI-P25-SCANNER/tools/open_pi_scanner_dashboard.sh
 Path=/home/pi/PI-P25-SCANNER
 Icon=network-wireless
