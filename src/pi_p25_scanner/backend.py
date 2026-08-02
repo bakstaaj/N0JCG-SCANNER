@@ -294,6 +294,10 @@ class ScannerManager:
         self.runtime_parser = RuntimeStatusParser()
         self.activity_tracker = RuntimeActivityTracker(state_path=ACTIVITY_STATE_PATH)
         self.analog_service_controller = AnalogScannerServiceController()
+        # HTTP requests run in separate threads. Serialize Start and Stop so a
+        # second request cannot overwrite the Popen handle while the first
+        # coordinated transition is still bringing analog services up or down.
+        self.control_lock = threading.Lock()
         self.talkgroup_labels: dict[int, str] = {}
         self.blocked_talkgroup_ids: set[int] = set()
         self._display_suppressed_tgid_until: dict[int, float] = {}
@@ -679,12 +683,43 @@ class ScannerManager:
         for line in process.stdout:
             self._append_log(line)
         rc = process.poll()
-        with self.lock:
-            self.status.decoder_process["running"] = False
-            self.status.decoder_process["pid"] = None
-            if self.status.scanner_state == "running":
-                self.status.scanner_state = "decoder_exited"
-            self._set_event(f"Decoder process exited rc={rc}")
+        with self.control_lock:
+            with self.lock:
+                # A late reader from an older launch must never mark a newer
+                # P25 process stopped. This was one source of the dashboard
+                # flipping to Stopped while live P25 audio continued.
+                if self.process is not process:
+                    return
+                self.process = None
+                self.status.decoder_process["running"] = False
+                self.status.decoder_process["pid"] = None
+                self.status.coordinated_scanners["p25"] = "stopped"
+                if self.status.scanner_state == "running":
+                    self.status.scanner_state = "decoder_exited"
+
+            analog_error = None
+            try:
+                self.analog_service_controller.stop()
+            except (OSError, subprocess.SubprocessError, ScannerServiceControlError) as exc:
+                analog_error = exc
+
+            with self.lock:
+                self.status.coordinated_scanners["vhf"] = (
+                    "error" if analog_error else "stopped"
+                )
+                self.status.coordinated_scanners["uhf"] = (
+                    "error" if analog_error else "stopped"
+                )
+                if analog_error:
+                    self.status.ok = False
+                    self._append_warning(str(analog_error))
+                    self._set_event(
+                        f"P25 decoder exited rc={rc}; VHF/UHF stop failed: {analog_error}"
+                    )
+                else:
+                    self._set_event(
+                        f"P25 decoder exited rc={rc}; VHF and UHF stopped"
+                    )
 
     def _build_command_from_template(self, manifest: dict[str, Any]) -> list[str]:
         template = os.environ.get("P25_SCANNER_OP25_COMMAND_TEMPLATE", "").strip()
@@ -723,6 +758,10 @@ class ScannerManager:
         return updated
 
     def start(self) -> tuple[dict[str, Any], HTTPStatus]:
+        with self.control_lock:
+            return self._start_coordinated()
+
+    def _start_coordinated(self) -> tuple[dict[str, Any], HTTPStatus]:
         with self.lock:
             if self.process is not None and self.process.poll() is None:
                 process = self.process
@@ -884,6 +923,10 @@ class ScannerManager:
         return self.status_payload(), HTTPStatus.ACCEPTED
 
     def stop(self) -> tuple[dict[str, Any], HTTPStatus]:
+        with self.control_lock:
+            return self._stop_coordinated()
+
+    def _stop_coordinated(self) -> tuple[dict[str, Any], HTTPStatus]:
         with self.lock:
             process = self.process
         stop_result = None

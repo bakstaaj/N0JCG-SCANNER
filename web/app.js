@@ -215,6 +215,12 @@ async function startScannerAndAudio() {
     return;
   }
 
+  const startBtn = field('startBtn');
+  const stopBtn = field('stopBtn');
+  if (startBtn) startBtn.disabled = true;
+  if (stopBtn) stopBtn.disabled = true;
+  setText('lastEvent', 'Starting P25, VHF, and UHF scanners...');
+
   const audio = field('browserAudioPlayer');
   if (audio) audio.src = audioStreamUrl();
   const playPromise = audio ? audio.play().catch((error) => { updateAudioPanel(`Press audio play if blocked: ${error.message}`); return false; }) : Promise.resolve(false);
@@ -231,6 +237,12 @@ async function startScannerAndAudio() {
 }
 
 async function stopScanner() {
+  const startBtn = field('startBtn');
+  const stopBtn = field('stopBtn');
+  if (startBtn) startBtn.disabled = true;
+  if (stopBtn) stopBtn.disabled = true;
+  setText('lastEvent', 'Stopping P25, VHF, and UHF scanners...');
+
   const audio = field('browserAudioPlayer');
   if (audio) { audio.pause(); audio.src = audioStreamUrl(); }
   updateAudioPanel('Stopping P25, VHF, UHF, and browser audio');

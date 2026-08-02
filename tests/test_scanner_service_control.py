@@ -1,5 +1,6 @@
 import subprocess
 import threading
+import time
 from dataclasses import asdict
 from http import HTTPStatus
 from pathlib import Path
@@ -82,6 +83,7 @@ class FakeP25Process:
 
     def __init__(self) -> None:
         self.returncode = None
+        self.stdout = []
 
     def poll(self):
         return self.returncode
@@ -98,6 +100,7 @@ def manager_with_running_p25():
     manager.status = ScannerStatus()
     manager.process = FakeP25Process()
     manager.lock = threading.RLock()
+    manager.control_lock = threading.Lock()
     manager.analog_service_controller = FakeAnalogController()
     manager.status_payload = lambda: asdict(manager.status)
     return manager
@@ -131,6 +134,70 @@ def test_backend_stop_stops_p25_vhf_and_uhf() -> None:
     }
 
 
+def test_backend_serializes_simultaneous_control_requests() -> None:
+    manager = ScannerManager.__new__(ScannerManager)
+    manager.control_lock = threading.Lock()
+    active = 0
+    maximum_active = 0
+    counter_lock = threading.Lock()
+
+    def fake_start():
+        nonlocal active, maximum_active
+        with counter_lock:
+            active += 1
+            maximum_active = max(maximum_active, active)
+        time.sleep(0.03)
+        with counter_lock:
+            active -= 1
+        return {"ok": True}, HTTPStatus.ACCEPTED
+
+    manager._start_coordinated = fake_start
+    threads = [threading.Thread(target=manager.start) for _ in range(3)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert maximum_active == 1
+
+
+def test_stale_reader_cannot_mark_replacement_process_stopped() -> None:
+    manager = manager_with_running_p25()
+    replacement = manager.process
+    stale = FakeP25Process()
+    stale.returncode = 1
+    manager._append_log = lambda _line: None
+
+    manager._reader_thread(stale)
+
+    assert manager.process is replacement
+    assert manager.analog_service_controller.stop_calls == 0
+
+
+def test_unexpected_p25_exit_stops_both_analog_scanners() -> None:
+    manager = manager_with_running_p25()
+    process = manager.process
+    process.returncode = 1
+    manager.status.scanner_state = "running"
+    manager.status.coordinated_scanners = {
+        "p25": "running",
+        "vhf": "active",
+        "uhf": "active",
+    }
+    manager._append_log = lambda _line: None
+
+    manager._reader_thread(process)
+
+    assert manager.process is None
+    assert manager.analog_service_controller.stop_calls == 1
+    assert manager.status.scanner_state == "decoder_exited"
+    assert manager.status.coordinated_scanners == {
+        "p25": "stopped",
+        "vhf": "stopped",
+        "uhf": "stopped",
+    }
+
+
 def test_runtime_units_are_not_enabled_for_boot() -> None:
     installer = (ROOT / "tools" / "install_audio_runtime_units.sh").read_text(encoding="utf-8")
     for unit in ANALOG_SCANNER_UNITS:
@@ -150,6 +217,8 @@ def test_dashboard_has_no_scanner_autostart_and_describes_coordinated_controls()
 
     assert "V0_5K_AUTO_START_RTL_POOL" not in app
     assert "window.setTimeout(autoStart" not in app
+    assert "Starting P25, VHF, and UHF scanners..." in app
+    assert "Stopping P25, VHF, and UHF scanners..." in app
     assert "Start Scanning + Audio" in html
     assert "scanning are all stopped" in manual
     assert "starts P25, VHF, and UHF scanning together" in manual
