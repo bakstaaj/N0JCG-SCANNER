@@ -435,7 +435,7 @@ def main() -> int:
     )
     parser.add_argument("--min-rms", type=int, default=25)
     parser.add_argument("--release-seconds", type=float, default=1.0)
-    parser.add_argument("--warmup-frames", type=int, default=8)
+    parser.add_argument("--warmup-frames", type=int, default=0)
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
 

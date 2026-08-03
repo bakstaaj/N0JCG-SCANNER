@@ -544,6 +544,10 @@ source-packet gaps. A short three-frame server prebuffer and approximately 60 ms
 browser jitter buffer reduce clipped call beginnings while absorbing normal
 network and browser scheduling variation.
 
+P25 audio is forwarded from the first valid decoded frame after each OP25 call
+boundary. The audio pool does not discard opening frames; its RMS validation,
+single-source ownership, and DRAIN/DROP boundary handling remain active.
+
 Check audio status directly:
 
 ```bash
