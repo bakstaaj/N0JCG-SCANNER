@@ -1,12 +1,15 @@
+import http.client
 import sys
+import threading
 import time
 from pathlib import Path
+from http.server import ThreadingHTTPServer
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from pi_scanner_audio_arbitrator import FRAME_BYTES, Source, State  # noqa: E402
+from pi_scanner_audio_arbitrator import FRAME_BYTES, Handler, Source, State  # noqa: E402
 
 
 def make_state(max_frames: int = 20) -> State:
@@ -61,3 +64,40 @@ def test_slow_browser_resumes_at_oldest_retained_frame() -> None:
 
     assert received == frames[1]
     assert sequence == 2
+
+
+def test_active_stream_keeps_twenty_millisecond_cadence_during_frame_gap() -> None:
+    state = make_state()
+    state.process(23456, bytes([7]) * FRAME_BYTES, time.time())
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.audio_state = state
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    connection = http.client.HTTPConnection(
+        "127.0.0.1",
+        server.server_address[1],
+        timeout=2,
+    )
+
+    try:
+        connection.request("GET", "/audio.pcm")
+        response = connection.getresponse()
+        started = time.monotonic()
+        payload = response.read(FRAME_BYTES * 6)
+        elapsed = time.monotonic() - started
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=2)
+
+    assert len(payload) == FRAME_BYTES * 6
+    assert 0.06 <= elapsed < 0.30
+
+
+def test_installed_arbitrator_uses_short_start_buffer() -> None:
+    service = (
+        ROOT / "systemd" / "pi-p25-raw-audio-bridge.service"
+    ).read_text(encoding="utf-8")
+
+    assert "--warmup-frames 2 --prebuffer-frames 3" in service

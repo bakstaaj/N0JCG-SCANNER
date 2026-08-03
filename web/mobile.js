@@ -4,7 +4,8 @@ const ROLE_BY_SOURCE = { VHF: 'analog_2m', UHF: 'analog_70cm' };
 const SAMPLE_RATE = 8000;
 const FRAME_SAMPLES = 160;
 const FRAME_BYTES = FRAME_SAMPLES * 2;
-const MAX_QUEUED_SECONDS = 0.35;
+const PLAYBACK_LEAD_SECONDS = 0.06;
+const MAX_QUEUED_SECONDS = 0.45;
 const state = {
   backend: null,
   analog: null,
@@ -14,6 +15,7 @@ const state = {
   busy: false,
   polling: false,
   audioAttached: false,
+  audioWanted: false,
   muted: false,
 };
 const pcm = {
@@ -24,6 +26,7 @@ const pcm = {
   stopping: false,
   nextPlayTime: 0,
   pending: new Uint8Array(0),
+  reconnectTimer: null,
 };
 
 function byId(id) { return document.getElementById(id); }
@@ -89,8 +92,8 @@ function scheduleFrame(bytes) {
     channel[index] = view.getInt16(index * 2, true) / 32768;
   }
   const now = pcm.context.currentTime;
-  if (pcm.nextPlayTime < now + 0.02 || pcm.nextPlayTime - now > MAX_QUEUED_SECONDS) {
-    pcm.nextPlayTime = now + 0.02;
+  if (pcm.nextPlayTime < now + PLAYBACK_LEAD_SECONDS || pcm.nextPlayTime - now > MAX_QUEUED_SECONDS) {
+    pcm.nextPlayTime = now + PLAYBACK_LEAD_SECONDS;
   }
   const source = pcm.context.createBufferSource();
   source.buffer = buffer;
@@ -115,14 +118,27 @@ async function pumpPcmStream() {
   } finally {
     pcm.reader = null;
     pcm.running = false;
-    if (!pcm.stopping) {
+    if (!pcm.stopping && state.audioWanted) {
       state.audioAttached = false;
+      scheduleMobileReconnect('Audio stream ended');
       render();
     }
   }
 }
 
+function scheduleMobileReconnect(reason) {
+  if (pcm.stopping || !state.audioWanted || pcm.reconnectTimer) return;
+  setText('message', `${reason}; reconnecting...`);
+  pcm.reconnectTimer = window.setTimeout(() => {
+    pcm.reconnectTimer = null;
+    attachAudio().catch((error) => {
+      scheduleMobileReconnect(`Audio reconnect failed: ${error.message}`);
+    });
+  }, 500);
+}
+
 async function attachAudio() {
+  state.audioWanted = true;
   await ensureAudioContext();
   if (pcm.running) {
     state.audioAttached = true;
@@ -146,7 +162,12 @@ async function attachAudio() {
 
 async function stopAudio() {
   pcm.stopping = true;
+  state.audioWanted = false;
   state.audioAttached = false;
+  if (pcm.reconnectTimer) {
+    window.clearTimeout(pcm.reconnectTimer);
+    pcm.reconnectTimer = null;
+  }
   if (pcm.reader) {
     try { await pcm.reader.cancel(); } catch (_error) {}
   }

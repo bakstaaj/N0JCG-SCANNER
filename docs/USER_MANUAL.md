@@ -539,6 +539,11 @@ PCM stream from port 8072. Browsers do not compete for audio frames. Each tab
 keeps only a small queue to limit delay; mute and volume operate in that browser,
 not in the radio workers or other tabs.
 
+The arbitrator maintains a continuous 20 ms browser stream even through short
+source-packet gaps. A short three-frame server prebuffer and approximately 60 ms
+browser jitter buffer reduce clipped call beginnings while absorbing normal
+network and browser scheduling variation.
+
 Check audio status directly:
 
 ```bash

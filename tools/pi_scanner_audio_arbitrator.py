@@ -16,6 +16,7 @@ from typing import Deque
 
 RATE = 8000
 FRAME_BYTES = 320
+FRAME_SECONDS = FRAME_BYTES / (RATE * 2)
 SILENCE = bytes(FRAME_BYTES)
 
 
@@ -230,18 +231,31 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/audio.wav":
             self.wfile.write(wav_header())
             self.wfile.flush()
+        try:
+            self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            pass
         sequence = self.state.register_client()
+        next_send = time.monotonic()
         try:
             while True:
-                frame, sequence = self.state.read_after(sequence)
+                next_send += FRAME_SECONDS
+                frame, sequence = self.state.read_after(
+                    sequence,
+                    wait_seconds=max(0.0, next_send - time.monotonic()),
+                )
                 if frame is None:
                     frame = SILENCE
                     with self.state.lock:
                         self.state.silence_frames += 1
+                delay = next_send - time.monotonic()
+                if delay > 0:
+                    time.sleep(delay)
+                elif delay < -(FRAME_SECONDS * 2):
+                    next_send = time.monotonic()
                 self.wfile.write(frame)
                 self.wfile.flush()
-                time.sleep(0.02)
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
         finally:
             self.state.unregister_client()
@@ -291,7 +305,7 @@ def main() -> int:
     parser.add_argument("--uhf-port", type=int, default=23459)
     parser.add_argument("--release-seconds", type=float, default=1.5)
     parser.add_argument("--warmup-frames", type=int, default=2)
-    parser.add_argument("--prebuffer-frames", type=int, default=8)
+    parser.add_argument("--prebuffer-frames", type=int, default=3)
     parser.add_argument("--max-queue-frames", type=int, default=100)
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()

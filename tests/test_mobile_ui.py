@@ -34,6 +34,9 @@ def test_mobile_controls_use_existing_coordinated_apis_without_autostart() -> No
     assert "postJson('/api/analog/control'" in script
     assert "/audio.pcm?_=" in script
     assert "new AudioContextClass" in script
+    assert "PLAYBACK_LEAD_SECONDS = 0.06" in script
+    assert "audioWanted: false" in script
+    assert "scheduleMobileReconnect('Audio stream ended')" in script
     assert ".play()" not in script
     assert "audio.wav" not in script
     assert "event.isTrusted === false" in script
