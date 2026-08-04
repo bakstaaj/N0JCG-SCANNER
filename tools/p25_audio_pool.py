@@ -28,6 +28,129 @@ OP25_AUDIO_DRAIN = 0x0000
 OP25_AUDIO_DROP = 0x0001
 
 
+class CaptureRecorder:
+    """Bounded raw/event capture at the P25 pool input and output boundary."""
+
+    def __init__(self, directory: Path | None, duration_seconds: float) -> None:
+        self.directory = Path(directory) if directory else None
+        self.duration_seconds = max(0.0, duration_seconds)
+        self.started_utc: float | None = None
+        self.deadline_utc: float | None = None
+        self.events_handle = None
+        self.forwarded_handle = None
+        self.input_handles: dict[int, Any] = {}
+        self.event_count = 0
+        self.input_audio_frames = 0
+        self.forwarded_audio_frames = 0
+        self.closed = False
+
+    @property
+    def enabled(self) -> bool:
+        return self.directory is not None and self.duration_seconds > 0
+
+    def start(self, now: float) -> None:
+        if not self.enabled or self.started_utc is not None:
+            return
+        assert self.directory is not None
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.started_utc = now
+        self.deadline_utc = now + self.duration_seconds
+        self.events_handle = (self.directory / "pool_events.jsonl").open(
+            "w", encoding="utf-8", buffering=1
+        )
+        self.forwarded_handle = (self.directory / "pool_forwarded.pcm").open("wb")
+        self._write_manifest(completed=False)
+
+    def _write_manifest(self, *, completed: bool) -> None:
+        if not self.enabled or self.directory is None:
+            return
+        atomic_write_json(
+            self.directory / "capture_manifest.json",
+            {
+                "completed": completed,
+                "duration_seconds": self.duration_seconds,
+                "started_utc": self.started_utc,
+                "deadline_utc": self.deadline_utc,
+                "event_count": self.event_count,
+                "input_audio_frames": self.input_audio_frames,
+                "forwarded_audio_frames": self.forwarded_audio_frames,
+                "format": {
+                    "pcm": "signed 16-bit little-endian mono 8000 Hz",
+                    "frame_bytes": PCM_FRAME_BYTES,
+                    "events": "newline-delimited JSON",
+                },
+            },
+        )
+
+    def active(self, now: float) -> bool:
+        if not self.enabled or self.closed:
+            return False
+        self.start(now)
+        if self.deadline_utc is not None and now >= self.deadline_utc:
+            self.close()
+            return False
+        return True
+
+    def record(
+        self,
+        *,
+        now: float,
+        port: int,
+        kind: str,
+        payload: bytes,
+        rms: int | None = None,
+        flag: int | None = None,
+        selected_before: int | None = None,
+        selected_after: int | None = None,
+        forwarded: bool = False,
+    ) -> None:
+        if not self.active(now):
+            return
+        assert self.directory is not None
+        event: dict[str, Any] = {
+            "utc": now,
+            "offset_seconds": round(now - (self.started_utc or now), 6),
+            "port": port,
+            "kind": kind,
+            "bytes": len(payload),
+            "selected_before": selected_before,
+            "selected_after": selected_after,
+            "forwarded": forwarded,
+        }
+        if rms is not None:
+            event["rms"] = rms
+        if flag is not None:
+            event["flag"] = flag
+        if kind == "audio":
+            handle = self.input_handles.get(port)
+            if handle is None:
+                handle = (self.directory / f"pool_input_{port}.pcm").open("wb")
+                self.input_handles[port] = handle
+            handle.write(payload)
+            self.input_audio_frames += 1
+            if forwarded and self.forwarded_handle is not None:
+                self.forwarded_handle.write(payload)
+                self.forwarded_audio_frames += 1
+        if self.events_handle is not None:
+            self.events_handle.write(json.dumps(event, separators=(",", ":")) + "\n")
+        self.event_count += 1
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        for handle in self.input_handles.values():
+            handle.close()
+        self.input_handles.clear()
+        if self.forwarded_handle is not None:
+            self.forwarded_handle.close()
+            self.forwarded_handle = None
+        if self.events_handle is not None:
+            self.events_handle.close()
+            self.events_handle = None
+        self._write_manifest(completed=True)
+
+
 def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
@@ -233,6 +356,8 @@ class AudioPool:
         min_rms: int,
         release_seconds: float,
         warmup_frames: int,
+        capture_dir: Path | None = None,
+        capture_seconds: float = 0.0,
     ) -> None:
         self.listen_host = listen_host
         self.base_port = base_port
@@ -253,6 +378,7 @@ class AudioPool:
         self.output_errors = 0
         self.bind_errors: list[str] = []
         self.last_state_write = 0.0
+        self.capture = CaptureRecorder(capture_dir, capture_seconds)
 
     def stop(self, *_args: Any) -> None:
         self.running = False
@@ -307,6 +433,16 @@ class AudioPool:
                 for port, stats in sorted(self.arbiter.sources.items())
             },
             "updated_utc": now,
+            "capture": {
+                "enabled": self.capture.enabled,
+                "directory": str(self.capture.directory) if self.capture.directory else None,
+                "started_utc": self.capture.started_utc,
+                "deadline_utc": self.capture.deadline_utc,
+                "closed": self.capture.closed,
+                "event_count": self.capture.event_count,
+                "input_audio_frames": self.capture.input_audio_frames,
+                "forwarded_audio_frames": self.capture.forwarded_audio_frames,
+            },
         }
 
     def write_state(self, force: bool = False) -> None:
@@ -326,25 +462,56 @@ class AudioPool:
         stats.packets += 1
         stats.bytes_received += len(payload)
         stats.last_packet_utc = now
+        selected_before = self.arbiter.selected_port
 
         if len(payload) == PCM_FRAME_BYTES:
-            if self.arbiter.process_audio(port, payload, now):
+            should_forward = self.arbiter.process_audio(port, payload, now)
+            forwarded = False
+            if should_forward:
                 try:
                     self.output_socket.sendto(payload, (self.output_host, self.output_port))
                     stats.forwarded_frames += 1
                     stats.last_forwarded_rms = stats.last_rms
                     self.forwarded_frames += 1
+                    forwarded = True
                 except OSError:
                     self.output_errors += 1
+            self.capture.record(
+                now=now,
+                port=port,
+                kind="audio",
+                payload=payload,
+                rms=stats.last_rms,
+                selected_before=selected_before,
+                selected_after=self.arbiter.selected_port,
+                forwarded=forwarded,
+            )
             return
 
         if len(payload) == 2:
             stats.flag_packets += 1
             flag = struct.unpack("<H", payload)[0]
             self.arbiter.process_flag(port, flag, now)
+            self.capture.record(
+                now=now,
+                port=port,
+                kind="flag",
+                payload=payload,
+                flag=flag,
+                selected_before=selected_before,
+                selected_after=self.arbiter.selected_port,
+            )
             return
 
         stats.ignored_packets += 1
+        self.capture.record(
+            now=now,
+            port=port,
+            kind="ignored",
+            payload=payload,
+            selected_before=selected_before,
+            selected_after=self.arbiter.selected_port,
+        )
 
     def run(self) -> int:
         self.bind()
@@ -358,8 +525,10 @@ class AudioPool:
                 for sock in readable:
                     self.handle_packet(sock, now)
                 self.arbiter.tick(now)
+                self.capture.active(now)
                 self.write_state()
         finally:
+            self.capture.close()
             self.write_state(force=True)
             for sock in self.sockets:
                 sock.close()
@@ -436,6 +605,8 @@ def main() -> int:
     parser.add_argument("--min-rms", type=int, default=25)
     parser.add_argument("--release-seconds", type=float, default=1.0)
     parser.add_argument("--warmup-frames", type=int, default=0)
+    parser.add_argument("--capture-dir", default="")
+    parser.add_argument("--capture-seconds", type=float, default=0.0)
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
 
@@ -458,6 +629,8 @@ def main() -> int:
         min_rms=max(0, args.min_rms),
         release_seconds=max(0.1, args.release_seconds),
         warmup_frames=args.warmup_frames,
+        capture_dir=Path(args.capture_dir) if args.capture_dir else None,
+        capture_seconds=args.capture_seconds,
     )
     return pool.run()
 

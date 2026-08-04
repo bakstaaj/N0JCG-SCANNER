@@ -88,6 +88,13 @@ The two analog assignments are mandatory: VHF is `00000144` and UHF is
 `00000440`. Do not swap them. The VHF and UHF workers fail closed if their
 runtime serial or audio port is wrong.
 
+The deployed Tenderfoot P25 configuration uses a fixed-center wideband voice
+receiver. Serial `00000252` samples 2.4 MHz centered at 852.49375 MHz, allowing
+OP25 to select the observed 851.6875-853.300 MHz voice channels digitally
+without a slow RTL hardware retune for every grant. The control receiver
+remains independent at 960 ksps. Both P25 receivers use `LNA:49` on the
+validated installation.
+
 ## 5. Prepare the Raspberry Pi
 
 ### 5.1 Install baseline packages
@@ -701,6 +708,21 @@ frequency.
 - Check **Logs / Details** for launch readiness and OP25 messages.
 - Inspect `runtime/settings/op25_validated_rx_command.env` and the generated
   files under `runtime/op25/`.
+- For the validated Tenderfoot configuration, confirm these marker values:
+
+  ```text
+  P25_CONTROL_GAIN=LNA:49
+  P25_VOICE_GAIN=LNA:49
+  P25_CONTROL_DEMOD_TYPE=cqpsk
+  P25_VOICE_DEMOD_TYPE=fsk4
+  P25_VOICE_SAMPLE_RATE=2400000
+  P25_VOICE_CENTER_HZ=852493750
+  ```
+
+- Use `tools/p25_terminal_diagnostic.py` to capture receiver frequency error
+  and `tools/p25_terminal_plot_snapshot.py` for bounded spectrum and
+  constellation evidence. Do not leave diagnostic plots enabled during normal
+  operation.
 - Run the bounded project probes before changing OP25 command arguments.
 
 ### CSV upload fails
