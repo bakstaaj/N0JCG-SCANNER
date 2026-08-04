@@ -5,13 +5,16 @@
   const SAMPLE_RATE = 8000;
   const FRAME_SAMPLES = 160;
   const FRAME_BYTES = FRAME_SAMPLES * 2;
-  const MAX_QUEUED_SECONDS = 0.35;
+  const PLAYBACK_LEAD_SECONDS = 0.06;
+  const MAX_QUEUED_SECONDS = 0.45;
 
   let context = null;
   let gainNode = null;
   let reader = null;
   let running = false;
   let stopping = false;
+  let audioWanted = false;
+  let reconnectTimer = null;
   let nextPlayTime = 0;
   let pending = new Uint8Array(0);
 
@@ -94,10 +97,10 @@
     const now = context.currentTime;
 
     if (
-      nextPlayTime < now + 0.02 ||
+      nextPlayTime < now + PLAYBACK_LEAD_SECONDS ||
       nextPlayTime - now > MAX_QUEUED_SECONDS
     ) {
-      nextPlayTime = now + 0.02;
+      nextPlayTime = now + PLAYBACK_LEAD_SECONDS;
     }
 
     const source = context.createBufferSource();
@@ -111,6 +114,7 @@
   async function startAudio() {
     if (running) return;
 
+    audioWanted = true;
     running = true;
     stopping = false;
     pending = new Uint8Array(0);
@@ -149,11 +153,30 @@
 
     reader = null;
     running = false;
+    if (!stopping && audioWanted) scheduleReconnect('Audio stream ended');
+  }
+
+  function scheduleReconnect(reason) {
+    running = false;
+    if (stopping || !audioWanted || reconnectTimer) return;
+    setStatus(`${reason}; reconnecting audio`);
+    reconnectTimer = window.setTimeout(() => {
+      reconnectTimer = null;
+      startAudio().catch((error) => {
+        scheduleReconnect(`Audio reconnect failed: ${error.message}`);
+      });
+    }, 500);
   }
 
   async function stopAudio() {
     stopping = true;
+    audioWanted = false;
     running = false;
+
+    if (reconnectTimer) {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
 
     if (reader) {
       try {
@@ -185,10 +208,7 @@
       start.addEventListener('click', () => {
         window.setTimeout(() => {
           startAudio().catch((error) => {
-            running = false;
-            setStatus(
-              `Low-latency audio error: ${error.message}`
-            );
+            scheduleReconnect(`Low-latency audio error: ${error.message}`);
           });
         }, 100);
       });

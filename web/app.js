@@ -2,8 +2,8 @@
 
 // V0.5F_DESKTOP_LAUNCHER_NO_PAGE_AUTOSTART
 // Normal browser page loads must not start the scanner automatically.
-// The Pi desktop launcher starts the scanner intentionally by calling the backend API,
-// then opens this page. Manual browser starts still work from the Start Scanner + Audio button.
+// Opening the dashboard never starts a receiver. Only a trusted press of the
+// Start Scanning + Audio button may request coordinated scanner startup.
 window.__P25_REQUIRE_USER_START__ = true;
 window.__P25_USER_START_REQUESTED__ = false;
 window.__P25_DESKTOP_LAUNCHER_MODE__ = false;
@@ -29,7 +29,7 @@ function p25AllowManualStart(event) {
         blocked: true,
         autostart_disabled: true,
         marker: 'V0.5F_DESKTOP_LAUNCHER_NO_PAGE_AUTOSTART',
-        error: 'Page-load scanner auto-start is disabled. Use the desktop launcher or the Start Scanner + Audio button.'
+        error: 'Page-load scanner auto-start is disabled. Use the Start Scanning + Audio button.'
       });
       return Promise.resolve(new Response(body, {
         status: 409,
@@ -43,14 +43,8 @@ function p25AllowManualStart(event) {
 
 let latestStatus = null;
 let currentConfig = null;
-let rrSystems = [];
-let rrSites = [];
+let latestProfilesPayload = null;
 let browserAudioLastEvent = 'Ready';
-
-const CATEGORY_DEFAULTS = [
-  'Fire', 'EMS', 'Law Enforcement', 'Public Works', 'Utilities', 'Transportation',
-  'Interop', 'Emergency Management', 'Corrections', 'Schools', 'Federal', 'Other',
-];
 
 function field(id) { return document.getElementById(id); }
 function setText(id, value) { const el = field(id); if (el) el.textContent = value ?? '-'; }
@@ -61,7 +55,6 @@ function commandText(command) { return Array.isArray(command) ? command.join(' '
 function audioStreamUrl() { return `http://${window.location.hostname}:8072/audio.wav`; }
 function testToneUrl() { return `http://${window.location.hostname}:8072/test-tone.wav`; }
 function safeJson(value) { try { return JSON.stringify(value, null, 2); } catch { return String(value); } }
-function numberOrNull(value) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : null; }
 
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, { cache: 'no-store', ...options });
@@ -144,7 +137,10 @@ function formatActivityEvent(event) {
 
 function renderActivitySummary(activity) {
   setText('activityUniqueTgids', activity?.unique_tgid_count ?? 0);
-  setText('activityClearEvents', activity?.clear_voice_events ?? 0);
+  setText(
+    'activityClearEvents',
+    activity?.distinct_voice_calls ?? activity?.voice_call_events ?? 0,
+  );
   setText('activityEncryptedEvents', activity?.encrypted_events ?? 0);
   setText('activityMutedEvents', activity?.muted_events ?? 0);
   const recent = Array.isArray(activity?.recent_events) ? activity.recent_events : [];
@@ -215,9 +211,15 @@ async function refreshConfig() {
 
 async function startScannerAndAudio() {
   if (window.__P25_REQUIRE_USER_START__ && !window.__P25_USER_START_REQUESTED__) {
-    setText('lastEvent', 'Page-load scanner auto-start is disabled. Use the desktop launcher or Start Scanner + Audio.');
+    setText('lastEvent', 'Page-load scanner auto-start is disabled. Use Start Scanning + Audio.');
     return;
   }
+
+  const startBtn = field('startBtn');
+  const stopBtn = field('stopBtn');
+  if (startBtn) startBtn.disabled = true;
+  if (stopBtn) stopBtn.disabled = true;
+  setText('lastEvent', 'Starting P25, VHF, and UHF scanners...');
 
   const audio = field('browserAudioPlayer');
   if (audio) audio.src = audioStreamUrl();
@@ -226,7 +228,7 @@ async function startScannerAndAudio() {
     const status = await postJson('/api/scanner/start');
     renderDashboard(status);
     await playPromise;
-    updateAudioPanel('Scanner started; browser audio attached');
+    updateAudioPanel('P25, VHF, and UHF started; browser audio attached');
   } catch (error) {
     setText('lastEvent', `Start error: ${error.message}`);
     updateAudioPanel(`Start/audio error: ${error.message}`);
@@ -235,9 +237,15 @@ async function startScannerAndAudio() {
 }
 
 async function stopScanner() {
+  const startBtn = field('startBtn');
+  const stopBtn = field('stopBtn');
+  if (startBtn) startBtn.disabled = true;
+  if (stopBtn) stopBtn.disabled = true;
+  setText('lastEvent', 'Stopping P25, VHF, and UHF scanners...');
+
   const audio = field('browserAudioPlayer');
   if (audio) { audio.pause(); audio.src = audioStreamUrl(); }
-  updateAudioPanel('Browser audio stopped');
+  updateAudioPanel('Stopping P25, VHF, UHF, and browser audio');
   try {
     const status = await postJson('/api/scanner/stop');
     renderDashboard(status);
@@ -245,62 +253,21 @@ async function stopScanner() {
   await refreshStatus();
 }
 
-function renderCategoryChoices(categories = CATEGORY_DEFAULTS) {
-  const target = field('categoryChoices');
-  if (!target) return;
-  target.innerHTML = '';
-  categories.forEach((category) => {
-    const label = document.createElement('label');
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.value = category;
-    input.checked = ['Fire', 'EMS', 'Law Enforcement', 'Interop'].includes(category);
-    label.append(input, document.createTextNode(category));
-    target.append(label);
-  });
-}
-
-function selectedCategories() {
-  return Array.from(document.querySelectorAll('#categoryChoices input[type="checkbox"]:checked')).map((el) => el.value);
-}
-
-function locationPayload() {
-  const selectedSite = selectedSiteRecord();
-  return {
-    state: String(field('wizardState')?.value || '').trim(),
-    county: String(field('wizardCounty')?.value || '').trim(),
-    city: String(field('wizardCity')?.value || '').trim(),
-    categories: selectedCategories(),
-    system_id: selectedSystemId(),
-    site_id: selectedSiteId(),
-    site: selectedSite?.name || selectedSite?.site_description || '',
-    site_label: selectedSite?.label || '',
-    name: String(field('profileName')?.value || '').trim(),
-  };
-}
-
-function selectedSystemId() { return numberOrNull(field('rrSystemSelect')?.value); }
-function selectedSiteId() { return numberOrNull(field('rrSiteSelect')?.value); }
-function selectedSiteRecord() {
-  const option = field('rrSiteSelect')?.selectedOptions?.[0];
-  const index = Number.parseInt(String(option?.dataset?.index ?? ''), 10);
-  return Number.isInteger(index) && index >= 0 ? rrSites[index] : null;
-}
-
 function compactProfileSummary(payload, message = '') {
   const configs = Array.isArray(payload?.configs) ? payload.configs : [];
   const lines = [];
   if (message) lines.push(message);
   if (configs.length) {
-    lines.push(`${configs.length} saved profile${configs.length === 1 ? '' : 's'}:`);
-    configs.forEach((item) => {
-      const system = item?.validation?.first_enabled_system || {};
-      const talkgroupCount = Array.isArray(system.talkgroups) ? system.talkgroups.length : 0;
-      const profileName = item?.name || item?.id || 'Unnamed profile';
-      const systemName = system.name || 'Unknown system';
-      const siteName = system.site || 'Unknown site';
-      lines.push(`- ${profileName}: ${systemName} / ${siteName} / ${talkgroupCount} talkgroups`);
-    });
+    lines.push(`${configs.length} saved profile${configs.length === 1 ? '' : 's'}. Choose one above to load or export.`);
+    const selectedId = field('profileSelect')?.value || '';
+    const selected = configs.find((item) => (item.id || item.name) === selectedId) || configs[0];
+    const system = selected?.validation?.first_enabled_system || {};
+    const talkgroupCount = Array.isArray(system.talkgroups) ? system.talkgroups.length : 0;
+    const analogCounts = selected?.analog_channel_counts;
+    const analogSummary = analogCounts && Object.keys(analogCounts).length
+      ? `${Number(analogCounts.analog_2m || 0)} VHF / ${Number(analogCounts.analog_70cm || 0)} UHF`
+      : 'analog unchanged when loaded';
+    lines.push(`Selected: ${selected?.name || selected?.id} · ${system.name || 'Unknown system'} · ${talkgroupCount} talkgroups · ${analogSummary}`);
   } else if (!message) {
     lines.push('No saved profiles found.');
   }
@@ -310,8 +277,10 @@ function compactProfileSummary(payload, message = '') {
 async function refreshProfiles() {
   try {
     const payload = await fetchJson('/api/config/named');
+    latestProfilesPayload = payload;
     const select = field('profileSelect');
     if (select) {
+      const selected = select.value;
       select.innerHTML = '';
       (payload.configs || []).forEach((item) => {
         const option = document.createElement('option');
@@ -319,6 +288,9 @@ async function refreshProfiles() {
         option.textContent = `${item.name || item.id}${item.active ? ' (active)' : ''}`;
         select.append(option);
       });
+      if (selected && Array.from(select.options).some((option) => option.value === selected)) {
+        select.value = selected;
+      }
     }
     setBadge('profileStatusBadge', `${payload.count || 0} profiles`, 'ok');
     setText('profileStatusText', compactProfileSummary(payload));
@@ -335,7 +307,9 @@ async function loadSelectedProfile() {
     const payload = await postJson('/api/config/named/load', { id, apply: true });
     setBadge('profileStatusBadge', 'Loaded', 'ok');
     setText('profileStatusText', `Loaded profile: ${id}`);
+    if (field('profileName')) field('profileName').value = payload.name || id;
     await refreshConfig();
+    await refreshAnalogChannels();
     await refreshStatus();
   } catch (error) {
     setBadge('profileStatusBadge', 'Load failed', 'bad');
@@ -354,6 +328,20 @@ async function saveCurrentProfile() {
   } catch (error) {
     setBadge('profileStatusBadge', 'Save failed', 'bad');
     setText('profileStatusText', `Save failed: ${error.message}`);
+  }
+}
+
+async function deleteSelectedProfile() {
+  const id = field('profileSelect')?.value || '';
+  if (!id) { setText('profileStatusText', 'Select a profile first.'); return; }
+  try {
+    await postJson('/api/config/named/delete', { id });
+    setBadge('profileStatusBadge', 'Deleted', 'warn');
+    await refreshProfiles();
+    setText('profileStatusText', `Deleted profile: ${id}`);
+  } catch (error) {
+    setBadge('profileStatusBadge', 'Delete failed', 'bad');
+    setText('profileStatusText', `Delete failed: ${error.message}`);
   }
 }
 
@@ -648,6 +636,134 @@ async function autoCalibratePpm() {
   }
 }
 
+function profileNameForFile(file) {
+  const entered = String(field('profileName')?.value || '').trim();
+  const fallback = String(file?.name || 'Imported Profile')
+    .replace(/\.csv$/i, '')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+  const name = entered || fallback || 'Imported Profile';
+  if (field('profileName')) field('profileName').value = name;
+  return name;
+}
+
+async function saveImportedProfile(name) {
+  const result = await postJson('/api/config/named/save', { name, apply: false });
+  await refreshProfiles();
+  if (field('profileSelect')) field('profileSelect').value = result.id || result.slug || name;
+  return result;
+}
+
+async function refreshAnalogChannels() {
+  try {
+    const result = await fetchJson('/api/analog/channels');
+    const counts = result?.channel_counts || {};
+    const vhf = Number(counts.analog_2m || 0);
+    const uhf = Number(counts.analog_70cm || 0);
+    setBadge('analogCsvStatusBadge', `${vhf} VHF / ${uhf} UHF`, (vhf + uhf) ? 'ok' : 'warn');
+    setText('analogCsvStatusText', `Current radio: ${vhf} VHF channels and ${uhf} UHF channels.`);
+  } catch (error) {
+    setBadge('analogCsvStatusBadge', 'Load failed', 'bad');
+    setText('analogCsvStatusText', `Analog channel status failed: ${error.message}`);
+  }
+}
+
+async function importAnalogCsv() {
+  const file = field('analogCsvFile')?.files?.[0];
+  if (!file) {
+    setBadge('analogCsvStatusBadge', 'Choose file', 'warn');
+    setText('analogCsvStatusText', 'Choose a CHIRP CSV file first.');
+    return;
+  }
+  const button = field('importAnalogCsvBtn');
+  if (button) button.disabled = true;
+  setBadge('analogCsvStatusBadge', 'Uploading', 'warn');
+  try {
+    const name = profileNameForFile(file);
+    const result = await postJson('/api/analog/channels/import', {
+      filename: file.name,
+      csv_text: await file.text(),
+      replace_mode: 'roles_in_file',
+    });
+    await saveImportedProfile(name);
+    const counts = result.channel_counts || {};
+    setBadge('analogCsvStatusBadge', 'Saved', 'ok');
+    setText('analogCsvStatusText', `Saved profile “${name}” with ${Number(counts.analog_2m || 0)} VHF and ${Number(counts.analog_70cm || 0)} UHF channels.`);
+  } catch (error) {
+    setBadge('analogCsvStatusBadge', 'Upload failed', 'bad');
+    setText('analogCsvStatusText', `Analog CSV upload failed: ${error.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function importP25CsvFile() {
+  const file = field('p25CsvFile')?.files?.[0];
+  if (!file) {
+    setBadge('p25CsvStatusBadge', 'Choose file', 'warn');
+    setText('p25CsvStatusText', 'Choose a P25 CSV file first.');
+    return;
+  }
+  const button = field('importP25CsvBtn');
+  if (button) button.disabled = true;
+  setBadge('p25CsvStatusBadge', 'Uploading', 'warn');
+  try {
+    const name = profileNameForFile(file);
+    const result = await postJson('/api/p25/csv/import', {
+      filename: file.name,
+      csv_text: await file.text(),
+      replace_mode: 'systems_in_file',
+    });
+    await refreshConfig();
+    await saveImportedProfile(name);
+    const systems = Array.isArray(result.systems) ? result.systems.join(', ') : 'P25 system';
+    setBadge('p25CsvStatusBadge', 'Saved', 'ok');
+    setText('p25CsvStatusText', `Saved profile “${name}” from ${result.imported_rows || 0} rows: ${systems}.`);
+  } catch (error) {
+    setBadge('p25CsvStatusBadge', 'Upload failed', 'bad');
+    setText('p25CsvStatusText', `P25 CSV upload failed: ${error.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function downloadCsv(filename, csvText) {
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function exportSelectedProfile(kind) {
+  const id = field('profileSelect')?.value || '';
+  const statusPrefix = kind === 'analog' ? 'analogCsv' : 'p25Csv';
+  if (!id) {
+    setBadge(`${statusPrefix}StatusBadge`, 'Select profile', 'warn');
+    setText(`${statusPrefix}StatusText`, 'Select a saved profile first.');
+    return;
+  }
+  try {
+    const result = await postJson('/api/config/named/export', { id, kind });
+    downloadCsv(result.filename, result.csv_text);
+    setBadge(`${statusPrefix}StatusBadge`, 'Exported', 'ok');
+    setText(`${statusPrefix}StatusText`, `Downloaded ${result.filename}.`);
+  } catch (error) {
+    setBadge(`${statusPrefix}StatusBadge`, 'Export failed', 'bad');
+    setText(`${statusPrefix}StatusText`, `CSV export failed: ${error.message}`);
+  }
+}
+
+function suggestProfileName(event) {
+  if (String(field('profileName')?.value || '').trim()) return;
+  const file = event.currentTarget?.files?.[0];
+  if (file) profileNameForFile(file);
+}
+
 function attachEventHandlers() {
   field('menuBtn')?.addEventListener('click', openDrawer);
   field('closeDrawerBtn')?.addEventListener('click', closeDrawer);
@@ -656,14 +772,18 @@ function attachEventHandlers() {
   field('startBtn')?.addEventListener('click', (event) => { if (p25AllowManualStart(event)) startScannerAndAudio(); });
   field('stopBtn')?.addEventListener('click', stopScanner);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
+  field('profileSelect')?.addEventListener('change', () => {
+    if (latestProfilesPayload) setText('profileStatusText', compactProfileSummary(latestProfilesPayload));
+  });
   field('loadProfileBtn')?.addEventListener('click', loadSelectedProfile);
   field('saveProfileBtn')?.addEventListener('click', saveCurrentProfile);
-  field('saveRrCredentialsBtn')?.addEventListener('click', saveRadioReferenceCredentials);
-  field('testRrLoginBtn')?.addEventListener('click', testRadioReferenceLogin);
-  field('findRrSystemsBtn')?.addEventListener('click', findRrSystems);
-  field('loadRrSitesBtn')?.addEventListener('click', loadRrSites);
-  field('importAndSaveRrBtn')?.addEventListener('click', importAndSaveRr);
-  field('autoCalibratePpmBtn')?.addEventListener('click', autoCalibratePpm);
+  field('deleteProfileBtn')?.addEventListener('click', deleteSelectedProfile);
+  field('importAnalogCsvBtn')?.addEventListener('click', importAnalogCsv);
+  field('importP25CsvBtn')?.addEventListener('click', importP25CsvFile);
+  field('exportAnalogCsvBtn')?.addEventListener('click', () => exportSelectedProfile('analog'));
+  field('exportP25CsvBtn')?.addEventListener('click', () => exportSelectedProfile('p25'));
+  field('analogCsvFile')?.addEventListener('change', suggestProfileName);
+  field('p25CsvFile')?.addEventListener('change', suggestProfileName);
   field('browserAudioPlayer')?.addEventListener('play', () => updateAudioPanel('Browser audio playing'));
   field('browserAudioPlayer')?.addEventListener('pause', () => updateAudioPanel('Browser audio paused'));
 }
@@ -671,10 +791,9 @@ function attachEventHandlers() {
 function boot() {
   attachEventHandlers();
 p25RemoveDashboardAutostartTuningRemnants();
-  renderCategoryChoices();
   updateAudioPanel();
   refreshProfiles();
-  refreshRadioReferenceStatus();
+  refreshAnalogChannels();
   refreshStatus();
   refreshConfig();
   setInterval(refreshStatus, 3000);
@@ -685,100 +804,6 @@ if (document.readyState === 'loading') {
 } else {
   boot();
 }
-
-/* V0_5K_AUTO_START_RTL_POOL_BEGIN */
-(function installV05KAutoStartScannerAudio() {
-  'use strict';
-
-  window.PI_P25_V05K_MARKER = 'V0_5K_AUTO_START_RTL_POOL';
-  window.PI_P25_ALLOWED_RTL_SERIAL_POOL = '0000025X';
-
-  function byId(id) {
-    return document.getElementById(id);
-  }
-
-  function setUiText(id, text) {
-    const target = byId(id);
-    if (target) target.textContent = text;
-  }
-
-  function audioUrl() {
-    return `http://${window.location.hostname}:8072/audio.wav`;
-  }
-
-  async function jsonFetch(url, options = {}) {
-    const response = await fetch(url, { cache: 'no-store', ...options });
-    const bodyText = await response.text();
-    let payload = {};
-    try {
-      payload = bodyText ? JSON.parse(bodyText) : {};
-    } catch (error) {
-      throw new Error(`Invalid JSON from ${url}: ${error.message}`);
-    }
-    if (!response.ok) {
-      throw new Error(payload.error || `HTTP ${response.status}`);
-    }
-    return payload;
-  }
-
-  async function startScannerIfNeeded() {
-    const status = await jsonFetch('/api/status');
-    if (status?.decoder_process?.running) return status;
-    return jsonFetch('/api/scanner/start', { method: 'POST' });
-  }
-
-  async function tryStartAudio(reason) {
-    const audio = byId('browserAudioPlayer');
-    if (!audio) return false;
-
-    if (audio.src !== audioUrl()) audio.src = audioUrl();
-
-    try {
-      await audio.play();
-      setUiText('browserAudioLastEvent', reason || 'Browser audio started');
-      window.__p25AutoAudioBlocked = false;
-      return true;
-    } catch (error) {
-      setUiText('browserAudioLastEvent', 'Scanner started; tap/click once to enable audio');
-      window.__p25AutoAudioBlocked = true;
-      return false;
-    }
-  }
-
-  async function autoStart() {
-    if (window.__p25V05KAutoStartAttempted) return;
-    window.__p25V05KAutoStartAttempted = true;
-
-    try {
-      setUiText('lastEvent', 'Auto-starting scanner and browser audio...');
-      await startScannerIfNeeded();
-      await tryStartAudio('Scanner and browser audio auto-started');
-      setUiText('lastEvent', 'Scanner auto-start requested.');
-    } catch (error) {
-      setUiText('lastEvent', `Auto-start failed: ${error.message}`);
-      setUiText('browserAudioLastEvent', `Auto-start failed: ${error.message}`);
-    }
-  }
-
-  function retryAudioAfterUserGesture() {
-    if (!window.__p25AutoAudioBlocked) return;
-    tryStartAudio('Browser audio enabled after tap/click');
-  }
-
-  function install() {
-    window.setTimeout(autoStart, 400);
-    document.addEventListener('pointerdown', retryAudioAfterUserGesture, { passive: true });
-    document.addEventListener('keydown', retryAudioAfterUserGesture);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', install, { once: true });
-  } else {
-    install();
-  }
-})();
-/* V0_5K_AUTO_START_RTL_POOL_END */
-
 
 function p25RemoveDashboardAutostartTuningRemnants() {
   document.querySelectorAll('button').forEach((button) => {
@@ -988,13 +1013,38 @@ function p25RemoveDashboardAutostartTuningRemnants() {
   let decoderRunning = false;
   let activeSource = null;
   let audioReachable = false;
+  let audioStatus = null;
 
   setBadge = function accurateStatusBadgeGuard(id, text, kind) {
     if (id === 'connectionStatus' || id === 'stateBadge') return;
     originalSetBadge(id, text, kind);
   };
 
+  function renderAudioArbitratorStatus() {
+    const muteButton = field('arbitratorMuteBtn');
+    const muted = muteButton?.getAttribute('aria-pressed') === 'true';
+    let text;
+
+    if (!audioReachable) {
+      text = 'Offline';
+    } else if (muted) {
+      text = `Muted · ${activeSource || 'Idle'}`;
+    } else if (activeSource) {
+      text = audioStatus?.playback_started
+        ? `${activeSource} Playing`
+        : `${activeSource} Buffering`;
+    } else if (Number(audioStatus?.clients || 0) > 0) {
+      text = 'Idle · Connected';
+    } else {
+      text = 'Idle · No Listener';
+    }
+
+    browserAudioLastEvent = text;
+    setText('browserAudioLastEvent', text);
+  }
+
   function renderAccurateStatus() {
+    renderAudioArbitratorStatus();
     if (!backendReachable) {
       originalSetBadge('connectionStatus', 'Offline', 'bad');
       originalSetBadge('stateBadge', 'Unavailable', 'bad');
@@ -1033,6 +1083,7 @@ function p25RemoveDashboardAutostartTuningRemnants() {
       decoderRunning = false;
       activeSource = null;
       audioReachable = false;
+      audioStatus = null;
       renderAccurateStatus();
       return;
     }
@@ -1042,9 +1093,11 @@ function p25RemoveDashboardAutostartTuningRemnants() {
       if (!audioResponse.ok) throw new Error(`audio HTTP ${audioResponse.status}`);
       const audio = await audioResponse.json();
       audioReachable = Boolean(audio?.ok);
+      audioStatus = audioReachable ? audio : null;
       activeSource = audioReachable && audio.active_source ? String(audio.active_source).toUpperCase() : null;
     } catch (_error) {
       audioReachable = false;
+      audioStatus = null;
       activeSource = null;
     }
     renderAccurateStatus();

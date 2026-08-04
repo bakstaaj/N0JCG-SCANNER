@@ -245,6 +245,8 @@ def build_multi_rx_config(
     voice_gain: str,
     control_demod_type: str,
     voice_demod_type: str,
+    voice_sample_rate: int,
+    voice_center_hz: int,
     terminal_type: str,
     crypt_behavior: int,
     audio_base_port: int,
@@ -272,18 +274,20 @@ def build_multi_rx_config(
             if role == "control"
             else voice_demod_type
         )
+        receiver_sample_rate = sample_rate if role == "control" else voice_sample_rate
+        receiver_center_hz = initial_frequency if role == "control" else voice_center_hz
         device_name = f"rtl_{serial}"
         audio_port = serial_audio_port(serial, audio_base_port, audio_port_count)
         devices.append(
             {
                 "args": f"rtl={serial}",
-                "frequency": initial_frequency,
+                "frequency": receiver_center_hz,
                 "gain_mode": False,
                 "gains": receiver_gain,
                 "name": device_name,
                 "offset": 0,
                 "ppm": ppm,
-                "rate": sample_rate,
+                "rate": receiver_sample_rate,
                 "tunable": True,
                 "usable_bw_pct": 0.85,
             }
@@ -294,6 +298,8 @@ def build_multi_rx_config(
                 "device": device_name,
                 "trunking_sysname": system_name,
                 "demod_type": receiver_demod_type,
+                "sample_rate": receiver_sample_rate,
+                "center_frequency_hz": receiver_center_hz,
                 "destination": f"udp://127.0.0.1:{audio_port}",
                 "meta_stream_name": "",
                 "excess_bw": 0.2,
@@ -318,6 +324,8 @@ def build_multi_rx_config(
                 "audio_port": audio_port,
                 "gain": receiver_gain,
                 "demod_type": receiver_demod_type,
+                "sample_rate": receiver_sample_rate,
+                "center_frequency_hz": receiver_center_hz,
             }
         )
 
@@ -484,6 +492,18 @@ def main(argv: list[str] | None = None) -> int:
         os.environ.get("P25_VOICE_GAIN", "") or marker.get("P25_VOICE_GAIN", ""),
         legacy_gain,
     )
+    voice_sample_rate = int(
+        os.environ.get("P25_VOICE_SAMPLE_RATE", "")
+        or marker.get("P25_VOICE_SAMPLE_RATE", "")
+        or args.sample_rate
+    )
+    voice_center_hz = int(
+        os.environ.get("P25_VOICE_CENTER_HZ", "")
+        or marker.get("P25_VOICE_CENTER_HZ", "")
+        or "0"
+    )
+    if not 250_000 <= voice_sample_rate <= 3_200_000:
+        raise MultiRxConfigError("P25_VOICE_SAMPLE_RATE must be 250000..3200000")
 
     excluded_control_channels_hz = parse_frequency_hz_list(
         os.environ.get("P25_CONTROL_CHANNEL_EXCLUDE_HZ", "")
@@ -595,6 +615,8 @@ def main(argv: list[str] | None = None) -> int:
         excluded_control_channels_hz,
     )
     system = select_system(manifest)
+    if voice_center_hz <= 0:
+        voice_center_hz = int(system["control_channels_hz"][0])
     legacy_demod_type = normalize_demod(
         args.demod_type
         or marker.get("P25_VALIDATED_RX_DEMOD_TYPE", "")
@@ -624,6 +646,8 @@ def main(argv: list[str] | None = None) -> int:
         voice_gain=voice_gain,
         control_demod_type=control_demod_type,
         voice_demod_type=voice_demod_type,
+        voice_sample_rate=voice_sample_rate,
+        voice_center_hz=voice_center_hz,
         terminal_type=terminal_type,
         crypt_behavior=int(args.crypt_behavior),
         audio_base_port=audio_base_port,
@@ -713,6 +737,8 @@ def main(argv: list[str] | None = None) -> int:
         "demod_type": legacy_demod_type,
         "control_demod_type": control_demod_type,
         "voice_demod_type": voice_demod_type,
+        "voice_sample_rate": voice_sample_rate,
+        "voice_center_hz": voice_center_hz,
         "sample_rate": int(args.sample_rate),
         "gain": str(args.gain),
         "control_gain": control_gain,

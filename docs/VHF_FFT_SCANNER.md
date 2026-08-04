@@ -40,6 +40,8 @@ VHF runtime configuration contains a different serial or audio port.
    above the measured 13--24 dB idle tuner artifacts.
 8. For a valid call, send 8 kHz, mono, signed 16-bit PCM frames to the unified
    audio arbitrator at `127.0.0.1:23458`.
+   The default NFM output gain is `105000`, 50% above the original analog level,
+   to better match P25 playback volume without changing P25 audio.
 9. Release when the carrier ends, useful audio has been absent for the audio
    hang interval, the operator skips/blocks the channel, or the maximum call
    duration is reached. Then return directly to FFT survey mode.

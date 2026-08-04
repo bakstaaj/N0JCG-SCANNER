@@ -34,6 +34,7 @@ if __package__ in (None, ""):
         list_named_configs,
         load_active_project_config,
         load_named_config as store_load_named_config,
+        read_named_config_bundle,
         read_active_config_payload,
         save_named_config as store_save_named_config,
         validate_config_payload,
@@ -48,7 +49,15 @@ if __package__ in (None, ""):
     from pi_p25_scanner.op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
     from pi_p25_scanner.runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from pi_p25_scanner.runtime_activity import RuntimeActivityTracker
+    from pi_p25_scanner.scanner_service_control import (
+        AnalogScannerServiceController,
+        ScannerServiceControlError,
+    )
     from pi_p25_scanner.p25_csv_import import P25CsvError, import_p25_csv_request
+    from pi_p25_scanner.csv_profile_tools import (
+        analog_channels_to_chirp_csv,
+        p25_config_to_csv,
+    )
     from pi_p25_scanner.receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
     try:
         from pi_p25_scanner.radioreference_import import (
@@ -73,6 +82,7 @@ else:
         list_named_configs,
         load_active_project_config,
         load_named_config as store_load_named_config,
+        read_named_config_bundle,
         read_active_config_payload,
         save_named_config as store_save_named_config,
         validate_config_payload,
@@ -87,7 +97,12 @@ else:
     from .op25_config import DEFAULT_OUTPUT_DIR, generate_op25_configs
     from .runtime_status import RuntimeStatusParser, RuntimeStatusUpdate
     from .runtime_activity import RuntimeActivityTracker
+    from .scanner_service_control import (
+        AnalogScannerServiceController,
+        ScannerServiceControlError,
+    )
     from .p25_csv_import import P25CsvError, import_p25_csv_request
+    from .csv_profile_tools import analog_channels_to_chirp_csv, p25_config_to_csv
     from .receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
     try:
         from .radioreference_import import (
@@ -113,6 +128,12 @@ OP25_HTTP_PORT_RE = re.compile(r"http:(?:\[[^\]]+\]|[^:\s]+):(?P<port>\d{1,5})")
 OP25_AUDIO_UDP_HOST = "127.0.0.1"
 OP25_AUDIO_UDP_PORT = int(os.environ.get("P25_SCANNER_AUDIO_UDP_PORT", "23456"))
 AUDIO_BRIDGE_PORT = int(os.environ.get("P25_SCANNER_AUDIO_BRIDGE_PORT", "8072"))
+ACTIVITY_STATE_PATH = Path(
+    os.environ.get(
+        "P25_SCANNER_ACTIVITY_STATE",
+        str(PROJECT_ROOT / "runtime" / "settings" / "runtime_activity.json"),
+    )
+)
 
 
 def iter_status_strings(value: Any):
@@ -175,6 +196,13 @@ class ScannerStatus:
         }
     )
     decoder_capability: dict[str, Any] = field(default_factory=dict)
+    coordinated_scanners: dict[str, Any] = field(
+        default_factory=lambda: {
+            "p25": "stopped",
+            "vhf": "stopped",
+            "uhf": "stopped",
+        }
+    )
     receiver_roles: dict[str, Any] = field(
         default_factory=lambda: {
             "p25_control": {"rtl_serial": "", "runtime_index": None},
@@ -264,7 +292,12 @@ class ScannerManager:
         self.process: subprocess.Popen[str] | None = None
         self.log_lines: deque[str] = deque(maxlen=LOG_TAIL_LIMIT)
         self.runtime_parser = RuntimeStatusParser()
-        self.activity_tracker = RuntimeActivityTracker()
+        self.activity_tracker = RuntimeActivityTracker(state_path=ACTIVITY_STATE_PATH)
+        self.analog_service_controller = AnalogScannerServiceController()
+        # HTTP requests run in separate threads. Serialize Start and Stop so a
+        # second request cannot overwrite the Popen handle while the first
+        # coordinated transition is still bringing analog services up or down.
+        self.control_lock = threading.Lock()
         self.talkgroup_labels: dict[int, str] = {}
         self.blocked_talkgroup_ids: set[int] = set()
         self._display_suppressed_tgid_until: dict[int, float] = {}
@@ -615,17 +648,92 @@ class ScannerManager:
             self._set_event(f"Deleted named config: {result.get('id', config_id)}")
         return {"ok": True, **result, "named_configs": self.named_configs_payload(), "status": self.status_payload()}
 
+    def export_named_config(self, request: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(request, dict):
+            raise ConfigError("named config export payload must be an object")
+        config_id = str(
+            request.get("name")
+            or request.get("id")
+            or request.get("config_id")
+            or request.get("slug")
+            or ""
+        ).strip()
+        kind = str(request.get("kind") or "").strip().lower()
+        if kind not in {"analog", "p25"}:
+            raise ConfigError("named config export kind must be analog or p25")
+        bundle = read_named_config_bundle(config_id)
+        slug = str(bundle["id"])
+        if kind == "analog":
+            csv_text = analog_channels_to_chirp_csv(bundle["analog_channels"])
+            filename = f"{slug}_analog_chirp.csv"
+        else:
+            csv_text = p25_config_to_csv(bundle["config"])
+            filename = f"{slug}_p25.csv"
+        return {
+            "ok": True,
+            "name": bundle["name"],
+            "id": slug,
+            "kind": kind,
+            "filename": filename,
+            "csv_text": csv_text,
+        }
+
     def _reader_thread(self, process: subprocess.Popen[str]) -> None:
         assert process.stdout is not None
         for line in process.stdout:
             self._append_log(line)
         rc = process.poll()
-        with self.lock:
-            self.status.decoder_process["running"] = False
-            self.status.decoder_process["pid"] = None
-            if self.status.scanner_state == "running":
-                self.status.scanner_state = "decoder_exited"
-            self._set_event(f"Decoder process exited rc={rc}")
+        with self.control_lock:
+            with self.lock:
+                # A late reader from an older launch must never mark a newer
+                # P25 process stopped. This was one source of the dashboard
+                # flipping to Stopped while live P25 audio continued.
+                if self.process is not process:
+                    return
+                self.process = None
+                self.status.decoder_process["running"] = False
+                self.status.decoder_process["pid"] = None
+                self.status.coordinated_scanners["p25"] = "stopped"
+                if self.status.scanner_state == "running":
+                    self.status.scanner_state = "decoder_exited"
+
+            analog_error = None
+            try:
+                self.analog_service_controller.stop()
+            except (OSError, subprocess.SubprocessError, ScannerServiceControlError) as exc:
+                analog_error = exc
+
+            counter_error = None
+            try:
+                _reset_analog_dashboard_lock_counters()
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                counter_error = exc
+
+            with self.lock:
+                self.status.activity_summary = self.activity_tracker.reset(
+                    preserve_distinct_voice_calls=False
+                )
+                self.status.coordinated_scanners["vhf"] = (
+                    "error" if analog_error else "stopped"
+                )
+                self.status.coordinated_scanners["uhf"] = (
+                    "error" if analog_error else "stopped"
+                )
+                if analog_error or counter_error:
+                    self.status.ok = False
+                    if analog_error:
+                        self._append_warning(str(analog_error))
+                    if counter_error:
+                        self._append_warning(
+                            f"Analog lock counter reset failed: {counter_error}"
+                        )
+                    self._set_event(
+                        f"P25 decoder exited rc={rc}; scanner shutdown had errors"
+                    )
+                else:
+                    self._set_event(
+                        f"P25 decoder exited rc={rc}; VHF and UHF stopped; counters reset"
+                    )
 
     def _build_command_from_template(self, manifest: dict[str, Any]) -> list[str]:
         template = os.environ.get("P25_SCANNER_OP25_COMMAND_TEMPLATE", "").strip()
@@ -664,12 +772,46 @@ class ScannerManager:
         return updated
 
     def start(self) -> tuple[dict[str, Any], HTTPStatus]:
+        with self.control_lock:
+            return self._start_coordinated()
+
+    def _start_coordinated(self) -> tuple[dict[str, Any], HTTPStatus]:
         with self.lock:
             if self.process is not None and self.process.poll() is None:
+                process = self.process
+            else:
+                process = None
+
+        if process is not None:
+            try:
+                analog_state = self.analog_service_controller.start()
+            except (OSError, subprocess.SubprocessError, ScannerServiceControlError) as exc:
+                _stop_process_safely(process)
+                with self.lock:
+                    self.process = None
+                    self.status.ok = False
+                    self.status.scanner_state = "coordinated_start_failed"
+                    self.status.decoder_process["running"] = False
+                    self.status.decoder_process["pid"] = None
+                    self.status.coordinated_scanners = {
+                        "p25": "stopped",
+                        "vhf": "error",
+                        "uhf": "error",
+                    }
+                    self._append_warning(str(exc))
+                    self._set_event(f"Coordinated scanner start failed: {exc}")
+                return self.status_payload(), HTTPStatus.INTERNAL_SERVER_ERROR
+            with self.lock:
+                self.status.ok = True
                 self.status.scanner_state = "running"
                 self.status.decoder_process["running"] = True
-                self.status.decoder_process["pid"] = self.process.pid
-                self._set_event("Scanner already running")
+                self.status.decoder_process["pid"] = process.pid
+                self.status.coordinated_scanners = {
+                    "p25": "running",
+                    "vhf": analog_state["vhf"],
+                    "uhf": analog_state["uhf"],
+                }
+                self._set_event("P25, VHF, and UHF scanners already running")
                 return self.status_payload(), HTTPStatus.ACCEPTED
 
         self.refresh_config_summary()
@@ -729,7 +871,9 @@ class ScannerManager:
             return self.status_payload(), HTTPStatus.ACCEPTED
 
         with self.lock:
-            self.status.activity_summary = self.activity_tracker.reset()
+            self.status.activity_summary = self.activity_tracker.reset(
+                preserve_distinct_voice_calls=True
+            )
             self._set_event("Runtime activity counters reset for scanner start")
 
         try:
@@ -758,25 +902,94 @@ class ScannerManager:
             self.status.control_channel_locked = False
             self.status.decoder_process["running"] = True
             self.status.decoder_process["pid"] = process.pid
-            self._set_event(f"Scanner started pid={process.pid}")
+            self.status.coordinated_scanners["p25"] = "running"
+            self._set_event(f"P25 scanner started pid={process.pid}; starting VHF and UHF")
         threading.Thread(target=self._reader_thread, args=(process,), daemon=True).start()
+
+        try:
+            analog_state = self.analog_service_controller.start()
+        except (OSError, subprocess.SubprocessError, ScannerServiceControlError) as exc:
+            _stop_process_safely(process)
+            with self.lock:
+                self.process = None
+                self.status.ok = False
+                self.status.scanner_state = "coordinated_start_failed"
+                self.status.control_channel_state = "idle"
+                self.status.control_channel_locked = False
+                self.status.decoder_process["running"] = False
+                self.status.decoder_process["pid"] = None
+                self.status.coordinated_scanners = {
+                    "p25": "stopped",
+                    "vhf": "error",
+                    "uhf": "error",
+                }
+                self._append_warning(str(exc))
+                self._set_event(f"Coordinated scanner start failed: {exc}")
+            return self.status_payload(), HTTPStatus.INTERNAL_SERVER_ERROR
+
+        with self.lock:
+            self.status.coordinated_scanners = {
+                "p25": "running",
+                "vhf": analog_state["vhf"],
+                "uhf": analog_state["uhf"],
+            }
+            self._set_event("P25, VHF, and UHF scanners started")
         return self.status_payload(), HTTPStatus.ACCEPTED
 
     def stop(self) -> tuple[dict[str, Any], HTTPStatus]:
+        with self.control_lock:
+            return self._stop_coordinated()
+
+    def _stop_coordinated(self) -> tuple[dict[str, Any], HTTPStatus]:
         with self.lock:
             process = self.process
         stop_result = None
         if process is not None:
             stop_result = _stop_process_safely(process)
+        analog_error = None
+        try:
+            self.analog_service_controller.stop()
+        except (OSError, subprocess.SubprocessError, ScannerServiceControlError) as exc:
+            analog_error = exc
+        counter_error = None
+        try:
+            _reset_analog_dashboard_lock_counters()
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            counter_error = exc
         with self.lock:
             self.process = None
+            self.status.activity_summary = self.activity_tracker.reset(
+                preserve_distinct_voice_calls=False
+            )
             self.status.scanner_state = "stopped"
             self.status.control_channel_state = "idle"
             self.status.control_channel_locked = False
             self.status.decoder_process["running"] = False
             self.status.decoder_process["pid"] = None
-            self._set_event("Scanner stopped")
-        return self.status_payload(), HTTPStatus.ACCEPTED
+            self.status.coordinated_scanners = {
+                "p25": "stopped",
+                "vhf": "error" if analog_error else "stopped",
+                "uhf": "error" if analog_error else "stopped",
+            }
+            if analog_error or counter_error:
+                self.status.ok = False
+                if analog_error:
+                    self._append_warning(str(analog_error))
+                if counter_error:
+                    self._append_warning(
+                        f"Analog lock counter reset failed: {counter_error}"
+                    )
+                self._set_event("Scanner stop completed with errors")
+            else:
+                self.status.ok = True
+                self._set_event(
+                    "P25, VHF, and UHF scanners stopped; voice and lock counters reset"
+                )
+        return self.status_payload(), (
+            HTTPStatus.INTERNAL_SERVER_ERROR
+            if analog_error or counter_error
+            else HTTPStatus.ACCEPTED
+        )
 
     def audio_status(self, request_host: str = "") -> dict[str, Any]:
         host = (request_host or "").split(":", 1)[0].strip() or socket.gethostname()
@@ -1215,6 +1428,28 @@ _ANALOG_DASHBOARD_ROLES = {
 }
 
 
+def _reset_analog_dashboard_lock_counters() -> list[str]:
+    """Reset persisted VHF/UHF lock totals after their workers are stopped."""
+    status_dir = _ANALOG_DASHBOARD_ROOT / "runtime" / "status"
+    reset_roles: list[str] = []
+    for role, metadata in _ANALOG_DASHBOARD_ROLES.items():
+        path = status_dir / metadata["status_file"]
+        if not path.exists():
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError(f"{path}: status root is not an object")
+        payload["lock_count"] = 0
+        temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        temporary.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)
+        reset_roles.append(role)
+    return reset_roles
+
+
 def _analog_dashboard_status_payload(host_header: str = "") -> dict[str, Any]:
     hostname = str(host_header or "").split(":", 1)[0].strip() or "127.0.0.1"
     status_dir = _ANALOG_DASHBOARD_ROOT / "runtime" / "status"
@@ -1589,6 +1824,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             if path in ("/api/config/named/delete", "/api/config/delete-named"):
                 self._send_json(MANAGER.delete_named_config(self._read_json()), HTTPStatus.ACCEPTED)
+                return
+            if path == "/api/config/named/export":
+                self._send_json(MANAGER.export_named_config(self._read_json()))
                 return
             if path == "/api/radioreference/save-credentials":
                 if save_radioreference_credentials is None:

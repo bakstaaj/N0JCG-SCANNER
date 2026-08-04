@@ -16,6 +16,7 @@
       "resume_delay_seconds": 1.2,
       "squelch_rms": 1800,
       "audio_tail_fade_ms": 20,
+      "nfm_audio_output_gain": 105000,
       "channels": [
         {
           "name": "2 m National Simplex",
@@ -320,6 +321,9 @@
       "hang_seconds": 0.9,
       "resume_delay_seconds": 1.2,
       "squelch_rms": 1800,
+      "audio_tail_fade_ms": 20,
+      "audio_noise_max_flatness": 0.65,
+      "nfm_audio_output_gain": 105000,
       "channels": [
         {
           "name": "70 cm National Simplex",

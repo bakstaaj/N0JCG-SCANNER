@@ -1,6 +1,12 @@
-# PI P25 Scanner
+# PI Scanner
 
-Minimal Raspberry Pi 5 P25 trunk-following scanner for NooElec NESDR Nano 2+ RTL-SDR receivers.
+Raspberry Pi 5 P25, VHF, and UHF scanner for dedicated RTL-SDR receivers.
+
+## User manual
+
+See the [PI Scanner User Manual](docs/USER_MANUAL.md) for hardware setup,
+RTL-SDR serial programming and role assignments, daily operation, radio
+profiles, CSV imports, live channel controls, maintenance, and troubleshooting.
 
 ## Goal
 

@@ -46,17 +46,17 @@
       "label": "Analog 2 m",
       "service": "analog",
       "rtl_serial": "00000144",
-      "enabled": false,
+      "enabled": true,
       "protected": false,
-      "notes": "Phase 3 worker target; disabled in Phase 2"
+      "notes": "Operational VHF FFT scanner"
     },
     "analog_70cm": {
       "label": "Analog 70 cm",
       "service": "analog",
       "rtl_serial": "00000440",
-      "enabled": false,
+      "enabled": true,
       "protected": false,
-      "notes": "Phase 3 worker target; disabled in Phase 2"
+      "notes": "Operational UHF FFT scanner"
     }
   }
 }

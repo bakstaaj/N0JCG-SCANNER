@@ -37,6 +37,7 @@ ROLE = "analog_2m"
 REQUIRED_SERIAL = "00000144"
 DEFAULT_UDP_HOST = "127.0.0.1"
 DEFAULT_UDP_PORT = 23458
+DEFAULT_NFM_AUDIO_OUTPUT_GAIN = 105_000.0
 
 
 class ScannerError(RuntimeError):
@@ -893,7 +894,10 @@ class VhfFftScanner:
             lock_rate,
             8_000,
             offset,
-            float(self.worker.get("nfm_audio_output_gain") or 70_000.0),
+            float(
+                self.worker.get("nfm_audio_output_gain")
+                or DEFAULT_NFM_AUDIO_OUTPUT_GAIN
+            ),
         )
         pcm_chunks: list[np.ndarray] = []
         carrier_results: list[CarrierMetrics] = []

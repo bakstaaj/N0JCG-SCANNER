@@ -2,6 +2,7 @@
 # Deploy and hardware-validate the FFT-directed VHF scanner from MSYS2 UCRT64.
 
 set -Eeuo pipefail
+export PATH=/ucrt64/bin:/usr/bin:/bin
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT/../PI-P25-SCANNER/.env}"

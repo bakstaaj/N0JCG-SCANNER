@@ -51,6 +51,7 @@ for required in \
   src/pi_p25_scanner/config_model.py src/pi_p25_scanner/config_store.py \
   src/pi_p25_scanner/decoder_discovery.py \
   src/pi_p25_scanner/vhf_fft_scanner.py \
+  src/pi_p25_scanner/uhf_fft_scanner.py \
   src/pi_p25_scanner/op25_config.py; do
   if [[ -f "$required" ]]; then
     pass "required file exists: $required"

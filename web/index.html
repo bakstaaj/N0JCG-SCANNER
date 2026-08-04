@@ -3,18 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>PI P25 Scanner</title>
-  <link rel="stylesheet" href="/app.css?v=2.0.1-analog-lock-controls">
+  <script>
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('desktop') === '1') return;
+      const mobileHint = navigator.userAgentData?.mobile === true;
+      const phoneUserAgent = /Android.*Mobile|iPhone|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (mobileHint || phoneUserAgent) window.location.replace('/mobile.html');
+    })();
+  </script>
+  <title>N0JCG SCANNER</title>
+  <link rel="stylesheet" href="/app.css?v=2.0.2-dashboard-layout">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <button id="menuBtn" class="icon-button" type="button" aria-label="Open menu">☰</button>
       <div class="title-block">
-        <strong>PI P25 Scanner</strong>
-        <span id="dashboardSummary">Loading scanner state...</span>
+        <strong>N0JCG SCANNER</strong>
       </div>
-      <span id="connectionStatus" class="pill warn">Connecting</span>
+      <div class="topbar-status" aria-label="scanner and connection status">
+        <span id="stateBadge" class="pill">-</span>
+        <span id="connectionStatus" class="pill warn">Connecting</span>
+      </div>
     </header>
 
     <aside id="drawer" class="drawer" aria-hidden="true">
@@ -25,6 +36,7 @@
       <button class="nav-item active" data-screen="dashboardScreen" type="button">Dashboard</button>
       <button class="nav-item" data-screen="radioSetupScreen" type="button">Radio Setup</button>
       <button class="nav-item" data-screen="logsScreen" type="button">Logs / Details</button>
+      <a class="nav-item" href="/mobile.html">Phone UI</a>
       <div class="drawer-foot"><span id="lastUpdated">Last update: -</span></div>
     </aside>
     <div id="drawerBackdrop" class="drawer-backdrop"></div>
@@ -32,15 +44,13 @@
     <main class="screen-frame">
       <section id="dashboardScreen" class="screen active" aria-label="dashboard">
         <div class="control-strip">
-          <button id="startBtn" type="button" class="big-action start">Start Scanner + Audio</button>
-<section class="audio-controls-only" aria-label="browser audio controls">
-  <button id="arbitratorMuteBtn" type="button" class="audio-mute-button" aria-pressed="false">Mute</button>
-  <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
-    <span>Volume</span>
-    <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
-  </label>
-</section>
-<button id="stopBtn" type="button" class="big-action stop">Stop</button>
+          <button id="startBtn" type="button" class="big-action start">Start Scanning + Audio</button>
+          <button id="arbitratorMuteBtn" type="button" class="big-action audio-mute-button" aria-pressed="false">Mute</button>
+          <label class="arbitrator-volume-label" for="arbitratorAudioVolume">
+            <span>Volume</span>
+            <input id="arbitratorAudioVolume" type="range" min="0" max="100" value="80" step="1">
+          </label>
+          <button id="stopBtn" type="button" class="big-action stop">Stop</button>
         </div>
 <section class="activity-card">
           <div class="activity-topline">
@@ -49,13 +59,12 @@
               <strong id="activeTalkgroupLabel">Waiting for activity</strong>
               <strong id="activeTgid" class="active-tgid-inline">-</strong>
             </div>
-<span id="stateBadge" class="pill">-</span>
           </div>
 <div class="activity-grid">
             <div><span>Voice</span><strong id="voiceFrequency">-</strong></div>
             <div><span>Control</span><strong id="controlFrequency">-</strong></div>
             <div><span>Phase</span><strong id="p25Phase">-</strong></div>
-            <div><span>Audio</span><strong id="browserAudioLastEvent">Ready</strong></div>
+            <div><span>Audio Arbitrator</span><strong id="browserAudioLastEvent">Checking</strong></div>
           </div>
         </section>
         <section class="stats-grid" aria-label="statistics">
@@ -72,27 +81,6 @@
           aria-label="analog scanner controls"
           aria-disabled="true"
         >
-          <div class="analog-squelch-row">
-            <span class="analog-squelch-label">Squelch</span>
-            <button
-              id="analogSquelchDownBtn"
-              type="button"
-              title="Lower squelch"
-              disabled
-            >−</button>
-            <strong
-              id="analogSquelchValue"
-              class="analog-squelch-value"
-              aria-live="polite"
-            >—</strong>
-            <button
-              id="analogSquelchUpBtn"
-              type="button"
-              title="Raise squelch"
-              disabled
-            >+</button>
-          </div>
-
           <div class="analog-channel-action-row">
             <button
               id="analogSkipBtn"
@@ -124,65 +112,54 @@
 
       <section id="radioSetupScreen" class="screen" aria-label="radio setup">
         <div class="screen-title">
-          <h1>Radio Setup</h1>
-          <p>One workflow: choose a saved profile or import a RadioReference system/site, filter talkgroups, calibrate if needed, then save as a named profile.</p>
+          <h1>Radio Profiles</h1>
+          <p>Select a complete saved profile, or upload standard CSV files to create a new one.</p>
         </div>
 
-        <section class="rr-panel" data-v05d-section="profiles">
-          <div class="section-row"><div><strong>1. Saved Profiles</strong><p>Reload a known-good profile or save the current active setup for future use.</p></div><span id="profileStatusBadge" class="pill warn">Profiles</span></div>
-          <div class="wizard-grid">
+        <section class="profile-panel">
+          <div class="section-row"><div><strong>Saved Profiles</strong><p>Loading a profile restores its P25 systems and analog VHF/UHF channel lists.</p></div><span id="profileStatusBadge" class="pill warn">Profiles</span></div>
+          <div class="profile-fields">
             <label>Saved Profile<select id="profileSelect"></select></label>
-            <label>Profile Name<input id="profileName" type="text" placeholder="TOPAZ Mesa Fire"></label>
+            <label>New Profile Name<input id="profileName" type="text" placeholder="Teller County Public Safety"></label>
           </div>
-          <div class="wizard-actions compact-actions">
+          <div class="profile-actions">
             <button id="refreshProfilesBtn" type="button">Refresh Profiles</button>
             <button id="loadProfileBtn" type="button">Load Selected Profile</button>
             <button id="saveProfileBtn" type="button" class="primary">Save Current</button>
+            <button id="deleteProfileBtn" type="button" class="danger-lite">Delete Selected</button>
           </div>
           <pre id="profileStatusText">Profiles not loaded yet.</pre>
         </section>
 
-        <section class="rr-panel" data-v05d-section="rr-login">
-          <div class="section-row"><div><strong>2. RadioReference Login</strong><p>Credentials stay local on this Pi. Blank API key/password fields preserve saved secrets.</p></div><span id="rrStatusBadge" class="pill warn">Checking</span></div>
-          <div class="wizard-grid">
-            <label>RR API Key<input id="rrAppKey" type="password" autocomplete="off"></label>
-            <label>RR Username<input id="rrUsername" type="text" autocomplete="username"></label>
-            <label>RR Password<input id="rrPassword" type="password" autocomplete="current-password"></label>
-          </div>
-          <div class="wizard-actions compact-actions">
-            <button id="saveRrCredentialsBtn" type="button">Save Login</button>
-            <button id="testRrLoginBtn" type="button">Test Login</button>
-          </div>
-          <pre id="rrStatusText">RadioReference status not loaded.</pre>
-        </section>
+        <div class="csv-profile-grid">
+          <section class="profile-panel csv-profile-card">
+            <div class="section-row">
+              <div><strong>Analog VHF / UHF</strong><p>Upload a standard CHIRP CSV. Frequencies are assigned to the dedicated VHF or UHF scanner automatically.</p></div>
+              <span id="analogCsvStatusBadge" class="pill warn">Ready</span>
+            </div>
+            <label>CHIRP CSV File<input id="analogCsvFile" type="file" accept=".csv,text/csv"></label>
+            <div class="csv-actions">
+              <button id="importAnalogCsvBtn" type="button" class="primary">Upload &amp; Save Profile</button>
+              <button id="exportAnalogCsvBtn" type="button">Export Selected</button>
+              <a class="button-link" href="/chirp_analog_template.csv" download="chirp_analog_template.csv">Download Template</a>
+            </div>
+            <pre id="analogCsvStatusText">Choose a CHIRP CSV file to upload.</pre>
+          </section>
 
-        <section class="rr-panel" data-v05d-section="rr-import">
-          <div class="section-row"><div><strong>3. Location, System, Site, Talkgroups</strong><p>Enter location, select system/site, choose talkgroup categories, then import and save.</p></div><span id="importStatusBadge" class="pill warn">Ready</span></div>
-          <div class="wizard-grid">
-            <label>State<input id="wizardState" type="text" value="AZ" autocomplete="off"></label>
-            <label>Counties<input id="wizardCounty" type="text" value="Maricopa" placeholder="Teller, El Paso" autocomplete="off"></label>
-            <label>Cities<input id="wizardCity" type="text" value="Mesa" placeholder="Cripple Creek, Woodland Park" autocomplete="off"></label>
-          </div>
-          <div class="wizard-actions compact-actions">
-            <button id="findRrSystemsBtn" type="button" class="primary">Find RR Systems</button>
-          </div>
-          <div class="wizard-grid">
-            <label>RR System<select id="rrSystemSelect"></select></label>
-            <label>RR Site<select id="rrSiteSelect"></select></label>
-          </div>
-          <div class="wizard-actions compact-actions">
-            <button id="loadRrSitesBtn" type="button">Load RR Sites</button>
-          </div>
-          <div class="category-panel">
-            <span class="label">Talkgroup Category Filters</span>
-            <div id="categoryChoices" class="checkbox-grid"></div>
-          </div>
-          <div class="wizard-actions compact-actions">
-            <button id="autoCalibratePpmBtn" type="button">Auto Calibrate PPM</button>
-            <button id="importAndSaveRrBtn" type="button" class="primary">Import and Save Named Config</button>
-          </div>
-          <pre id="wizardPreview">Find systems to begin.</pre>
-        </section>
+          <section class="profile-panel csv-profile-card">
+            <div class="section-row">
+              <div><strong>P25 Systems &amp; Talkgroups</strong><p>Upload control, voice, and talkgroup rows using the PI Scanner P25 template.</p></div>
+              <span id="p25CsvStatusBadge" class="pill warn">Ready</span>
+            </div>
+            <label>P25 CSV File<input id="p25CsvFile" type="file" accept=".csv,text/csv"></label>
+            <div class="csv-actions">
+              <button id="importP25CsvBtn" type="button" class="primary">Upload &amp; Save Profile</button>
+              <button id="exportP25CsvBtn" type="button">Export Selected</button>
+              <a class="button-link" href="/p25_import_template.csv" download="p25_import_template.csv">Download Template</a>
+            </div>
+            <pre id="p25CsvStatusText">Choose a P25 CSV file to upload.</pre>
+          </section>
+        </div>
       </section>
 
       <section id="logsScreen" class="screen" aria-label="logs">
@@ -201,7 +178,7 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=2.0.1-analog-lock-controls"></script>
-  <script src="/audio_arbitrator_live.js?v=1.0.6-controls-only"></script>
+  <script src="/app.js?v=2.0.3-audio-arbitrator-status-2.1.0-csv-radio-profiles-2.0.0-voice-call-counter"></script>
+  <script src="/audio_arbitrator_live.js?v=1.0.8-jitter-reconnect"></script>
 </body>
 </html>

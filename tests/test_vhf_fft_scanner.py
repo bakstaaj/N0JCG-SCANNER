@@ -14,6 +14,7 @@ from pi_p25_scanner.analog_channels import ROLE_DEFAULTS
 from pi_p25_scanner.vhf_fft_scanner import (
     AudioMetrics,
     CarrierMetrics,
+    DEFAULT_NFM_AUDIO_OUTPUT_GAIN,
     NfmDemodulator,
     REQUIRED_SERIAL,
     VhfFftScanner,
@@ -73,6 +74,7 @@ class VhfFftScannerTests(unittest.TestCase):
 
     def test_receiver_serial_contract_is_not_reversed(self) -> None:
         self.assertEqual(REQUIRED_SERIAL, "00000144")
+        self.assertEqual(DEFAULT_NFM_AUDIO_OUTPUT_GAIN, 105_000.0)
         self.assertEqual(ROLE_DEFAULTS["analog_2m"]["rtl_serial"], "00000144")
         self.assertEqual(ROLE_DEFAULTS["analog_70cm"]["rtl_serial"], "00000440")
 
