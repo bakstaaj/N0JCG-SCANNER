@@ -9,16 +9,21 @@
       if (params.get('desktop') === '1') return;
       const mobileHint = navigator.userAgentData?.mobile === true;
       const phoneUserAgent = /Android.*Mobile|iPhone|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      if (mobileHint || phoneUserAgent) window.location.replace('/mobile.html');
+      const base = window.location.pathname === '/pi-scanner'
+        || window.location.pathname.startsWith('/pi-scanner/')
+        ? '/pi-scanner'
+        : '';
+      if (mobileHint || phoneUserAgent) window.location.replace(`${base}/mobile.html`);
     })();
   </script>
   <title>N0JCG SCANNER</title>
-  <link rel="stylesheet" href="/app.css?v=2.0.2-dashboard-layout">
+  <link rel="stylesheet" href="app.css?v=2.0.2-dashboard-layout-3.0.2-roc-back">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <button id="menuBtn" class="icon-button" type="button" aria-label="Open menu">☰</button>
+      <a class="icon-button return-button" href="/" aria-label="Return to ROC dashboard" title="Return to ROC dashboard">&#8592;</a>
       <div class="title-block">
         <strong>N0JCG SCANNER</strong>
       </div>
@@ -36,7 +41,7 @@
       <button class="nav-item active" data-screen="dashboardScreen" type="button">Dashboard</button>
       <button class="nav-item" data-screen="radioSetupScreen" type="button">Radio Setup</button>
       <button class="nav-item" data-screen="logsScreen" type="button">Logs / Details</button>
-      <a class="nav-item" href="/mobile.html">Phone UI</a>
+      <a class="nav-item" href="mobile.html">Phone UI</a>
       <div class="drawer-foot"><span id="lastUpdated">Last update: -</span></div>
     </aside>
     <div id="drawerBackdrop" class="drawer-backdrop"></div>
@@ -178,7 +183,8 @@
       </section>
     </main>
   </div>
-  <script src="/app.js?v=2.0.3-audio-arbitrator-status-2.1.0-csv-radio-profiles-2.0.0-voice-call-counter"></script>
-  <script src="/audio_arbitrator_live.js?v=1.0.8-jitter-reconnect"></script>
+  <script src="app.js?v=2.0.3-audio-arbitrator-status-2.1.0-csv-radio-profiles-2.0.0-voice-call-counter-2.1.1-desktop-listen-3.0.1-roc-subpath"></script>
+  <script src="pcm-ring-player.js?v=1.0.1-clock-recovery"></script>
+  <script src="audio_arbitrator_live.js?v=2.2.2-clock-recovered-ring-player-3.0.1-roc-subpath"></script>
 </body>
 </html>

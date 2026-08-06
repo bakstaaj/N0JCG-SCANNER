@@ -12,7 +12,7 @@ def test_mobile_dashboard_is_separate_and_phone_friendly() -> None:
     assert 'viewport-fit=cover' in html
     assert '<title>N0JCG SCANNER Mobile</title>' in html
     assert '<span class="eyebrow">N0JCG SCANNER</span>' in html
-    assert 'href="/?desktop=1"' in html
+    assert 'href="./?desktop=1"' in html
     assert 'id="startBtn"' in html
     assert 'id="stopBtn"' in html
     assert 'id="muteBtn"' in html
@@ -35,6 +35,11 @@ def test_mobile_controls_use_existing_coordinated_apis_without_autostart() -> No
     assert "/audio.pcm?_=" in script
     assert "new AudioContextClass" in script
     assert "PLAYBACK_LEAD_SECONDS = 0.06" in script
+    assert "if (pcm.nextPlayTime - now > MAX_QUEUED_SECONDS)" in script
+    assert "pcm.droppedFrames += 1" in script
+    assert "new AudioWorkletNode" in script
+    assert "pcm-player-worklet.js?v=1.0.0" in script
+    assert "new window.ScannerPcmRingPlayer" in script
     assert "audioWanted: false" in script
     assert "scheduleMobileReconnect('Audio stream ended')" in script
     assert ".play()" not in script
@@ -51,5 +56,5 @@ def test_phone_browser_redirect_has_full_ui_override() -> None:
 
     assert "navigator.userAgentData?.mobile === true" in html
     assert "Android.*Mobile|iPhone|iPod" in html
-    assert "window.location.replace('/mobile.html')" in html
+    assert "window.location.replace(`${base}/mobile.html`)" in html
     assert "params.get('desktop') === '1'" in html

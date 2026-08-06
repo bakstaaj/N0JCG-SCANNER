@@ -136,6 +136,13 @@ ACTIVITY_STATE_PATH = Path(
 )
 
 
+def local_audio_proxy_url(request_path: str) -> str:
+    """Map the shared UI's /radio route to this radio node's audio bridge."""
+    suffix = request_path[len("/radio") :] if request_path.startswith("/radio") else request_path
+    suffix = suffix if suffix.startswith("/") else f"/{suffix}"
+    return f"http://127.0.0.1:{AUDIO_BRIDGE_PORT}{suffix}"
+
+
 def iter_status_strings(value: Any):
     if isinstance(value, str):
         yield value
@@ -1718,9 +1725,51 @@ class Handler(SimpleHTTPRequestHandler):
     def _handle_exception(self, exc: Exception, status: HTTPStatus = HTTPStatus.BAD_REQUEST) -> None:
         self._send_json(_safe_error_payload(exc), status)
 
+    def _proxy_local_audio(self) -> None:
+        path = self.path.split("?", 1)[0]
+        stream = path in {"/radio/audio.pcm", "/radio/audio.wav"}
+        request = urllib.request.Request(
+            local_audio_proxy_url(self.path),
+            headers={"Accept": self.headers.get("Accept", "*/*")},
+            method="GET",
+        )
+        try:
+            response = urllib.request.urlopen(request, timeout=None)
+        except urllib.error.HTTPError as exc:
+            response = exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            self._send_json(
+                {"ok": False, "error": f"audio bridge unavailable: {exc}"},
+                HTTPStatus.BAD_GATEWAY,
+            )
+            return
+
+        try:
+            self.send_response(int(response.status))
+            for name in ("Content-Type", "Content-Length", "Cache-Control"):
+                value = response.headers.get(name)
+                if value:
+                    self.send_header(name, value)
+            self.send_header("X-PI-Scanner-Upstream", "local-radio-audio")
+            self.end_headers()
+            read_size = 320 if stream else 64 * 1024
+            while True:
+                chunk = response.read(read_size)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            response.close()
+
     def do_GET(self) -> None:  # noqa: N802 - http.server method name
         try:
             path = self.path.split("?", 1)[0]
+            if path.startswith("/radio/"):
+                self._proxy_local_audio()
+                return
             if path == "/api/status":
                 self._send_json(MANAGER.status_payload())
                 return

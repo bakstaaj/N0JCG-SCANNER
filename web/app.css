@@ -21,6 +21,18 @@ button:disabled { opacity: 0.45; }
 .primary, .start { background: linear-gradient(180deg, #2fd986, #139b61); color: #03140c; }
 .stop, .danger { background: linear-gradient(180deg, #ff7b7b, #c33636); color: #220303; }
 .icon-button { width: 52px; min-height: 52px; padding: 0; font-size: 28px; }
+.return-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 52px;
+  border-radius: 16px;
+  background: var(--panel-2);
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 900;
+}
+.return-button:active { transform: scale(0.98); }
 .app-shell { height: 100vh; display: flex; flex-direction: column; }
 .topbar { height: 58px; display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: #0c1724; border-bottom: 1px solid var(--line); }
 .title-block { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.1; }

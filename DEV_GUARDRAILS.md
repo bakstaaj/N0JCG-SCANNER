@@ -11,6 +11,15 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - Do not assume an Ubuntu development server for this project unless explicitly requested.
 - Do not pivot to a native Windows application, PowerShell/cmd packaging, Windows services, Visual Studio, or installers.
 
+## Split-Host Runtime Ownership
+
+- The ROC application host is `192.168.68.114`; the existing `N0JCG-ROC` service owns browser-facing port `8095` and mounts scanner assets at `/pi-scanner/`.
+- The radio Pi is `192.168.68.137`; it owns RTL-SDR devices, OP25, VHF/UHF workers, the radio API on port `8070`, and audio fanout on port `8072`.
+- Browser code must rebase `/api/*` to `/pi-scanner/api/*` and `/radio/*` to `/pi-scanner/audio-api/*` when mounted on the ROC. Do not hard-code the browser hostname with port `8072`.
+- Application deployments must use `deploy/roc-files.txt`; radio deployments must use `deploy/radio-pi-files.txt`.
+- Deploy `web/` only into `N0JCG-ROC/web/pi-scanner/`; never overwrite the ROC dashboard's root `web/`. Never deploy `src/`, `config/`, or radio `systemd/` units to the ROC.
+- API contract changes require validation of both the ROC proxy and the direct radio API before either deployment is reported complete.
+
 ## Script Handoff Rules
 
 - Prefer a single directly downloadable `.sh` script for non-trivial command sequences.

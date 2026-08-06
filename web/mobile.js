@@ -21,11 +21,15 @@ const state = {
 const pcm = {
   context: null,
   gain: null,
+  worklet: null,
+  workletStats: null,
+  ringPlayer: null,
   reader: null,
   running: false,
   stopping: false,
   nextPlayTime: 0,
   pending: new Uint8Array(0),
+  droppedFrames: 0,
   reconnectTimer: null,
 };
 
@@ -33,8 +37,23 @@ function byId(id) { return document.getElementById(id); }
 function setText(id, value) { const node = byId(id); if (node) node.textContent = value ?? '-'; }
 function formatHz(value) { return value ? `${(Number(value) / 1e6).toFixed(5)} MHz` : 'Frequency unavailable'; }
 
+const PI_SCANNER_BASE_PATH = window.location.pathname === '/pi-scanner'
+  || window.location.pathname.startsWith('/pi-scanner/')
+  ? '/pi-scanner'
+  : '';
+
+function applicationUrl(value) {
+  const url = String(value || '');
+  if (!PI_SCANNER_BASE_PATH || !url.startsWith('/')) return url;
+  if (url.startsWith('/api/')) return `${PI_SCANNER_BASE_PATH}${url}`;
+  if (url.startsWith('/radio/')) {
+    return `${PI_SCANNER_BASE_PATH}/audio-api${url.slice('/radio'.length)}`;
+  }
+  return url;
+}
+
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, { cache: 'no-store', ...options });
+  const response = await fetch(applicationUrl(url), { cache: 'no-store', ...options });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
   return payload;
@@ -72,6 +91,32 @@ async function ensureAudioContext() {
     pcm.gain = pcm.context.createGain();
     pcm.gain.connect(pcm.context.destination);
     applyAudioLevel();
+    if (pcm.context.audioWorklet && window.AudioWorkletNode) {
+      try {
+        await pcm.context.audioWorklet.addModule(
+          new URL('pcm-player-worklet.js?v=1.0.0', window.location.href).href,
+        );
+        pcm.worklet = new AudioWorkletNode(pcm.context, 'scanner-pcm-player', {
+          numberOfInputs: 0,
+          numberOfOutputs: 1,
+          outputChannelCount: [1],
+          processorOptions: { inputRate: SAMPLE_RATE, startSamples: 640, maxSamples: 3600 },
+        });
+        pcm.worklet.port.onmessage = (event) => {
+          if (event.data?.type === 'stats') pcm.workletStats = event.data;
+        };
+        pcm.worklet.connect(pcm.gain);
+      } catch (_error) {
+        pcm.worklet = null;
+      }
+    }
+    if (!pcm.worklet && window.ScannerPcmRingPlayer) {
+      pcm.ringPlayer = new window.ScannerPcmRingPlayer(pcm.context, pcm.gain, {
+        inputRate: SAMPLE_RATE,
+        startSamples: 640,
+        maxSamples: 3600,
+      });
+    }
   }
   if (pcm.context.state === 'suspended') await pcm.context.resume();
 }
@@ -85,6 +130,24 @@ function appendBytes(first, second) {
 
 function scheduleFrame(bytes) {
   if (!pcm.context || !pcm.gain) return;
+  if (pcm.worklet) {
+    const samples = new Int16Array(FRAME_SAMPLES);
+    const input = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    for (let index = 0; index < FRAME_SAMPLES; index += 1) {
+      samples[index] = input.getInt16(index * 2, true);
+    }
+    pcm.worklet.port.postMessage({ type: 'pcm', samples: samples.buffer }, [samples.buffer]);
+    return;
+  }
+  if (pcm.ringPlayer) {
+    const samples = new Int16Array(FRAME_SAMPLES);
+    const input = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    for (let index = 0; index < FRAME_SAMPLES; index += 1) {
+      samples[index] = input.getInt16(index * 2, true);
+    }
+    pcm.ringPlayer.enqueue(samples);
+    return;
+  }
   const buffer = pcm.context.createBuffer(1, FRAME_SAMPLES, SAMPLE_RATE);
   const channel = buffer.getChannelData(0);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -92,8 +155,14 @@ function scheduleFrame(bytes) {
     channel[index] = view.getInt16(index * 2, true) / 32768;
   }
   const now = pcm.context.currentTime;
-  if (pcm.nextPlayTime < now + PLAYBACK_LEAD_SECONDS || pcm.nextPlayTime - now > MAX_QUEUED_SECONDS) {
+  if (pcm.nextPlayTime < now + PLAYBACK_LEAD_SECONDS) {
     pcm.nextPlayTime = now + PLAYBACK_LEAD_SECONDS;
+  }
+  // Do not rewind into already-scheduled sources. That overlaps audio and
+  // sounds like a buffer overrun; discard excess input while the queue drains.
+  if (pcm.nextPlayTime - now > MAX_QUEUED_SECONDS) {
+    pcm.droppedFrames += 1;
+    return;
   }
   const source = pcm.context.createBufferSource();
   source.buffer = buffer;
@@ -148,9 +217,13 @@ async function attachAudio() {
   pcm.stopping = false;
   pcm.pending = new Uint8Array(0);
   pcm.nextPlayTime = 0;
+  pcm.droppedFrames = 0;
+  pcm.workletStats = null;
+  pcm.worklet?.port.postMessage({ type: 'reset' });
+  pcm.ringPlayer?.reset();
   const response = await fetch(
-    `http://${window.location.hostname}:8072/audio.pcm?_=${Date.now()}`,
-    { cache: 'no-store', mode: 'cors' },
+    applicationUrl(`/radio/audio.pcm?_=${Date.now()}`),
+    { cache: 'no-store', credentials: 'same-origin' },
   );
   if (!response.ok || !response.body) throw new Error(`PCM stream HTTP ${response.status}`);
   pcm.reader = response.body.getReader();
@@ -282,7 +355,7 @@ async function poll() {
     const [backend, analog, audio, controls] = await Promise.all([
       fetchJson('/api/status'),
       fetchJson('/api/analog/status'),
-      fetchJson(`http://${window.location.hostname}:8072/api/audio/status`, { mode: 'cors' }),
+      fetchJson('/radio/api/audio/status'),
       fetchJson('/api/analog/controls'),
     ]);
     Object.assign(state, { backend, analog, audio, controls });

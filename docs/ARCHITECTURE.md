@@ -1,87 +1,70 @@
-# PI P25 Scanner Architecture
+# PI Scanner split-host architecture
 
-## V0.1 architecture
-
-The first implementation is a small Python web application that controls an external P25 decoder engine and exposes a minimal browser UI.
+## Production topology
 
 ```text
-Browser UI
-   |
-   | HTTP / JSON / optional audio stream
-   v
-Python backend
-   |
-   | process wrapper + generated config
-   v
-P25 decoder engine on Pi
-   |
-   | RTL-SDR control/voice receivers
-   v
-NooElec NESDR Nano 2+ radio(s)
+Desktop / phone browsers
+          |
+          | http://192.168.68.114:8095/pi-scanner/
+          v
+Existing N0JCG ROC application — 192.168.68.114:8095
+  /pi-scanner/                 -> static PI-SCANNER web assets
+  /pi-scanner/api/*            -> radio Pi :8070/api/*
+  /pi-scanner/audio-api/*      -> radio Pi :8072/*
+          v
+Radio Pi — 192.168.68.137
+  backend.py / OP25 / radio API
+  P25 audio pool and audio arbitrator
+  VHF FFT scanner and UHF FFT scanner
+          v
+Dedicated RTL-SDR receivers selected by EEPROM serial
 ```
 
-## Decoder engine model
+## Ownership boundary
 
-The backend should not initially implement a full P25 demodulator. It should:
+The existing `N0JCG-ROC` application owns the browser-facing server and
+navigation dashboard. This repository supplies only the scanner web bundle
+installed under its `web/pi-scanner/` directory. It does not install a second
+ROC web service.
 
-1. validate local system configuration,
-2. generate decoder-specific runtime files,
-3. launch the decoder engine,
-4. monitor process liveness,
-5. parse status/log metadata when available,
-6. expose a stable web/API contract, and
-7. stop the decoder cleanly.
+The radio Pi owns every hardware or real-time function:
 
-OP25 is the preferred first decoder target because it is Linux/Pi oriented and already supports P25 trunk-following workflows. SDRTrunk is a useful reference for behavior and protocol interpretation, but the Java GUI/application stack is intentionally outside V0.1 scope.
+- P25 control and voice receivers;
+- VHF and UHF FFT scanners;
+- OP25 launch, monitoring, and runtime status parsing;
+- analog worker lifecycle;
+- audio pooling, arbitration, and fanout;
+- runtime radio configuration and EEPROM-serial role mapping.
 
-## One-SDR vs two-SDR mode
+The radio Pi remains authoritative for scanner state and configuration. The
+ROC proxy forwards requests; it does not duplicate radio state.
 
-### One-SDR mode
+## Browser contract
 
-One RTL-SDR alternates between the active control channel and assigned voice channels. This is useful for early testing and lower hardware cost, but it may miss control-channel grants while tuned away.
+The frontend detects whether it is mounted below `/pi-scanner/`:
 
-### Two-SDR mode
+- local/direct maintenance `/api/*` remains `/api/*`;
+- ROC-mounted `/api/*` becomes `/pi-scanner/api/*`;
+- local/direct `/radio/*` remains `/radio/*`;
+- ROC-mounted `/radio/*` becomes `/pi-scanner/audio-api/*`.
 
-One RTL-SDR remains on the control channel while the second follows voice grants. This is the preferred operational model for trunked scanning.
+Stylesheets, scripts, phone navigation, and the desktop override use relative
+paths so both `/` and `/pi-scanner/` are supported by the same source files.
 
-Receiver roles:
+## Repository/deployment boundary
 
-- `p25_control`
-- `p25_voice`
+| Repository area | Owner | Deployment destination |
+|---|---|---|
+| `web/` | ROC `.114` | `N0JCG-ROC/web/pi-scanner/` |
+| `config/`, `src/`, `systemd/`, `tools/` | radio Pi `.137` | `/home/pi/PI-P25-SCANNER/` |
+| `docs/`, `tests/`, `deploy/` | development/GitHub | not copied to runtime |
 
-Persistent code must resolve roles from RTL EEPROM serials, not Linux runtime indexes.
+An API contract change must remain compatible with the existing ROC proxy.
+Deploy radio-side support first when needed, followed by the ROC web bundle.
 
-## Minimal API contract
+## Radio model
 
-Initial endpoints:
-
-- `GET /api/status`
-- `GET /api/config`
-- `POST /api/config`
-- `POST /api/scanner/start`
-- `POST /api/scanner/stop`
-
-Initial status fields:
-
-- `ok`
-- `scanner_state`
-- `decoder_engine`
-- `receiver_roles`
-- `active_control_frequency_hz`
-- `active_voice_frequency_hz`
-- `active_tgid`
-- `active_talkgroup_label`
-- `p25_phase`
-- `encrypted`
-- `muted`
-- `last_event`
-- `warnings`
-
-## Audio model
-
-V0.1 should prefer the simplest working path first. Acceptable first paths are:
-
-- decoder plays audio to Pi default audio device, or
-- backend exposes a local stream/file endpoint after decoder audio is stable.
-
-Browser audio is desired, but decoder reliability comes first.
+P25 uses dedicated control and voice receivers. VHF and UHF use their own
+FFT-directed NFM scanners. Persistent ownership is always resolved from RTL
+EEPROM serials, never Linux device indexes. Encrypted P25 traffic remains
+mute/skip only.

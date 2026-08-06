@@ -7,6 +7,19 @@
 window.__P25_REQUIRE_USER_START__ = true;
 window.__P25_USER_START_REQUESTED__ = false;
 window.__P25_DESKTOP_LAUNCHER_MODE__ = false;
+const PI_SCANNER_BASE_PATH = window.location.pathname === '/pi-scanner'
+  || window.location.pathname.startsWith('/pi-scanner/')
+  ? '/pi-scanner'
+  : '';
+function p25ApplicationUrl(value) {
+  const url = String(value || '');
+  if (!PI_SCANNER_BASE_PATH || !url.startsWith('/')) return url;
+  if (url.startsWith('/api/')) return `${PI_SCANNER_BASE_PATH}${url}`;
+  if (url.startsWith('/radio/')) {
+    return `${PI_SCANNER_BASE_PATH}/audio-api${url.slice('/radio'.length)}`;
+  }
+  return url;
+}
 function p25AllowManualStart(event) {
   if (event && event.isTrusted === false) {
     setText('lastEvent', 'Ignored non-user scanner start request.');
@@ -20,7 +33,8 @@ function p25AllowManualStart(event) {
   window.__P25_FETCH_GUARD_INSTALLED__ = true;
   const originalFetch = window.fetch.bind(window);
   window.fetch = function guardedP25Fetch(input, init) {
-    const url = typeof input === 'string' ? input : String(input && input.url || '');
+    const requestInput = typeof input === 'string' ? p25ApplicationUrl(input) : input;
+    const url = typeof requestInput === 'string' ? requestInput : String(requestInput && requestInput.url || '');
     const method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
     const scannerStart = method === 'POST' && url.includes('/api/scanner/start');
     if (scannerStart && window.__P25_REQUIRE_USER_START__ && !window.__P25_USER_START_REQUESTED__) {
@@ -36,7 +50,7 @@ function p25AllowManualStart(event) {
         headers: { 'Content-Type': 'application/json' }
       }));
     }
-    return originalFetch(input, init);
+    return originalFetch(requestInput, init);
   };
 })();
 // V0.5D_EMERGENCY_UI_RESTORE
@@ -52,8 +66,8 @@ function setBadge(id, text, kind) { const el = field(id); if (!el) return; el.te
 function formatHz(value) { return value ? `${(Number(value) / 1000000).toFixed(6)} MHz` : '-'; }
 function formatList(values) { return Array.isArray(values) && values.length ? values.join('\n') : '-'; }
 function commandText(command) { return Array.isArray(command) ? command.join(' ') : (typeof command === 'string' ? command : ''); }
-function audioStreamUrl() { return `http://${window.location.hostname}:8072/audio.wav`; }
-function testToneUrl() { return `http://${window.location.hostname}:8072/test-tone.wav`; }
+function audioStreamUrl() { return '/radio/audio.wav'; }
+function testToneUrl() { return '/radio/test-tone.wav'; }
 function safeJson(value) { try { return JSON.stringify(value, null, 2); } catch { return String(value); } }
 
 async function fetchJson(url, options = {}) {
@@ -78,6 +92,19 @@ function showScreen(id) {
 }
 
 function markerIsReady(marker) { return Boolean(marker?.start_ready || (marker?.exists && marker?.validated)); }
+function desktopScannersRunning(status) {
+  const coordinated = status?.coordinated_scanners || {};
+  const activeStates = ['running', 'active'];
+  return Boolean(status?.decoder_process?.running)
+    || activeStates.includes(String(coordinated.p25 || '').toLowerCase())
+    || activeStates.includes(String(coordinated.vhf || '').toLowerCase())
+    || activeStates.includes(String(coordinated.uhf || '').toLowerCase());
+}
+
+function desktopBrowserAudioAttached() {
+  return Boolean(window.__scannerBrowserAudio?.isAttached?.());
+}
+
 function extractOp25HttpListener(status) {
   const process = status?.decoder_process || {};
   const marker = process.validated_marker || {};
@@ -91,11 +118,17 @@ function extractOp25HttpListener(status) {
 function setButtonsForState(status) {
   const process = status?.decoder_process || {};
   const marker = process.validated_marker || {};
-  const running = Boolean(process.running);
+  const running = desktopScannersRunning(status);
+  const listening = desktopBrowserAudioAttached();
   const canStart = markerIsReady(marker) || Boolean(process.start_enabled);
   const startBtn = field('startBtn');
   const stopBtn = field('stopBtn');
-  if (startBtn) startBtn.disabled = running || !canStart;
+  if (startBtn) {
+    startBtn.textContent = running
+      ? (listening ? 'Listening' : 'Listen')
+      : 'Start Scanning + Audio';
+    startBtn.disabled = running ? listening : !canStart;
+  }
   if (stopBtn) stopBtn.disabled = !running;
 }
 
@@ -217,21 +250,34 @@ async function startScannerAndAudio() {
 
   const startBtn = field('startBtn');
   const stopBtn = field('stopBtn');
+  const alreadyRunning = desktopScannersRunning(latestStatus);
   if (startBtn) startBtn.disabled = true;
   if (stopBtn) stopBtn.disabled = true;
-  setText('lastEvent', 'Starting P25, VHF, and UHF scanners...');
+  setText(
+    'lastEvent',
+    alreadyRunning
+      ? 'Connecting this browser to scanner audio...'
+      : 'Starting P25, VHF, and UHF scanners...',
+  );
 
-  const audio = field('browserAudioPlayer');
-  if (audio) audio.src = audioStreamUrl();
-  const playPromise = audio ? audio.play().catch((error) => { updateAudioPanel(`Press audio play if blocked: ${error.message}`); return false; }) : Promise.resolve(false);
   try {
-    const status = await postJson('/api/scanner/start');
-    renderDashboard(status);
-    await playPromise;
-    updateAudioPanel('P25, VHF, and UHF started; browser audio attached');
+    const audioController = window.__scannerBrowserAudio;
+    if (!audioController?.start) throw new Error('PCM browser audio is not ready');
+    const audioPromise = audioController.start();
+    if (!alreadyRunning) {
+      const status = await postJson('/api/scanner/start');
+      renderDashboard(status);
+    }
+    await audioPromise;
+    updateAudioPanel(
+      alreadyRunning
+        ? 'Browser audio attached; scanners were left running'
+        : 'P25, VHF, and UHF started; browser audio attached',
+    );
   } catch (error) {
-    setText('lastEvent', `Start error: ${error.message}`);
-    updateAudioPanel(`Start/audio error: ${error.message}`);
+    const action = alreadyRunning ? 'Listen' : 'Start';
+    setText('lastEvent', `${action} error: ${error.message}`);
+    updateAudioPanel(`${action}/audio error: ${error.message}`);
   }
   await refreshStatus();
 }
@@ -786,6 +832,9 @@ function attachEventHandlers() {
   field('p25CsvFile')?.addEventListener('change', suggestProfileName);
   field('browserAudioPlayer')?.addEventListener('play', () => updateAudioPanel('Browser audio playing'));
   field('browserAudioPlayer')?.addEventListener('pause', () => updateAudioPanel('Browser audio paused'));
+  window.addEventListener('scanner-browser-audio-state', () => {
+    if (latestStatus) setButtonsForState(latestStatus);
+  });
 }
 
 function boot() {
@@ -1089,7 +1138,7 @@ function p25RemoveDashboardAutostartTuningRemnants() {
     }
 
     try {
-      const audioResponse = await fetch(`http://${window.location.hostname}:8072/api/audio/status`, {cache:'no-store', mode:'cors'});
+      const audioResponse = await fetch('/radio/api/audio/status', {cache:'no-store'});
       if (!audioResponse.ok) throw new Error(`audio HTTP ${audioResponse.status}`);
       const audio = await audioResponse.json();
       audioReachable = Boolean(audio?.ok);
@@ -1164,7 +1213,7 @@ function p25RemoveDashboardAutostartTuningRemnants() {
 
     try {
       const audioStatus = await fetchJson(
-        `http://${window.location.hostname}:8072/api/audio/status`
+        '/radio/api/audio/status'
       );
       const role = analogRoleForSource(audioStatus?.active_source);
 
@@ -1467,7 +1516,7 @@ function p25RemoveDashboardAutostartTuningRemnants() {
         controlsPayload,
       ] = await Promise.all([
         fetchJson(
-          `http://${window.location.hostname}:8072/api/audio/status`
+          '/radio/api/audio/status'
         ),
         fetchJson('/api/analog/status'),
         fetchJson('/api/analog/controls'),

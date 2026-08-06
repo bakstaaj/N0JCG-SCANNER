@@ -2,6 +2,9 @@
 
 Raspberry Pi 5 P25, VHF, and UHF scanner for dedicated RTL-SDR receivers.
 
+Current release: **v3.0.0**, introducing the split ROC/radio architecture and
+continuous multi-browser PCM playback.
+
 ## User manual
 
 See the [PI Scanner User Manual](docs/USER_MANUAL.md) for hardware setup,
@@ -22,10 +25,17 @@ This project is intended to provide a simple web-controlled scanner that:
 
 ## Target runtime
 
-- Raspberry Pi 5
-- Raspberry Pi OS / Debian Trixie full
-- One or two NooElec NESDR Nano 2+ RTL-SDR receivers
-- Browser-based UI served from the Pi
+The production runtime is split across two hosts:
+
+- ROC application host `192.168.68.114`: the existing N0JCG ROC dashboard on
+  port `8095`, with PI Scanner mounted at `/pi-scanner/`.
+- Radio Pi `192.168.68.137`: RTL-SDR ownership, OP25, VHF/UHF workers, radio
+  API on port `8070`, and audio fanout on port `8072`.
+- Raspberry Pi OS / Debian Trixie full on the radio node.
+- Dedicated RTL-SDR receivers selected by EEPROM serial, never USB index.
+
+Operators open `http://192.168.68.114:8095/pi-scanner/`. The ROC forwards API
+and audio traffic to the radio Pi; browsers do not connect directly to `.137`.
 
 ## Development environment
 
@@ -65,13 +75,20 @@ Out of scope:
 ## Repository layout
 
 ```text
-config/                 Example system configuration templates
+config/                 Radio configuration templates
+deploy/                 Explicit ROC-web and radio-Pi deployment manifests
 docs/                   Architecture, milestones, guardrails, notes
-src/pi_p25_scanner/     Python backend/service code
-web/                    Minimal browser UI
-tools/                  MSYS2/Pi validation and setup scripts
-runtime/                Ignored local runtime state created on the Pi
+src/pi_p25_scanner/     Radio API, decoder control, and SDR worker code
+web/                    ROC-hosted desktop and mobile browser UI
+tools/                  Role-specific deployment and validation scripts
+runtime/                Ignored local runtime state and backups
 ```
+
+Use `tools/deploy_application_to_roc.sh` for changes under `web/`; it installs
+them into the existing N0JCG-ROC `web/pi-scanner/` mount. Use
+`tools/deploy_radio_to_pi.sh` for changes under `config/`, `src/`, `systemd/`,
+or radio tooling. Both commands default to a non-mutating dry run.
+See [Split-host deployment](docs/SPLIT_HOST_DEPLOYMENT.md).
 
 ## Development validation
 

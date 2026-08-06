@@ -17,6 +17,8 @@ from typing import Deque
 RATE = 8000
 FRAME_BYTES = 320
 FRAME_SECONDS = FRAME_BYTES / (RATE * 2)
+CLIENT_JITTER_GRACE_SECONDS = 0.08
+SOURCE_RECENT_SECONDS = 0.12
 SILENCE = bytes(FRAME_BYTES)
 
 
@@ -36,6 +38,8 @@ class Source:
     forwarded: int = 0
     rejected: int = 0
     last_packet: float | None = None
+    max_packet_gap_seconds: float = 0.0
+    packet_gaps_over_40ms: int = 0
 
 
 @dataclass
@@ -57,6 +61,8 @@ class State:
     switches: int = 0
     silence_frames: int = 0
     clients: int = 0
+    late_frames_recovered: int = 0
+    active_gap_silence_frames: int = 0
     started: float = field(default_factory=time.time)
 
     def __post_init__(self) -> None:
@@ -80,6 +86,11 @@ class State:
             return False
         with self.condition:
             source = self.sources[port]
+            if source.last_packet is not None:
+                gap = max(0.0, now - source.last_packet)
+                source.max_packet_gap_seconds = max(source.max_packet_gap_seconds, gap)
+                if gap > 0.04:
+                    source.packet_gaps_over_40ms += 1
             source.packets += 1
             source.last_packet = now
             self._release_stale(now)
@@ -121,6 +132,16 @@ class State:
     def unregister_client(self) -> None:
         with self.lock:
             self.clients = max(0, self.clients - 1)
+
+    def source_is_recent(self, now: float, max_age: float = SOURCE_RECENT_SECONDS) -> bool:
+        with self.lock:
+            self._release_stale(time.time())
+            source = self.sources.get(self.active_port)
+            return bool(
+                source is not None
+                and source.last_packet is not None
+                and now - source.last_packet <= max_age
+            )
 
     def read_after(
         self,
@@ -176,6 +197,8 @@ class State:
                 "switches": self.switches,
                 "silence_frames": self.silence_frames,
                 "clients": self.clients,
+                "late_frames_recovered": self.late_frames_recovered,
+                "active_gap_silence_frames": self.active_gap_silence_frames,
                 "uptime_seconds": round(now - self.started, 3),
                 "sources": {
                     source.name: {
@@ -185,6 +208,8 @@ class State:
                         "rejected": source.rejected,
                         "selected": self.active_port == source.port,
                         "last_packet_age_seconds": None if source.last_packet is None else round(now - source.last_packet, 3),
+                        "max_packet_gap_seconds": round(source.max_packet_gap_seconds, 4),
+                        "packet_gaps_over_40ms": source.packet_gaps_over_40ms,
                     }
                     for source in self.sources.values()
                 },
@@ -240,14 +265,27 @@ class Handler(BaseHTTPRequestHandler):
         try:
             while True:
                 next_send += FRAME_SECONDS
+                grace = (
+                    CLIENT_JITTER_GRACE_SECONDS
+                    if self.state.source_is_recent(time.time())
+                    else 0.0
+                )
                 frame, sequence = self.state.read_after(
                     sequence,
-                    wait_seconds=max(0.0, next_send - time.monotonic()),
+                    wait_seconds=max(
+                        0.0,
+                        next_send + grace - time.monotonic(),
+                    ),
                 )
                 if frame is None:
                     frame = SILENCE
                     with self.state.lock:
                         self.state.silence_frames += 1
+                        if grace:
+                            self.state.active_gap_silence_frames += 1
+                elif time.monotonic() > next_send + 0.002:
+                    with self.state.lock:
+                        self.state.late_frames_recovered += 1
                 delay = next_send - time.monotonic()
                 if delay > 0:
                     time.sleep(delay)

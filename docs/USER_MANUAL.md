@@ -1,6 +1,6 @@
 # N0JCG SCANNER User Manual
 
-This manual covers the N0JCG SCANNER v2.0.0 production layout: P25 trunked radio,
+This manual covers the N0JCG SCANNER v3.0.0 production layout: P25 trunked radio,
 FFT-directed VHF and UHF analog scanning, unified browser audio, radio profiles,
 and four dedicated RTL-SDR receiver assignments. It is written for both initial
 installation and normal daily operation.
@@ -305,8 +305,13 @@ sudo ./tools/install_audio_runtime_units.sh
 
 ## 9. Start PI Scanner and open the web application
 
-Enable the UI and audio infrastructure at boot, while keeping the receiver
-workers out of the boot target:
+The production installation uses two hosts. The radio Pi at
+`192.168.68.137` runs the backend, audio infrastructure, OP25, and analog
+workers. The existing N0JCG ROC at `192.168.68.114:8095` serves the scanner at
+`/pi-scanner/` and forwards its API and audio requests to the radio Pi.
+
+On the radio Pi, enable the radio API and audio infrastructure at boot while
+keeping the receiver workers out of the boot target:
 
 ```bash
 sudo systemctl enable --now pi-p25-scanner.service
@@ -316,28 +321,22 @@ sudo systemctl disable --now pi-scanner-vhf-worker.service
 sudo systemctl disable --now pi-scanner-uhf-worker.service
 ```
 
-Find the Pi address:
+On the ROC, the existing `n0jcg-roc.service` owns the dashboard and scanner
+mount. PI-SCANNER does not install a second ROC web service.
 
-```bash
-hostname -I
-```
-
-Open either of these from a device on the same network:
+Open this address from a device on the same network:
 
 ```text
-http://PI-SDR.local:8070
-http://<pi-ip-address>:8070
+http://192.168.68.114:8095/pi-scanner/
 ```
 
-The current installation is normally available at
-`http://192.168.68.137:8070`, but DHCP may change that address. A DHCP
-reservation is recommended.
+The ROC and radio Pi should both have DHCP reservations. Direct access to
+`http://192.168.68.137:8070` is reserved for radio-node maintenance.
 
 For the separate compact phone dashboard, open:
 
 ```text
-http://PI-SDR.local:8070/mobile.html
-http://<pi-ip-address>:8070/mobile.html
+http://192.168.68.114:8095/pi-scanner/mobile.html
 ```
 
 Supported phone browsers are redirected to this page automatically when they
@@ -355,6 +354,10 @@ does not start a receiver. Press **Start Scanning + Audio** once to start all
 three scanners together and connect that browser tab to the audio stream.
 Browsers require a real tap or click before audio can begin.
 
+When another browser has already started the scanners, the new browser shows
+an enabled **Listen** button. Pressing **Listen** attaches only that browser to
+the PCM fanout and does not restart P25, VHF, or UHF.
+
 If any one of the three scanners cannot start, the coordinated start is treated
 as failed and the application returns the other scanners to the stopped state.
 
@@ -365,13 +368,16 @@ as failed and the application returns the other scanners to the stopped state.
 - **Scanning:** the system is ready and looking for activity.
 - **P25/VHF/UHF ON AIR:** the audio arbitrator is currently forwarding that
   source.
-- **Online:** the browser can reach the backend.
-- **Offline:** the backend is unreachable; check the Pi network and service.
+- **Online:** the browser can reach the ROC and the proxied radio API.
+- **Offline:** check the ROC application service, then its connection to the
+  radio Pi.
 
 ### Main controls
 
 - **Start Scanning + Audio:** starts P25, VHF, and UHF scanning together and
   connects low-latency browser audio.
+- **Listen:** appears when the scanners are already running but this browser is
+  not attached; it connects this tab without restarting radio services.
 - **Mute / Unmute:** mutes only this browser tab. It does not stop the scanners
   or mute another browser.
 - **Volume:** controls only this browser tab. Moving it while muted also
@@ -794,8 +800,11 @@ Use this checklist after initial setup, a power cycle, or a major update:
 - [ ] Immediately after boot, the backend, audio bridge, and audio pool are
       active, while P25, VHF, and UHF scanning are stopped.
 - [ ] VHF and UHF worker services are not enabled for boot.
-- [ ] Port 8070 loads the dashboard and shows **Online**.
-- [ ] Port 8072 reports `"ok": true`.
+- [ ] ROC `192.168.68.114:8095/pi-scanner/` loads the scanner and shows **Online**.
+- [ ] ROC root `192.168.68.114:8095/` still loads the main dashboard.
+- [ ] ROC `/pi-scanner/api/status` matches the radio Pi scanner state.
+- [ ] Radio Pi `192.168.68.137:8072/api/audio/status` reports `"ok": true`.
+- [ ] `./tools/validate_split_runtime.sh` reports `FINAL=PASS`.
 - [ ] **Start Scanning + Audio** starts P25, VHF, and UHF and connects browser
       audio.
 - [ ] While scanning, `/api/status` reports P25 `running`, VHF `active`, and UHF

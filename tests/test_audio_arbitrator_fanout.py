@@ -9,7 +9,13 @@ from http.server import ThreadingHTTPServer
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from pi_scanner_audio_arbitrator import FRAME_BYTES, Handler, Source, State  # noqa: E402
+from pi_scanner_audio_arbitrator import (  # noqa: E402
+    CLIENT_JITTER_GRACE_SECONDS,
+    FRAME_BYTES,
+    Handler,
+    Source,
+    State,
+)
 
 
 def make_state(max_frames: int = 20) -> State:
@@ -101,3 +107,24 @@ def test_installed_arbitrator_uses_short_start_buffer() -> None:
     ).read_text(encoding="utf-8")
 
     assert "--warmup-frames 2 --prebuffer-frames 3" in service
+
+
+def test_active_source_gets_bounded_late_frame_recovery_window() -> None:
+    state = make_state()
+    now = time.time()
+    state.process(23456, bytes([3]) * FRAME_BYTES, now)
+
+    assert state.source_is_recent(now + 0.05)
+    assert not state.source_is_recent(now + 0.20)
+    assert CLIENT_JITTER_GRACE_SECONDS == 0.08
+
+
+def test_source_status_tracks_packet_jitter() -> None:
+    state = make_state()
+    now = time.time()
+    state.process(23459, bytes([1]) * FRAME_BYTES, now)
+    state.process(23459, bytes([2]) * FRAME_BYTES, now + 0.06)
+
+    source = state.snapshot()["sources"]["UHF"]
+    assert source["packet_gaps_over_40ms"] == 1
+    assert source["max_packet_gap_seconds"] == 0.06
