@@ -5,6 +5,8 @@ notes are available in [`docs/releases/`](docs/releases/).
 
 ## Unreleased
 
+## 4.0.0 - 2026-08-07
+
 - Added reusable phone-home license activation using a stable installation S/N,
   email binding, signed offline leases, visible desktop/mobile registration
   state, and a backend-enforced five-minute scan limit for unregistered
@@ -16,6 +18,15 @@ notes are available in [`docs/releases/`](docs/releases/).
   architecture, release, and changelog documentation surfaces.
 - Added contributor/security guidance and GitHub CI/issue/PR templates.
 - Consolidated historical release notes under `docs/releases/`.
+
+- Promoted the N0JCG branding, licensing, deployment, and operator UI work to
+  the v4.0.0 major release.
+- Added the canonical radio runtime root `/home/pi/n0jcg-scanner` for P25,
+  VHF, and UHF services, with migration support from legacy paths.
+- Renamed the ROC application route to `/n0jcg-scanner/` and aligned the
+  split-role deployment tooling and documentation with that route.
+- Added dark-theme contrast fixes for navigation controls, start scanning,
+  and last-heard talkgroup status text.
 
 ## 3.0.0 - 2026-08-06
 
