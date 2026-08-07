@@ -46,7 +46,7 @@ if [[ "$role" == "roc" ]]; then
 else
   target_user="${RADIO_USER:-${PI_USER:-pi}}"
   target_host="${RADIO_HOST:-${PI_HOST:-192.168.68.137}}"
-  target_repo="${RADIO_REPO:-${PI_REPO:-/home/pi/PI-P25-SCANNER}}"
+  target_repo="${RADIO_REPO:-${PI_REPO:-/home/pi/PI-SCANNER}}"
   target_password="${RADIO_PASSWORD:-${PI_PASSWORD:-}}"
   manifest="deploy/radio-pi-files.txt"
 fi
