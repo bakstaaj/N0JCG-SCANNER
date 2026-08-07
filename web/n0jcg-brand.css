@@ -722,6 +722,14 @@ button:disabled {
   color: #08101d;
 }
 
+/* Last-heard and unmapped-talkgroup messages must remain readable on cards. */
+#lastEvent,
+.last-event,
+#activeTalkgroupLabel,
+#activeTgid.active-tgid-inline {
+  color: #e8eef6 !important;
+}
+
 .drawer {
   background: var(--n0-color-white);
   color: var(--n0-color-text);
