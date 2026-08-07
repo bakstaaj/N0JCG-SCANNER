@@ -46,10 +46,16 @@ def test_terminate_process_group_escalates_to_sigkill() -> None:
 
     assert "before-term" in output
     assert "after-kill" in output
-    assert killpg.call_args_list == [
-        call(12345, signal.SIGTERM),
-    ]
-    proc.kill.assert_called_once_with()
+    sigkill = getattr(signal, "SIGKILL", None)
+    if sigkill is None:
+        killpg.assert_called_once_with(12345, signal.SIGTERM)
+        proc.kill.assert_called_once_with()
+    else:
+        assert killpg.call_args_list == [
+            call(12345, signal.SIGTERM),
+            call(12345, sigkill),
+        ]
+        proc.kill.assert_not_called()
 
 
 def test_terminate_process_group_handles_second_timeout() -> None:
@@ -75,8 +81,16 @@ def test_terminate_process_group_handles_second_timeout() -> None:
 
     assert "term-output" in output
     assert "kill-output" in output
-    assert killpg.call_count == 1
-    proc.kill.assert_called_once_with()
+    sigkill = getattr(signal, "SIGKILL", None)
+    if sigkill is None:
+        killpg.assert_called_once_with(12345, signal.SIGTERM)
+        proc.kill.assert_called_once_with()
+    else:
+        assert killpg.call_args_list == [
+            call(12345, signal.SIGTERM),
+            call(12345, sigkill),
+        ]
+        proc.kill.assert_not_called()
 
 
 def test_terminate_process_group_falls_back_to_direct_signal() -> None:

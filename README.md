@@ -10,7 +10,7 @@ dedicated RTL-SDR receivers, a radio-services host, a browser application host,
 and a single audio arbitrator that safely fans audio out to multiple clients.
 
 - Product page: [n0jcg.com/products/scanner](https://www.n0jcg.com/products/scanner/)
-- Report a problem: [GitHub Issues](https://github.com/bakstaaj/PI-SCANNER/issues)
+- Report a problem: [GitHub Issues](https://github.com/bakstaaj/N0JCG-SCANNER/issues)
 - Current release notes: [v3.0.0](docs/releases/RELEASE_NOTES_v3.0.0.md)
 
 ## Capabilities
@@ -46,8 +46,8 @@ The supported Windows development shell is MSYS2 UCRT64. Clone the repository,
 create a virtual environment, and install the development dependencies:
 
 ```bash
-git clone https://github.com/bakstaaj/PI-SCANNER.git
-cd PI-SCANNER
+git clone https://github.com/bakstaaj/N0JCG-SCANNER.git
+cd N0JCG-SCANNER
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r requirements-dev.txt

@@ -81,12 +81,12 @@ ssh_options=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
 temp_dir="$(mktemp -d)"
 [[ "$temp_dir" == /tmp/* ]] || fail "unexpected temporary directory: $temp_dir"
 trap 'rm -rf -- "$temp_dir"' EXIT
-bundle="$temp_dir/pi-scanner-$role.tar.gz"
-checksums="$temp_dir/pi-scanner-$role.sha256"
+bundle="$temp_dir/N0JCG-SCANNER-$role.tar.gz"
+checksums="$temp_dir/N0JCG-SCANNER-$role.sha256"
 stage_dir="$temp_dir/stage"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-remote_bundle="/tmp/pi-scanner-$role-$stamp.tar.gz"
-remote_checksums="/tmp/pi-scanner-$role-$stamp.sha256"
+remote_bundle="/tmp/N0JCG-SCANNER-$role-$stamp.tar.gz"
+remote_checksums="/tmp/N0JCG-SCANNER-$role-$stamp.sha256"
 backup="$target_repo/runtime/patch_backups/${role}_deployment_$stamp"
 
 mkdir -p "$stage_dir"

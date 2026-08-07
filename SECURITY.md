@@ -15,7 +15,7 @@ available, open a minimal issue requesting a private contact channel without
 including sensitive details.
 
 For ordinary defects that contain no sensitive information, use
-[GitHub Issues](https://github.com/bakstaaj/PI-SCANNER/issues).
+[GitHub Issues](https://github.com/bakstaaj/N0JCG-SCANNER/issues).
 
 ## Security boundaries
 
