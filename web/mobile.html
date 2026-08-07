@@ -3,18 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#101820">
-  <title>N0JCG SCANNER Mobile</title>
+  <meta name="theme-color" content="#0A1F44">
+  <title>N0JCG Scanner Mobile</title>
+  <link rel="icon" type="image/png" href="assets/brand/N0JCG_Icon_Approved.png">
   <link rel="stylesheet" href="mobile.css?v=1.0.0">
+  <link rel="stylesheet" href="n0jcg-brand.css?v=3.1.0">
 </head>
 <body>
   <main class="phone-shell">
     <header class="phone-header">
-      <div>
-        <span class="eyebrow">N0JCG SCANNER</span>
-        <h1>Mobile Control</h1>
+      <div class="phone-brand" aria-label="N0JCG Scanner mobile control">
+        <img
+          class="brand-logo"
+          src="assets/brand/N0JCG_Header_Dark_Approved.png"
+          alt="N0JCG Open Radio Platform"
+          width="420"
+          height="80"
+        >
+        <div class="phone-product-line">
+          <span class="product-name">Scanner</span>
+          <h1>Mobile control</h1>
+        </div>
       </div>
-      <a class="full-ui-link" href="./?desktop=1">Full UI</a>
+      <a class="full-ui-link" href="./?desktop=1">Full dashboard</a>
     </header>
 
     <section class="status-row" aria-label="scanner status">
@@ -24,7 +35,7 @@
 
     <section class="now-card" aria-live="polite">
       <div class="now-topline">
-        <span>Now / Last Heard</span>
+        <span>Now or last heard</span>
         <strong id="activeSource">Idle</strong>
       </div>
       <h2 id="activeLabel">Waiting for activity</h2>
@@ -32,7 +43,7 @@
     </section>
 
     <section class="primary-controls" aria-label="scanner controls">
-      <button id="startBtn" class="control-button start" type="button">Start + Listen</button>
+      <button id="startBtn" class="control-button start" type="button">Start + listen</button>
       <button id="stopBtn" class="control-button stop" type="button" disabled>Stop</button>
     </section>
 
@@ -45,23 +56,23 @@
     </section>
 
     <section class="counter-grid" aria-label="call counters">
-      <article><span>Voice Calls</span><strong id="voiceCalls">0</strong></article>
-      <article><span>VHF Locks</span><strong id="vhfLocks">0</strong></article>
-      <article><span>UHF Locks</span><strong id="uhfLocks">0</strong></article>
+      <article><span>Voice calls</span><strong id="voiceCalls">0</strong></article>
+      <article><span>VHF locks</span><strong id="vhfLocks">0</strong></article>
+      <article><span>UHF locks</span><strong id="uhfLocks">0</strong></article>
     </section>
 
     <section class="analog-card" aria-label="analog channel controls">
       <div class="section-heading">
         <div>
-          <span class="eyebrow">Analog Channel</span>
+          <span class="eyebrow">Analog channel</span>
           <strong id="analogControlTarget">No active lock</strong>
         </div>
       </div>
       <div class="analog-actions">
-        <button id="skipBtn" type="button" disabled>Skip 10 Min</button>
+        <button id="skipBtn" type="button" disabled>Skip 10 min</button>
         <button id="blockBtn" type="button" disabled>Block</button>
-        <button id="clearLockBtn" type="button" disabled>Clear Lock</button>
-        <button id="clearBlocksBtn" type="button" disabled>Clear Blocks</button>
+        <button id="clearLockBtn" type="button" disabled>Clear lock</button>
+        <button id="clearBlocksBtn" type="button" disabled>Clear blocks</button>
       </div>
     </section>
 

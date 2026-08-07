@@ -1,11 +1,11 @@
-# PI Scanner v3.0.0 — split-host runtime
+# N0JCG Scanner v3.0.0 — split-host runtime
 
 This major architecture release separates the browser application from the
 radio runtime.
 
-- The existing N0JCG ROC at `192.168.68.114:8095` serves PI Scanner at
+- The existing N0JCG ROC at `<ROC_HOST>:8095` serves N0JCG Scanner at
   `/pi-scanner/` and retains the main ROC dashboard at `/`.
-- Radio Pi `192.168.68.137` retains all RTL-SDR, OP25, VHF/UHF, and audio
+- Radio host `<RADIO_HOST>` retains all RTL-SDR, OP25, VHF/UHF, and audio
   functions.
 - Browser API and PCM traffic use the existing `/pi-scanner/api/*` and
   `/pi-scanner/audio-api/*` proxy routes.
@@ -25,5 +25,5 @@ radio runtime.
 - The ROC header includes a relative back link to the dashboard, with no
   browser-visible host address hardcoded into navigation or API requests.
 
-See `RELEASE_NOTES_v3.0.0.md` in the repository root for deployment,
+See `docs/releases/RELEASE_NOTES_v3.0.0.md` for deployment,
 validation, and compatibility details.

@@ -1,18 +1,32 @@
-# PI Scanner split-host architecture
+# N0JCG Scanner architecture guide
+
+| Metadata | Value |
+|---|---|
+| Product | N0JCG Scanner |
+| Slug | scanner-architecture-guide |
+| Type | Architecture guide |
+| Version | 3.0.0 |
+| Status | Preview |
+| Last updated | 2026-08-07 |
+| Audience | Developers, integrators, and administrators |
+| Prerequisites | Familiarity with HTTP proxies, SDR receivers, and systemd |
+| Estimated time | 15 minutes |
+| Related | [Administrator Guide](ADMINISTRATOR_GUIDE.md), [API Reference](API_REFERENCE.md) |
+| Owner | N0JCG |
 
 ## Production topology
 
 ```text
 Desktop / phone browsers
           |
-          | http://192.168.68.114:8095/pi-scanner/
+          | http://<ROC_HOST>:8095/pi-scanner/
           v
-Existing N0JCG ROC application — 192.168.68.114:8095
+Existing N0JCG ROC application — <ROC_HOST>:8095
   /pi-scanner/                 -> static PI-SCANNER web assets
   /pi-scanner/api/*            -> radio Pi :8070/api/*
   /pi-scanner/audio-api/*      -> radio Pi :8072/*
           v
-Radio Pi — 192.168.68.137
+Radio Pi — <RADIO_HOST>
   backend.py / OP25 / radio API
   P25 audio pool and audio arbitrator
   VHF FFT scanner and UHF FFT scanner

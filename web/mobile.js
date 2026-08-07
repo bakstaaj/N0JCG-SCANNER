@@ -322,7 +322,7 @@ function render() {
   const running = scannersRunning();
   const audioPlaying = state.audioAttached;
   const source = String(state.audio?.active_source || '').toUpperCase();
-  setBadge('onlineBadge', state.backend ? 'Online' : 'Offline', state.backend ? 'online' : 'offline');
+  setBadge('onlineBadge', state.backend ? 'Connected' : 'Offline', state.backend ? 'online' : 'offline');
   if (source) setBadge('scannerBadge', `${source} On Air`, 'on-air');
   else if (running) setBadge('scannerBadge', 'Scanning', 'scanning');
   else setBadge('scannerBadge', 'Stopped', 'idle');

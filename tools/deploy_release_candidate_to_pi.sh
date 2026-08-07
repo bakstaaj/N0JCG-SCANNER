@@ -50,7 +50,7 @@ echo "=== Local validation ==="
 
 PYTHONPATH=src python3 -m compileall -q src/pi_p25_scanner
 PYTHONPATH=src python3 -m pytest -q
-git diff --check
+git --no-pager diff --check
 
 echo "PASS: local validation"
 

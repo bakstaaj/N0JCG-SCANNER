@@ -58,7 +58,7 @@ else
   warn "node unavailable locally; skipped app.js syntax check"
 fi
 
-git diff --check
+git --no-pager diff --check
 pass "local git diff --check passed"
 
 if [[ -n "$PI_PASSWORD" ]]; then

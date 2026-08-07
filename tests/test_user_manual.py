@@ -21,7 +21,7 @@ def test_user_manual_links_and_tool_references_exist() -> None:
         assert (ROOT / target).exists(), target
 
 
-def test_manual_and_role_template_use_canonical_serial_map() -> None:
+def test_manual_uses_public_placeholders_and_role_template_keeps_defaults() -> None:
     expected = {
         "p25_control": "00000251",
         "p25_voice": "00000252",
@@ -35,9 +35,16 @@ def test_manual_and_role_template_use_canonical_serial_map() -> None:
         )
     )
 
+    placeholders = {
+        "p25_control": "<P25_CONTROL_SERIAL>",
+        "p25_voice": "<P25_VOICE_SERIAL>",
+        "analog_2m": "<VHF_SERIAL>",
+        "analog_70cm": "<UHF_SERIAL>",
+    }
     for role, serial in expected.items():
         assert template["roles"][role]["rtl_serial"] == serial
-        assert serial in manual
+        assert serial not in manual
+        assert placeholders[role] in manual
     assert template["roles"]["analog_2m"]["enabled"] is True
     assert template["roles"]["analog_70cm"]["enabled"] is True
     for unrelated in (
@@ -51,3 +58,29 @@ def test_manual_and_role_template_use_canonical_serial_map() -> None:
         "00001090",
     ):
         assert unrelated not in manual
+
+
+def test_public_front_door_docs_do_not_publish_private_station_data() -> None:
+    public_docs = (
+        ROOT / "README.md",
+        ROOT / ".env.example",
+        ROOT / "docs" / "README.md",
+        ROOT / "docs" / "USER_MANUAL.md",
+        ROOT / "docs" / "ADMINISTRATOR_GUIDE.md",
+        ROOT / "docs" / "DEVELOPER_GUIDE.md",
+        ROOT / "docs" / "API_REFERENCE.md",
+        ROOT / "docs" / "HARDWARE_GUIDE.md",
+        ROOT / "docs" / "ARCHITECTURE.md",
+        ROOT / "docs" / "SPLIT_HOST_DEPLOYMENT.md",
+    )
+    forbidden = (
+        "192.168.68.",
+        "00000144",
+        "00000440",
+        "00000251",
+        "00000252",
+    )
+    for path in public_docs:
+        text = path.read_text(encoding="utf-8")
+        for value in forbidden:
+            assert value not in text, f"{path.relative_to(ROOT)} exposes {value}"

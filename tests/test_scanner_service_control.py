@@ -258,7 +258,7 @@ def test_dashboard_has_no_scanner_autostart_and_describes_coordinated_controls()
     assert "window.setTimeout(autoStart" not in app
     assert "Starting P25, VHF, and UHF scanners..." in app
     assert "Stopping P25, VHF, and UHF scanners..." in app
-    assert "Start Scanning + Audio" in html
+    assert "Start scanning + audio" in html
     assert "scanning are all stopped" in manual
     assert "starts P25, VHF, and UHF scanning together" in manual
     assert "/api/scanner/start" not in launcher
