@@ -19,12 +19,12 @@
 ```text
 Desktop / phone browsers
           |
-          | http://<ROC_HOST>:8095/pi-scanner/
+          | http://<ROC_HOST>:8095/n0jcg-scanner/
           v
 Existing N0JCG ROC application — <ROC_HOST>:8095
-  /pi-scanner/                 -> static PI-SCANNER web assets
-  /pi-scanner/api/*            -> radio Pi :8070/api/*
-  /pi-scanner/audio-api/*      -> radio Pi :8072/*
+  /n0jcg-scanner/              -> static PI-SCANNER web assets
+  /n0jcg-scanner/api/*         -> radio Pi :8070/api/*
+  /n0jcg-scanner/audio-api/*   -> radio Pi :8072/*
           v
 Radio Pi — <RADIO_HOST>
   backend.py / OP25 / radio API
@@ -66,22 +66,22 @@ radio-control behavior.
 
 ## Browser contract
 
-The frontend detects whether it is mounted below `/pi-scanner/`:
+The frontend detects whether it is mounted below `/n0jcg-scanner/`:
 
 - local/direct maintenance `/api/*` remains `/api/*`;
-- ROC-mounted `/api/*` becomes `/pi-scanner/api/*`;
+- ROC-mounted `/api/*` becomes `/n0jcg-scanner/api/*`;
 - local/direct `/radio/*` remains `/radio/*`;
-- ROC-mounted `/radio/*` becomes `/pi-scanner/audio-api/*`.
+- ROC-mounted `/radio/*` becomes `/n0jcg-scanner/audio-api/*`.
 
 Stylesheets, scripts, phone navigation, and the desktop override use relative
-paths so both `/` and `/pi-scanner/` are supported by the same source files.
+paths so both `/` and `/n0jcg-scanner/` are supported by the same source files.
 
 ## Repository/deployment boundary
 
 | Repository area | Owner | Deployment destination |
 |---|---|---|
 | `web/` | ROC `.114` | `N0JCG-ROC/web/pi-scanner/` |
-| `config/`, `src/`, `systemd/`, `tools/` | radio Pi `.137` | `/home/pi/PI-P25-SCANNER/` |
+| `config/`, `src/`, `systemd/`, `tools/` | radio Pi `.137` | `/home/pi/n0jcg-scanner/` |
 | `docs/`, `tests/`, `deploy/` | development/GitHub | not copied to runtime |
 
 An API contract change must remain compatible with the existing ROC proxy.

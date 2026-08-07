@@ -1,2 +1,3 @@
-# Application-layer files deployed into N0JCG-ROC/web/pi-scanner on .114.
+# Application-layer files deployed into N0JCG-ROC/web/pi-scanner and served at
+# /n0jcg-scanner/ on .114.
 web

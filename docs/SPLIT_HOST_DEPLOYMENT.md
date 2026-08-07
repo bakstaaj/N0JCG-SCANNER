@@ -10,7 +10,7 @@
 Open PI Scanner at:
 
 ```text
-http://<ROC_HOST>:8095/pi-scanner/
+http://<ROC_HOST>:8095/n0jcg-scanner/
 ```
 
 The ROC root dashboard remains at `http://<ROC_HOST>:8095/`.
@@ -19,9 +19,9 @@ The ROC root dashboard remains at `http://<ROC_HOST>:8095/`.
 
 The `N0JCG-ROC` server already provides the required boundary:
 
-- `/pi-scanner/` serves `N0JCG-ROC/web/pi-scanner/`;
-- `/pi-scanner/api/*` proxies to `<RADIO_HOST>:8070`;
-- `/pi-scanner/audio-api/*` proxies to `<RADIO_HOST>:8072`.
+- `/n0jcg-scanner/` serves `N0JCG-ROC/web/pi-scanner/`;
+- `/n0jcg-scanner/api/*` proxies to `<RADIO_HOST>:8070`;
+- `/n0jcg-scanner/audio-api/*` proxies to `<RADIO_HOST>:8072`.
 
 PI-SCANNER does not install or operate a second web service on the ROC.
 
@@ -35,7 +35,7 @@ ROC_PASSWORD=...
 
 RADIO_USER=pi
 RADIO_HOST=radio.example.internal
-RADIO_REPO=/home/pi/PI-P25-SCANNER
+RADIO_REPO=/home/pi/n0jcg-scanner
 RADIO_PASSWORD=...
 ```
 
