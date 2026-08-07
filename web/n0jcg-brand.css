@@ -707,6 +707,21 @@ button:disabled {
   color: #ffffff;
 }
 
+/* Keep the primary scanner action readable in its hover state. */
+.start:not(:disabled),
+.control-button.start:not(:disabled) {
+  border-color: #42cf8a;
+  background: #42cf8a;
+  color: #08101d;
+}
+
+.start:not(:disabled):hover,
+.control-button.start:not(:disabled):hover {
+  border-color: #70e3a8;
+  background: #70e3a8;
+  color: #08101d;
+}
+
 .drawer {
   background: var(--n0-color-white);
   color: var(--n0-color-text);
