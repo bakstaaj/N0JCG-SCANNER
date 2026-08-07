@@ -1,0 +1,56 @@
+name: Bug report
+description: Report reproducible N0JCG Scanner behavior
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Do not include credentials, private addresses, receiver serials,
+        station identifiers, protected traffic, or received-audio recordings.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v3.0.0 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Affected role
+      options:
+        - Browser application
+        - Application host / ROC proxy
+        - Radio API / audio fanout
+        - P25 receiver
+        - VHF receiver
+        - UHF receiver
+        - Deployment or documentation
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: What happened, and what did the UI/service report?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      placeholder: Numbered, minimal steps
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence and validation
+      description: Include relevant status/log excerpts after removing private data.

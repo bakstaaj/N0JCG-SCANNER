@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate the PI-P25-SCANNER repository from the repo root.
+# Validate the N0JCG Scanner repository from the repo root.
 
 set -Eeuo pipefail
 
@@ -12,12 +12,12 @@ pass() { printf 'PASS: %s\n' "$*"; PASS_COUNT=$((PASS_COUNT + 1)); return 0; }
 warn() { printf 'WARN: %s\n' "$*"; WARN_COUNT=$((WARN_COUNT + 1)); return 0; }
 fail() { printf 'FAIL: %s\n' "$*"; FAIL_COUNT=$((FAIL_COUNT + 1)); return 0; }
 
-printf '=== PI-P25-SCANNER repo validation ===\n'
+printf '=== N0JCG Scanner repository validation ===\n'
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "tools" && -d "web" && -d "src/pi_p25_scanner" ]]; then
   pass "running from repository root"
 else
-  fail "run this script from the PI-P25-SCANNER repository root"
+  fail "run this script from the N0JCG Scanner repository root"
   printf 'FINAL: FAIL\n'
   exit 1
 fi
@@ -38,7 +38,18 @@ fi
 
 for required in \
   README.md \
+  CHANGELOG.md \
+  CONTRIBUTING.md \
+  SECURITY.md \
+  requirements.txt \
+  requirements-dev.txt \
   DEV_GUARDRAILS.md \
+  docs/README.md \
+  docs/USER_MANUAL.md \
+  docs/ADMINISTRATOR_GUIDE.md \
+  docs/DEVELOPER_GUIDE.md \
+  docs/API_REFERENCE.md \
+  docs/HARDWARE_GUIDE.md \
   docs/ARCHITECTURE.md \
   docs/MILESTONES.md \
   docs/OP25_WRAPPER.md docs/OP25_GUARDED_SOURCE_PATH.md tools/pi5_p25_op25_source_install.sh tools/pi5_p25_op25_command_candidate.sh tools/pi5_p25_backend_live_launch_probe.sh docs/OP25_BACKEND_LIVE_LAUNCH.md docs/OP25_LIVE_COMMAND_VALIDATION.md tools/pi5_p25_op25_live_command_probe.sh tools/p25_set_receiver_roles.sh tools/pi5_p25_rtl_role_probe.sh tools/pi5_p25_bringup_acceptance.sh docs/RTL_ROLE_MAPPING.md docs/PI_BRINGUP_ACCEPTANCE.md \

@@ -126,7 +126,7 @@ function setButtonsForState(status) {
   if (startBtn) {
     startBtn.textContent = running
       ? (listening ? 'Listening' : 'Listen')
-      : 'Start Scanning + Audio';
+      : 'Start scanning + audio';
     startBtn.disabled = running ? listening : !canStart;
   }
   if (stopBtn) stopBtn.disabled = !running;
@@ -1100,7 +1100,7 @@ function p25RemoveDashboardAutostartTuningRemnants() {
       setText('activeSourceStat', '-');
       return;
     }
-    originalSetBadge('connectionStatus', 'Online', 'ok');
+    originalSetBadge('connectionStatus', 'Connected', 'ok');
     if (!audioReachable) {
       originalSetBadge('stateBadge', 'Audio Error', 'bad');
       setText('activeSourceStat', 'Unavailable');

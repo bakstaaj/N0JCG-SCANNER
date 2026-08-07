@@ -11,9 +11,9 @@ def test_bottom_controls_and_always_enabled_clear() -> None:
     radio_setup_pos = index.index('id="radioSetupScreen"')
 
     assert stats_pos < controls_pos < radio_setup_pos
-    assert "Clear Lock" in index
+    assert "Clear lock" in index
     assert 'id="analogClearLockBtn"' in index
-    assert "Clear Blocks" in index
+    assert "Clear blocks" in index
     assert 'id="analogClearBlockBtn"' in index
 
     assert "clearAllAnalogBlocks" in app

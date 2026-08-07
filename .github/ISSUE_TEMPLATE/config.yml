@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Product documentation
+    url: https://www.n0jcg.com/products/scanner/
+    about: Read the current product overview and documentation.
+  - name: Private security report
+    url: https://github.com/bakstaaj/PI-SCANNER/security/advisories/new
+    about: Report vulnerabilities or sensitive security concerns privately.

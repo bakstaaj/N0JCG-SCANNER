@@ -1,4 +1,4 @@
-# PI-SCANNER v3.0.0
+# N0JCG Scanner v3.0.0
 
 This major release separates the browser application from the radio runtime
 and hardens continuous audio delivery for multiple simultaneous listeners.
@@ -30,8 +30,8 @@ and hardens continuous audio delivery for multiple simultaneous listeners.
 - ROC application host: static PI Scanner assets and reverse-proxy routes.
 - Radio Pi: P25 decoder, VHF and UHF FFT workers, RTL-SDR ownership, radio API,
   and unified PCM fanout.
-- VHF RTL-SDR serial: `00000144`.
-- UHF RTL-SDR serial: `00000440`.
+- VHF and UHF RTL-SDR receivers remain assigned by the private station serial
+  map, never by Linux device index.
 
 ## Audio validation
 

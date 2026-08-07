@@ -4,24 +4,24 @@
 
 | Role | Address | Runtime responsibility |
 |---|---|---|
-| Existing N0JCG ROC | `192.168.68.114:8095` | ROC dashboard, PI Scanner web mount, API/audio proxy |
-| Radio Pi | `192.168.68.137` | RTL radios, OP25, FFT scanners, radio API, audio fanout |
+| Existing N0JCG ROC | `<ROC_HOST>:8095` | ROC dashboard, PI Scanner web mount, API/audio proxy |
+| Radio Pi | `<RADIO_HOST>` | RTL radios, OP25, FFT scanners, radio API, audio fanout |
 
 Open PI Scanner at:
 
 ```text
-http://192.168.68.114:8095/pi-scanner/
+http://<ROC_HOST>:8095/pi-scanner/
 ```
 
-The ROC root dashboard remains at `http://192.168.68.114:8095/`.
+The ROC root dashboard remains at `http://<ROC_HOST>:8095/`.
 
 ## Existing ROC routes
 
 The `N0JCG-ROC` server already provides the required boundary:
 
 - `/pi-scanner/` serves `N0JCG-ROC/web/pi-scanner/`;
-- `/pi-scanner/api/*` proxies to `192.168.68.137:8070`;
-- `/pi-scanner/audio-api/*` proxies to `192.168.68.137:8072`.
+- `/pi-scanner/api/*` proxies to `<RADIO_HOST>:8070`;
+- `/pi-scanner/audio-api/*` proxies to `<RADIO_HOST>:8072`.
 
 PI-SCANNER does not install or operate a second web service on the ROC.
 
@@ -29,12 +29,12 @@ PI-SCANNER does not install or operate a second web service on the ROC.
 
 ```text
 ROC_USER=n0jcg
-ROC_HOST=192.168.68.114
+ROC_HOST=roc.example.internal
 ROC_REPO=/home/n0jcg/sdrdev/N0JCG-ROC
 ROC_PASSWORD=...
 
 RADIO_USER=pi
-RADIO_HOST=192.168.68.137
+RADIO_HOST=radio.example.internal
 RADIO_REPO=/home/pi/PI-P25-SCANNER
 RADIO_PASSWORD=...
 ```

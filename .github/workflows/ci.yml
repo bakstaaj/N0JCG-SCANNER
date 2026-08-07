@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Run Python tests
+        run: PYTHONPATH=src python -m pytest -q
+
+      - name: Check browser JavaScript
+        run: |
+          node --check web/app.js
+          node --check web/mobile.js
+
+      - name: Check shell syntax
+        run: find tools -maxdepth 1 -name '*.sh' -print0 | xargs -0 -n1 bash -n
+
+      - name: Check whitespace
+        run: git diff --check

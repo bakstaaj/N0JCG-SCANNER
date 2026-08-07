@@ -49,7 +49,7 @@ pass "deploy target forced to ${PI_USER}@${PI_HOST}:${PI_REPO}"
 python3 -m py_compile src/pi_p25_scanner/backend.py src/pi_p25_scanner/runtime_status.py
 pass "local python compile passed"
 
-git diff --check -- src/pi_p25_scanner/backend.py src/pi_p25_scanner/runtime_status.py
+git --no-pager diff --check -- src/pi_p25_scanner/backend.py src/pi_p25_scanner/runtime_status.py
 pass "local git diff --check passed"
 
 TARBALL="/tmp/pi_p25_${VERSION}_active_audio_only_${STAMP}.tar.gz"

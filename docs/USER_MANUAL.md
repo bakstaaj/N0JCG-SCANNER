@@ -1,6 +1,20 @@
-# N0JCG SCANNER User Manual
+# N0JCG Scanner user manual
 
-This manual covers the N0JCG SCANNER v3.0.0 production layout: P25 trunked radio,
+| Metadata | Value |
+|---|---|
+| Product | N0JCG Scanner |
+| Slug | scanner-user-guide |
+| Type | User guide |
+| Version | 3.0.0 |
+| Status | Preview |
+| Last updated | 2026-08-07 |
+| Audience | Scanner operators and installers |
+| Prerequisites | N0JCG Scanner hardware and network access |
+| Estimated time | 45 minutes for setup; 5 minutes for daily operation |
+| Related | [Product page](https://www.n0jcg.com/products/scanner/), [Hardware Guide](HARDWARE_GUIDE.md) |
+| Owner | N0JCG |
+
+This manual covers the N0JCG Scanner v3.0.0 production layout: P25 trunked radio,
 FFT-directed VHF and UHF analog scanning, unified browser audio, radio profiles,
 and four dedicated RTL-SDR receiver assignments. It is written for both initial
 installation and normal daily operation.
@@ -79,21 +93,20 @@ serial stored in each RTL-SDR EEPROM.
 
 | Role | Required serial | Operational use |
 |---|---:|---|
-| P25 control | `00000251` | Remains on the trunked-system control channel |
-| P25 voice | `00000252` | Follows P25 voice-channel grants |
-| VHF / analog 2 m | `00000144` | FFT-directed VHF NFM scanner |
-| UHF / analog 70 cm | `00000440` | FFT-directed UHF NFM scanner |
+| P25 control | `<P25_CONTROL_SERIAL>` | Remains on the trunked-system control channel |
+| P25 voice | `<P25_VOICE_SERIAL>` | Follows P25 voice-channel grants |
+| VHF / analog 2 m | `<VHF_SERIAL>` | FFT-directed VHF NFM scanner |
+| UHF / analog 70 cm | `<UHF_SERIAL>` | FFT-directed UHF NFM scanner |
 
-The two analog assignments are mandatory: VHF is `00000144` and UHF is
-`00000440`. Do not swap them. The VHF and UHF workers fail closed if their
+Keep the two analog assignments distinct and do not swap them. The VHF and UHF
+workers fail closed if their
 runtime serial or audio port is wrong.
 
-The deployed Tenderfoot P25 configuration uses a fixed-center wideband voice
-receiver. Serial `00000252` samples 2.4 MHz centered at 852.49375 MHz, allowing
-OP25 to select the observed 851.6875-853.300 MHz voice channels digitally
-without a slow RTL hardware retune for every grant. The control receiver
-remains independent at 960 ksps. Both P25 receivers use `LNA:49` on the
-validated installation.
+The P25 path supports a fixed-center wideband voice receiver. When enabled,
+OP25 selects configured voice channels digitally within the sampled bandwidth
+without a slow RTL hardware retune for every grant. Keep system frequencies,
+sample rates, demodulator types, and gain values in the ignored station runtime
+configuration.
 
 ## 5. Prepare the Raspberry Pi
 
@@ -172,7 +185,7 @@ rtl_test -t
 For example, to prepare the VHF receiver:
 
 ```bash
-sudo rtl_eeprom -d 0 -s 00000144
+sudo rtl_eeprom -d 0 -s <VHF_SERIAL>
 ```
 
 Read the warning, confirm the write, then unplug and reconnect the receiver.
@@ -267,8 +280,8 @@ curl -fsS http://127.0.0.1:8070/api/analog/status \
 
 Confirm:
 
-- `analog_2m.rtl_serial` is `00000144`.
-- `analog_70cm.rtl_serial` is `00000440`.
+- `analog_2m.rtl_serial` matches `<VHF_SERIAL>`.
+- `analog_70cm.rtl_serial` matches `<UHF_SERIAL>`.
 - Before **Start Scanning + Audio** is pressed, both workers are expected to be
   stopped.
 - After **Start Scanning + Audio** is pressed, both roles report
@@ -293,8 +306,8 @@ Main services:
 | `pi-p25-scanner.service` | Boot-enabled web UI/API on port 8070 and coordinated scanner control |
 | `pi-p25-raw-audio-bridge.service` | Boot-enabled three-source audio arbitrator and browser stream on port 8072 |
 | `pi-p25-audio-pool.service` | Boot-enabled collector for P25 voice-receiver audio |
-| `pi-scanner-vhf-worker.service` | On-demand VHF FFT scanner using serial `00000144`; started and stopped by the dashboard |
-| `pi-scanner-uhf-worker.service` | On-demand UHF FFT scanner using serial `00000440`; started and stopped by the dashboard |
+| `pi-scanner-vhf-worker.service` | On-demand VHF FFT scanner using `<VHF_SERIAL>`; started and stopped by the dashboard |
+| `pi-scanner-uhf-worker.service` | On-demand UHF FFT scanner using `<UHF_SERIAL>`; started and stopped by the dashboard |
 
 Install or refresh the analog/audio runtime units from the analog root:
 
@@ -306,8 +319,8 @@ sudo ./tools/install_audio_runtime_units.sh
 ## 9. Start PI Scanner and open the web application
 
 The production installation uses two hosts. The radio Pi at
-`192.168.68.137` runs the backend, audio infrastructure, OP25, and analog
-workers. The existing N0JCG ROC at `192.168.68.114:8095` serves the scanner at
+`<RADIO_HOST>` runs the backend, audio infrastructure, OP25, and analog
+workers. The N0JCG ROC at `<ROC_HOST>:8095` serves the scanner at
 `/pi-scanner/` and forwards its API and audio requests to the radio Pi.
 
 On the radio Pi, enable the radio API and audio infrastructure at boot while
@@ -327,16 +340,16 @@ mount. PI-SCANNER does not install a second ROC web service.
 Open this address from a device on the same network:
 
 ```text
-http://192.168.68.114:8095/pi-scanner/
+http://<ROC_HOST>:8095/pi-scanner/
 ```
 
 The ROC and radio Pi should both have DHCP reservations. Direct access to
-`http://192.168.68.137:8070` is reserved for radio-node maintenance.
+`http://<RADIO_HOST>:8070` is reserved for radio-node maintenance.
 
 For the separate compact phone dashboard, open:
 
 ```text
-http://192.168.68.114:8095/pi-scanner/mobile.html
+http://<ROC_HOST>:8095/pi-scanner/mobile.html
 ```
 
 Supported phone browsers are redirected to this page automatically when they
@@ -368,7 +381,7 @@ as failed and the application returns the other scanners to the stopped state.
 - **Scanning:** the system is ready and looking for activity.
 - **P25/VHF/UHF ON AIR:** the audio arbitrator is currently forwarding that
   source.
-- **Online:** the browser can reach the ROC and the proxied radio API.
+- **Connected:** the browser can reach the ROC and the proxied radio API.
 - **Offline:** check the ROC application service, then its connection to the
   radio Pi.
 
@@ -485,8 +498,8 @@ downloaded template includes the full standard CHIRP column set.
 
 Import behavior:
 
-- 136–174 MHz channels are assigned to VHF / `analog_2m` / serial `00000144`.
-- 400–520 MHz channels are assigned to UHF / `analog_70cm` / serial `00000440`.
+- 136–174 MHz channels are assigned to VHF / `analog_2m` / `<VHF_SERIAL>`.
+- 400–520 MHz channels are assigned to UHF / `analog_70cm` / `<UHF_SERIAL>`.
 - `FM` and `NFM` are accepted and normalized for the NFM scanner path.
 - `Skip` values `S` or `L` import the row as disabled.
 - CHIRP `Tone` by itself is transmit-only and does not enable receive gating.
@@ -664,7 +677,8 @@ service is running. Do not reinstall drivers first.
 ### The wrong receiver is scanning VHF or UHF
 
 Check both the inventory registry and analog runtime status. VHF must be
-`00000144`; UHF must be `00000440`. Reapply the canonical role map and correct
+the configured VHF serial; UHF must use its configured UHF serial. Reapply the
+station role map and correct
 `analog_receivers.json`, then use **Stop** followed by **Start Scanning +
 Audio**. Do not enable either analog worker for boot.
 
@@ -709,20 +723,20 @@ frequency.
 
 ### P25 does not lock or follow calls
 
-- Confirm P25 control serial `00000251` and voice serial `00000252` are present.
+- Confirm the configured P25 control and voice serials are present.
 - Confirm the selected system contains the correct current control channels.
 - Check **Logs / Details** for launch readiness and OP25 messages.
 - Inspect `runtime/settings/op25_validated_rx_command.env` and the generated
   files under `runtime/op25/`.
-- For the validated Tenderfoot configuration, confirm these marker values:
+- Confirm the private station command markers match its validated values:
 
   ```text
-  P25_CONTROL_GAIN=LNA:49
-  P25_VOICE_GAIN=LNA:49
-  P25_CONTROL_DEMOD_TYPE=cqpsk
-  P25_VOICE_DEMOD_TYPE=fsk4
-  P25_VOICE_SAMPLE_RATE=2400000
-  P25_VOICE_CENTER_HZ=852493750
+  P25_CONTROL_GAIN=<VALIDATED_CONTROL_GAIN>
+  P25_VOICE_GAIN=<VALIDATED_VOICE_GAIN>
+  P25_CONTROL_DEMOD_TYPE=<VALIDATED_CONTROL_DEMOD>
+  P25_VOICE_DEMOD_TYPE=<VALIDATED_VOICE_DEMOD>
+  P25_VOICE_SAMPLE_RATE=<VALIDATED_SAMPLE_RATE>
+  P25_VOICE_CENTER_HZ=<VALIDATED_CENTER_HZ>
   ```
 
 - Use `tools/p25_terminal_diagnostic.py` to capture receiver frequency error
@@ -794,16 +808,16 @@ Use this checklist after initial setup, a power cycle, or a major update:
 
 - [ ] Pi boots without undervoltage or USB power warnings.
 - [ ] Four unique PI Scanner RTL-SDR serials are visible.
-- [ ] P25 control is `00000251`; P25 voice is `00000252`.
-- [ ] VHF is `00000144`; UHF is `00000440`.
+- [ ] P25 control and P25 voice match the private station role map.
+- [ ] VHF and UHF match the private station role map.
 - [ ] Receiver inventory reports no missing, duplicate, or unassigned serials.
 - [ ] Immediately after boot, the backend, audio bridge, and audio pool are
       active, while P25, VHF, and UHF scanning are stopped.
 - [ ] VHF and UHF worker services are not enabled for boot.
-- [ ] ROC `192.168.68.114:8095/pi-scanner/` loads the scanner and shows **Online**.
-- [ ] ROC root `192.168.68.114:8095/` still loads the main dashboard.
+- [ ] ROC `<ROC_HOST>:8095/pi-scanner/` loads the scanner and shows **Connected**.
+- [ ] ROC root `<ROC_HOST>:8095/` still loads the main dashboard.
 - [ ] ROC `/pi-scanner/api/status` matches the radio Pi scanner state.
-- [ ] Radio Pi `192.168.68.137:8072/api/audio/status` reports `"ok": true`.
+- [ ] Radio host `<RADIO_HOST>:8072/api/audio/status` reports `"ok": true`.
 - [ ] `./tools/validate_split_runtime.sh` reports `FINAL=PASS`.
 - [ ] **Start Scanning + Audio** starts P25, VHF, and UHF and connects browser
       audio.

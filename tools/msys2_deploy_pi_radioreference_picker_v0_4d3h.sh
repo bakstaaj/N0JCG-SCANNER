@@ -95,7 +95,7 @@ else
   warn "node not available locally; skipped app.js syntax check"
 fi
 
-git diff --check -- src/pi_p25_scanner/radioreference_import.py src/pi_p25_scanner/backend.py web/index.html web/app.js
+git --no-pager diff --check -- src/pi_p25_scanner/radioreference_import.py src/pi_p25_scanner/backend.py web/index.html web/app.js
 pass "local git diff --check passed"
 
 TMP_TAR="/tmp/pi_p25_v0_4d3h_rr_picker_${STAMP}.tar"

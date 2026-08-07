@@ -106,7 +106,7 @@ print('credentials_file_exists', p.exists())
 if p.exists():
     text=p.read_text(encoding='utf-8', errors='replace')
     for key in ('RADIOREFERENCE_APP_KEY','RADIOREFERENCE_USERNAME','RADIOREFERENCE_PASSWORD'):
-        print(key, 'present' if (key+'=') in text and not text.split(key+'=',1)[1].split('\n',1)[0].strip().strip('"\'') == '' else 'missing_or_blank')
+        print(key, 'present' if (key+'=') in text and text.split(key+'=',1)[1].split('\n',1)[0].strip() else 'missing_or_blank')
 PY"; then
   pass "remote credential file sanity probe completed"
 else
