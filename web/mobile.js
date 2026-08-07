@@ -74,6 +74,51 @@ function setBadge(id, label, style) {
   badge.className = `badge ${style}`;
 }
 
+function renderRegistration(registration = {}) {
+  const badge = byId('registrationBadge');
+  if (!badge) return;
+  setText('registrationSerial', registration.serial_number || '-');
+  setText(
+    'registrationStatusText',
+    registration.registered
+      ? `Registered ${registration.license_suffix || ''} for ${registration.serial_number || ''}`
+      : `Installation S/N: ${registration.serial_number || '-'} · Five-minute trial`,
+  );
+  badge.title = registration.serial_number
+    ? `Scanner S/N ${registration.serial_number}`
+    : 'Scanner registration unavailable';
+  if (registration.registered) {
+    setBadge('registrationBadge', 'Registered', 'online');
+  } else if (registration.trial_expired) {
+    setBadge('registrationBadge', 'Trial ended', 'offline');
+  } else if (registration.trial_active) {
+    const seconds = Math.max(0, Number(registration.trial_remaining_seconds || 0));
+    const label = `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+    setBadge('registrationBadge', `Trial ${label}`, 'scanning');
+  } else {
+    setBadge('registrationBadge', 'Unregistered', 'pending');
+  }
+}
+
+async function activateLicense() {
+  if (state.busy) return;
+  state.busy = true;
+  render();
+  try {
+    await postJson('/api/license/activate', {
+      license_serial: String(byId('licenseSerialInput')?.value || '').trim(),
+      email: String(byId('licenseEmailInput')?.value || '').trim(),
+    });
+    if (byId('licenseSerialInput')) byId('licenseSerialInput').value = '';
+    setText('message', 'License activated');
+  } catch (error) {
+    setText('message', `Activation failed: ${error.message}`);
+  } finally {
+    state.busy = false;
+    await poll();
+  }
+}
+
 function applyAudioLevel() {
   if (!pcm.gain) return;
   const volume = Number(byId('volumeSlider').value) / 100;
@@ -334,6 +379,7 @@ function render() {
   setText('voiceCalls', state.backend?.activity_summary?.distinct_voice_calls || 0);
   setText('vhfLocks', state.analog?.roles?.analog_2m?.lock_count || 0);
   setText('uhfLocks', state.analog?.roles?.analog_70cm?.lock_count || 0);
+  renderRegistration(state.backend?.registration || {});
   renderNowPlaying();
 
   byId('startBtn').textContent = running
@@ -440,6 +486,7 @@ async function analogAction(action) {
 byId('startBtn').addEventListener('click', startScanning);
 byId('stopBtn').addEventListener('click', stopScanning);
 byId('muteBtn').addEventListener('click', toggleMute);
+byId('activateLicenseBtn').addEventListener('click', activateLicense);
 byId('volumeSlider').addEventListener('input', (event) => {
   if (state.muted && Number(event.target.value) > 0) toggleMute();
   applyAudioLevel();

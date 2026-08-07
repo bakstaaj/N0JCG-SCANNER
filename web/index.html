@@ -43,8 +43,9 @@
         <strong class="product-name">Scanner</strong>
       </div>
       <div class="topbar-status" aria-label="scanner and connection status">
+        <span id="registrationBadge" class="pill warn">Unregistered</span>
         <span id="stateBadge" class="pill">-</span>
-          <span id="connectionStatus" class="pill warn">Connecting</span>
+        <span id="connectionStatus" class="pill warn">Connecting</span>
       </div>
     </header>
 
@@ -55,10 +56,14 @@
       </div>
       <button class="nav-item active" data-screen="dashboardScreen" type="button">Dashboard</button>
       <button class="nav-item" data-screen="radioSetupScreen" type="button">Radio setup</button>
+      <button class="nav-item" data-screen="registrationScreen" type="button">Registration</button>
       <button class="nav-item" data-screen="logsScreen" type="button">Logs and details</button>
       <a class="nav-item" href="mobile.html">Phone interface</a>
       <a class="nav-item" href="docs/N0JCG_Scanner_User_Manual.pdf" target="_blank" rel="noopener">User manual</a>
-      <div class="drawer-foot"><span id="lastUpdated">Last update: -</span></div>
+      <div class="drawer-foot">
+        <span id="registrationSerial">S/N -</span>
+        <span id="lastUpdated">Last update: -</span>
+      </div>
     </aside>
     <div id="drawerBackdrop" class="drawer-backdrop"></div>
 
@@ -181,6 +186,27 @@
             <pre id="p25CsvStatusText">Choose a P25 CSV file to upload.</pre>
           </section>
         </div>
+      </section>
+
+      <section id="registrationScreen" class="screen" aria-label="registration">
+        <div class="screen-title">
+          <h1>Product registration</h1>
+          <p>Enter the license S/N supplied by N0JCG and the purchaser email address.</p>
+        </div>
+        <section class="profile-panel registration-panel">
+          <div class="section-row">
+            <div><strong>N0JCG Scanner license</strong><p>The first successful activation binds this license to the displayed installation S/N.</p></div>
+            <span id="registrationPanelBadge" class="pill warn">Unregistered</span>
+          </div>
+          <div class="profile-fields">
+            <label>License S/N<input id="licenseSerialInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="N0JCG-SCN-XXXX-XXXX-XXXX-XXXX"></label>
+            <label>Registered email<input id="licenseEmailInput" type="email" autocomplete="email" placeholder="operator@example.com"></label>
+          </div>
+          <div class="profile-actions registration-actions">
+            <button id="activateLicenseBtn" type="button" class="primary">Activate license</button>
+          </div>
+          <pre id="registrationStatusText">Installation S/N: loading…</pre>
+        </section>
       </section>
 
       <section id="logsScreen" class="screen" aria-label="logs">

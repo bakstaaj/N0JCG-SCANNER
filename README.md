@@ -24,6 +24,8 @@ and a single audio arbitrator that safely fans audio out to multiple clients.
 - Named radio profiles with CHIRP-compatible analog and P25 CSV import/export
 - Split deployment: browser application on the ROC and radio/DSP services on
   the receiver host
+- Server-enforced five-minute scan sessions on unregistered installations,
+  with phone-home activation and a signed seven-day offline grace lease
 
 ## Documentation
 

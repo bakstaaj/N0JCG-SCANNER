@@ -47,6 +47,25 @@ allowing more than one process to own an RTL-SDR receiver.
    ./tools/p25_validate_config_api.sh
    ```
 
+## Registration and trial mode
+
+`GET /api/status` reports the radio host's stable installation S/N in
+`registration.serial_number`. An unregistered installation may start normally,
+but the radio backend stops P25, VHF, and UHF after five minutes. Stopping and
+starting begins a new trial session.
+
+Open **Menu → Registration**, enter the N0JCG license S/N and purchaser email,
+then select **Activate license**. The radio backend contacts the N0JCG licensing
+service over HTTPS. First activation binds one license to the email and
+installation. A signed lease is cached in ignored `runtime/settings/` storage.
+
+The backend revalidates at startup and every 24 hours. A previously verified
+installation continues through a seven-day offline grace period if the public
+service or Internet connection is temporarily unavailable. A definitive
+revocation, product mismatch, email mismatch, or expired grace period returns
+the appliance to trial mode. License credentials and leases must never be
+committed, packaged, or copied to another installation.
+
 ## Deploy
 
 Run both deployment tools without mutation first and review their manifests:

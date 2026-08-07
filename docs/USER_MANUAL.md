@@ -802,6 +802,16 @@ UHF. `POST /api/scanner/stop` is the coordinated Stop action. The
 `GET /api/status` response includes `coordinated_scanners`, which reports the
 last known P25, VHF, and UHF state.
 
+## Registration and five-minute trial
+
+The status bar shows **Registered**, **Unregistered**, or a live **Trial**
+countdown. An unregistered scanner operates for five minutes after scanning is
+started, then automatically stops P25, VHF, and UHF. To register, open
+**Menu → Registration**, enter the license S/N supplied by N0JCG and the
+purchaser email, then select **Activate license**. The scanner validates over
+HTTPS and keeps a signed offline lease. A registered scanner can remain offline
+for up to seven days after its last successful validation.
+
 ## 19. Acceptance checklist
 
 Use this checklist after initial setup, a power cycle, or a major update:

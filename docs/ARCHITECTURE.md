@@ -32,6 +32,9 @@ Radio Pi — <RADIO_HOST>
   VHF FFT scanner and UHF FFT scanner
           v
 Dedicated RTL-SDR receivers selected by EEPROM serial
+
+Radio Pi backend -- HTTPS --> www.n0jcg.com licensing service
+  product-neutral validation / installation binding / signed lease
 ```
 
 ## Ownership boundary
@@ -52,6 +55,14 @@ The radio Pi owns every hardware or real-time function:
 
 The radio Pi remains authoritative for scanner state and configuration. The
 ROC proxy forwards requests; it does not duplicate radio state.
+
+The radio backend also owns licensing. It derives a stable, product-neutral
+installation S/N, submits activation and refresh requests over HTTPS, and
+accepts registration only after verifying the signed lease against its embedded
+public key and expected product, installation, and email hash. The ROC/browser
+sees display-safe status only. Scanner-specific five-minute trial enforcement
+stays in `ScannerManager`; the shared licensing client contains no scanner or
+radio-control behavior.
 
 ## Browser contract
 

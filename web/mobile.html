@@ -29,9 +29,11 @@
     </header>
 
     <section class="status-row" aria-label="scanner status">
+      <span id="registrationBadge" class="badge pending">Unregistered</span>
       <span id="scannerBadge" class="badge idle">Stopped</span>
       <span id="onlineBadge" class="badge pending">Connecting</span>
     </section>
+    <p class="registration-serial">S/N <strong id="registrationSerial">-</strong></p>
 
     <section class="now-card" aria-live="polite">
       <div class="now-topline">
@@ -81,6 +83,15 @@
       <span>VHF <strong id="vhfState">-</strong></span>
       <span>UHF <strong id="uhfState">-</strong></span>
     </section>
+
+    <details class="registration-card">
+      <summary>Product registration</summary>
+      <p>Enter the N0JCG license S/N and purchaser email.</p>
+      <label>License S/N<input id="licenseSerialInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="N0JCG-SCN-…"></label>
+      <label>Email<input id="licenseEmailInput" type="email" autocomplete="email" placeholder="operator@example.com"></label>
+      <button id="activateLicenseBtn" type="button">Activate</button>
+      <p id="registrationStatusText">Installation S/N: loading…</p>
+    </details>
 
     <p id="message" class="message" role="status">Ready</p>
   </main>

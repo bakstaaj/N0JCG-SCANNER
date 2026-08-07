@@ -59,6 +59,8 @@ if __package__ in (None, ""):
         p25_config_to_csv,
     )
     from pi_p25_scanner.receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
+    from pi_p25_scanner import __version__ as APP_VERSION
+    from n0jcg_licensing import LicenseClient, LicenseError
     try:
         from pi_p25_scanner.radioreference_import import (
             RadioReferenceError,
@@ -104,6 +106,8 @@ else:
     from .p25_csv_import import P25CsvError, import_p25_csv_request
     from .csv_profile_tools import analog_channels_to_chirp_csv, p25_config_to_csv
     from .receiver_inventory import build_receiver_inventory  # PHASE2_MULTI_RECEIVER_INVENTORY_V0_6A
+    from . import __version__ as APP_VERSION
+    from n0jcg_licensing import LicenseClient, LicenseError
     try:
         from .radioreference_import import (
             RadioReferenceError,
@@ -210,6 +214,7 @@ class ScannerStatus:
             "uhf": "stopped",
         }
     )
+    registration: dict[str, Any] = field(default_factory=dict)
     receiver_roles: dict[str, Any] = field(
         default_factory=lambda: {
             "p25_control": {"rtl_serial": "", "runtime_index": None},
@@ -305,12 +310,23 @@ class ScannerManager:
         # second request cannot overwrite the Popen handle while the first
         # coordinated transition is still bringing analog services up or down.
         self.control_lock = threading.Lock()
+        self.license_client = LicenseClient(
+            product_slug="scanner",
+            app_version=APP_VERSION,
+            state_root=PROJECT_ROOT / "runtime" / "settings",
+        )
+        self._trial_timer: threading.Timer | None = None
+        self._trial_generation = 0
+        self._trial_started_epoch: float | None = None
+        self._trial_deadline_epoch: float | None = None
+        self._trial_expired = False
         self.talkgroup_labels: dict[int, str] = {}
         self.blocked_talkgroup_ids: set[int] = set()
         self._display_suppressed_tgid_until: dict[int, float] = {}
         self.lock = threading.RLock()
         self.refresh_capability()
         self.refresh_config_summary()
+        self.license_client.start_background_refresh()
 
     # LAUNCH_READINESS_REFRESH_V0_4G14
     def _refresh_launch_readiness_locked(self) -> None:
@@ -366,7 +382,140 @@ class ScannerManager:
             if self.process is None or self.process.poll() is not None:
                 self._refresh_launch_readiness_locked()
             self.status.config = active_config_metadata()
+            self.status.registration = self._registration_payload_locked()
+            if (
+                self.process is not None
+                and self.process.poll() is None
+                and not self.status.registration.get("registered")
+                and getattr(self, "_trial_deadline_epoch", None) is None
+            ):
+                self._arm_trial_limit_locked()
             return asdict(self.status)
+
+    def _registration_snapshot(self) -> dict[str, Any]:
+        provider = getattr(self, "_registration_provider", None)
+        if provider is not None:
+            return dict(provider(PROJECT_ROOT))
+        client = getattr(self, "license_client", None)
+        if client is not None:
+            return dict(client.status())
+        return {
+            "serial_number": "",
+            "registered": False,
+            "mode": "trial",
+            "trial_limit_seconds": 300,
+        }
+
+    def license_status(self) -> dict[str, Any]:
+        with self.lock:
+            self.status.registration = self._registration_payload_locked()
+            return {"ok": True, "registration": dict(self.status.registration)}
+
+    def activate_license(self, request: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(request, dict):
+            raise LicenseError("activation request must be an object")
+        client = getattr(self, "license_client", None)
+        if client is None:
+            raise LicenseError("license client is unavailable")
+        status = client.activate(
+            str(request.get("license_serial") or ""),
+            str(request.get("email") or ""),
+        )
+        with self.lock:
+            if status.get("registered"):
+                self._cancel_trial_limit_locked()
+            self.status.registration = self._registration_payload_locked()
+            self._set_event("N0JCG Scanner license activated and bound to this installation")
+            return {"ok": True, "registration": dict(self.status.registration)}
+
+    def shutdown(self) -> None:
+        client = getattr(self, "license_client", None)
+        if client is not None:
+            client.close()
+        self.stop()
+
+    def _registration_payload_locked(self) -> dict[str, Any]:
+        payload = self._registration_snapshot()
+        if payload.get("registered"):
+            payload.update(
+                {
+                    "trial_active": False,
+                    "trial_started_epoch": None,
+                    "trial_expires_epoch": None,
+                    "trial_remaining_seconds": None,
+                    "trial_expired": False,
+                }
+            )
+            return payload
+
+        deadline = getattr(self, "_trial_deadline_epoch", None)
+        started = getattr(self, "_trial_started_epoch", None)
+        remaining = None
+        if deadline is not None:
+            remaining = max(0, int(deadline - time.time() + 0.999))
+        payload.update(
+            {
+                "trial_active": deadline is not None and bool(remaining),
+                "trial_started_epoch": started,
+                "trial_expires_epoch": deadline,
+                "trial_remaining_seconds": remaining,
+                "trial_expired": bool(getattr(self, "_trial_expired", False)),
+            }
+        )
+        return payload
+
+    def _cancel_trial_limit_locked(self, *, reset_expired: bool = True) -> None:
+        timer = getattr(self, "_trial_timer", None)
+        self._trial_generation = int(getattr(self, "_trial_generation", 0)) + 1
+        self._trial_timer = None
+        self._trial_started_epoch = None
+        self._trial_deadline_epoch = None
+        if reset_expired:
+            self._trial_expired = False
+        if timer is not None:
+            timer.cancel()
+
+    def _arm_trial_limit_locked(self) -> None:
+        registration = self._registration_snapshot()
+        if registration.get("registered"):
+            self._cancel_trial_limit_locked()
+            self.status.registration = self._registration_payload_locked()
+            return
+        if getattr(self, "_trial_deadline_epoch", None) is not None:
+            self.status.registration = self._registration_payload_locked()
+            return
+
+        duration = int(registration.get("trial_limit_seconds") or 300)
+        now = time.time()
+        self._trial_generation = int(getattr(self, "_trial_generation", 0)) + 1
+        generation = self._trial_generation
+        self._trial_started_epoch = now
+        self._trial_deadline_epoch = now + duration
+        self._trial_expired = False
+        timer_factory = getattr(self, "_timer_factory", threading.Timer)
+        timer = timer_factory(duration, self._expire_unregistered_trial, args=(generation,))
+        timer.daemon = True
+        self._trial_timer = timer
+        timer.start()
+        self.status.registration = self._registration_payload_locked()
+
+    def _expire_unregistered_trial(self, generation: int) -> None:
+        with self.control_lock:
+            with self.lock:
+                if generation != getattr(self, "_trial_generation", 0):
+                    return
+                if self._registration_snapshot().get("registered"):
+                    self._cancel_trial_limit_locked()
+                    self.status.registration = self._registration_payload_locked()
+                    return
+            self._stop_coordinated()
+            with self.lock:
+                self._trial_expired = True
+                self.status.scanner_state = "trial_expired"
+                self._set_event(
+                    "Unregistered five-minute trial ended; P25, VHF, and UHF scanners stopped"
+                )
+                self.status.registration = self._registration_payload_locked()
 
     def _set_event(self, message: str) -> None:
         self.status.last_event = message
@@ -697,6 +846,7 @@ class ScannerManager:
                 # flipping to Stopped while live P25 audio continued.
                 if self.process is not process:
                     return
+                self._cancel_trial_limit_locked()
                 self.process = None
                 self.status.decoder_process["running"] = False
                 self.status.decoder_process["pid"] = None
@@ -818,6 +968,7 @@ class ScannerManager:
                     "vhf": analog_state["vhf"],
                     "uhf": analog_state["uhf"],
                 }
+                self._arm_trial_limit_locked()
                 self._set_event("P25, VHF, and UHF scanners already running")
                 return self.status_payload(), HTTPStatus.ACCEPTED
 
@@ -940,6 +1091,7 @@ class ScannerManager:
                 "vhf": analog_state["vhf"],
                 "uhf": analog_state["uhf"],
             }
+            self._arm_trial_limit_locked()
             self._set_event("P25, VHF, and UHF scanners started")
         return self.status_payload(), HTTPStatus.ACCEPTED
 
@@ -950,6 +1102,7 @@ class ScannerManager:
     def _stop_coordinated(self) -> tuple[dict[str, Any], HTTPStatus]:
         with self.lock:
             process = self.process
+            self._cancel_trial_limit_locked()
         stop_result = None
         if process is not None:
             stop_result = _stop_process_safely(process)
@@ -1773,6 +1926,9 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/status":
                 self._send_json(MANAGER.status_payload())
                 return
+            if path == "/api/license/status":
+                self._send_json(MANAGER.license_status())
+                return
             if path == "/api/config":
                 self._send_json(MANAGER.config_payload())
                 return
@@ -1826,6 +1982,18 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/scanner/stop":
                 payload, status = MANAGER.stop()
                 self._send_json(payload, status)
+                return
+            if path == "/api/license/activate":
+                try:
+                    self._send_json(
+                        MANAGER.activate_license(self._read_json()),
+                        HTTPStatus.ACCEPTED,
+                    )
+                except LicenseError as exc:
+                    self._send_json(
+                        {"ok": False, "error": str(exc)},
+                        HTTPStatus.BAD_REQUEST,
+                    )
                 return
             if path == "/api/analog/control":
                 self._send_json(
@@ -2282,7 +2450,7 @@ def main() -> int:
     except KeyboardInterrupt:
         print("Stopping PI P25 Scanner backend", flush=True)
     finally:
-        MANAGER.stop()
+        MANAGER.shutdown()
         httpd.server_close()
     return 0
 

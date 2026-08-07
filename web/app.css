@@ -183,6 +183,9 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d9e8f7; 
   color: #ffd7d7;
   border: 1px solid rgba(255, 100, 100, 0.5);
 }
+.registration-actions {
+  grid-template-columns: minmax(180px, 280px);
+}
 .csv-profile-card pre {
   max-height: 72px;
 }

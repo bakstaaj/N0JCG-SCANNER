@@ -5,6 +5,10 @@ notes are available in [`docs/releases/`](docs/releases/).
 
 ## Unreleased
 
+- Added reusable phone-home license activation using a stable installation S/N,
+  email binding, signed offline leases, visible desktop/mobile registration
+  state, and a backend-enforced five-minute scan limit for unregistered
+  installations.
 - Rebranded the desktop and mobile interfaces to the N0JCG visual system.
 - Added a hooked return control to the ROC dashboard using relative navigation.
 - Published a branded user manual in Markdown, DOCX, and PDF formats.

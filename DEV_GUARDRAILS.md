@@ -136,6 +136,17 @@ This is the living guardrail file for `bakstaaj/PI-P25-SCANNER`. Keep it updated
 - Service/API validators must wait for a stable, parseable `/api/status` before counting endpoint failures after startup.
 - Do not render full named-profile/config payloads into hidden or visible UI elements. Large talkgroup arrays must be represented by compact counts and summaries so opening Radio Setup cannot trigger a browser layout stall.
 
+## Registration and Trial Guardrails
+
+- Registration enforcement belongs in the radio backend; browser countdowns are display-only and must never be the mechanism that stops scanning.
+- An unregistered scanning session is limited to 300 seconds by default. Expiry must stop P25, VHF, and UHF through the same coordinated shutdown path as the Stop control.
+- Repeated browser Start/Listen requests while scanners are already running must not reset or extend an active trial deadline.
+- Installation S/N values may be exposed in status for registration, but license credentials, email addresses, signed leases, private keys, and license inventories belong only in ignored/private storage and must never be committed or packaged.
+- Browser clients submit activation to the radio backend. They must not call the public licensing service directly or receive the complete stored license S/N/email in status responses.
+- The reusable N0JCG licensing client must verify the RSA/SHA-256 lease signature, product slug, installation S/N, and email hash before accepting online or offline registration state.
+- Successful leases are valid online for 24 hours and may continue for a maximum seven-day offline grace period. Network failure must not erase a still-valid signed lease; definitive server rejection must invalidate it.
+- Manual stop, decoder exit, failed coordinated start, and backend shutdown must invalidate stale trial timers so an old callback cannot stop a later registered session.
+
 ## ChatGPT/Sandbox Reliability Guardrail
 
 - When the assistant sandbox is slow or timing out, prefer small bounded scripts that run in the user's MSYS2/Pi environment instead of long sandbox operations.

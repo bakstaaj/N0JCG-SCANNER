@@ -105,6 +105,64 @@ function desktopBrowserAudioAttached() {
   return Boolean(window.__scannerBrowserAudio?.isAttached?.());
 }
 
+function registrationBadge(status) {
+  const registration = status?.registration || {};
+  const badge = field('registrationBadge');
+  if (!badge) return;
+  setText('registrationSerial', `S/N ${registration.serial_number || '-'}`);
+  setText(
+    'registrationStatusText',
+    registration.registered
+      ? `Registered license ${registration.license_suffix || ''} · Installation S/N ${registration.serial_number || '-'}`
+      : `Installation S/N ${registration.serial_number || '-'} · Unregistered sessions stop after five minutes.`,
+  );
+  setBadge(
+    'registrationPanelBadge',
+    registration.registered ? 'REGISTERED' : 'UNREGISTERED',
+    registration.registered ? 'ok' : 'warn',
+  );
+  badge.title = registration.serial_number
+    ? `Scanner S/N ${registration.serial_number}`
+    : 'Scanner registration unavailable';
+  if (registration.registered) {
+    setBadge('registrationBadge', 'REGISTERED', 'ok');
+    return;
+  }
+  if (registration.trial_expired) {
+    setBadge('registrationBadge', 'TRIAL ENDED', 'bad');
+    return;
+  }
+  const remaining = registration.trial_remaining_seconds;
+  if (registration.trial_active && Number.isFinite(Number(remaining))) {
+    const seconds = Math.max(0, Number(remaining));
+    const label = `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+    setBadge('registrationBadge', `TRIAL ${label}`, 'warn');
+    return;
+  }
+  setBadge('registrationBadge', 'UNREGISTERED', 'warn');
+}
+
+async function activateLicense() {
+  const button = field('activateLicenseBtn');
+  const licenseSerial = String(field('licenseSerialInput')?.value || '').trim();
+  const email = String(field('licenseEmailInput')?.value || '').trim();
+  if (button) button.disabled = true;
+  setText('registrationStatusText', 'Contacting N0JCG licensing service…');
+  try {
+    const result = await postJson('/api/license/activate', {
+      license_serial: licenseSerial,
+      email,
+    });
+    if (field('licenseSerialInput')) field('licenseSerialInput').value = '';
+    setText('registrationStatusText', `License activated for installation ${result.registration?.serial_number || ''}.`);
+    await refreshStatus();
+  } catch (error) {
+    setText('registrationStatusText', `Activation failed: ${error.message}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function extractOp25HttpListener(status) {
   const process = status?.decoder_process || {};
   const marker = process.validated_marker || {};
@@ -216,6 +274,7 @@ function renderDashboard(status) {
   setText('lastUpdated', `Last update: ${new Date().toLocaleTimeString()}`);
   setBadge('stateBadge', running ? 'ON AIR' : (status?.scanner_state || '-'), running ? 'ok' : (status?.ok ? 'warn' : 'bad'));
   setBadge('connectionStatus', 'Connected', 'ok');
+  registrationBadge(status);
   renderActivitySummary(status?.activity_summary || {});
   updateAudioPanel();
   setButtonsForState(status || {});
@@ -817,6 +876,7 @@ function attachEventHandlers() {
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => showScreen(button.dataset.screen)));
   field('startBtn')?.addEventListener('click', (event) => { if (p25AllowManualStart(event)) startScannerAndAudio(); });
   field('stopBtn')?.addEventListener('click', stopScanner);
+  field('activateLicenseBtn')?.addEventListener('click', activateLicense);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
   field('profileSelect')?.addEventListener('change', () => {
     if (latestProfilesPayload) setText('profileStatusText', compactProfileSummary(latestProfilesPayload));

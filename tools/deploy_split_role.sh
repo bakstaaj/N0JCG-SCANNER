@@ -125,7 +125,7 @@ mkdir -p "$repo" "$backup"
 if [ "$role" = roc ]; then
   entries="web/pi-scanner"
 else
-  entries="config src systemd tools"
+  entries="config src systemd tools requirements.txt"
 fi
 for entry in $entries; do
   if [ -e "$repo/$entry" ]; then

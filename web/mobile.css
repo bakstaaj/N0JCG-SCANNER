@@ -78,6 +78,14 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 .status-row { gap: 8px; margin-bottom: 10px; }
 
+.registration-serial {
+  margin: -4px 4px 10px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-align: right;
+}
+
 .badge {
   border: 1px solid transparent;
   border-radius: 999px;
@@ -148,6 +156,12 @@ button:disabled { cursor: default; opacity: 0.42; }
 
 .scanner-summary { justify-content: space-around; gap: 5px; margin-top: 12px; padding: 10px; color: var(--muted); font-size: 0.72rem; }
 .scanner-summary strong { color: #e9f1f5; text-transform: capitalize; }
+.registration-card { margin-top: 12px; padding: 12px; border: 1px solid var(--panel-edge); border-radius: 14px; background: var(--panel); }
+.registration-card summary { cursor: pointer; font-weight: 800; }
+.registration-card label { display: grid; gap: 4px; margin-top: 9px; color: var(--muted); font-size: 0.72rem; }
+.registration-card input { min-height: 40px; padding: 0 10px; border: 1px solid #486579; border-radius: 9px; color: #eaf7ff; background: #15232d; }
+.registration-card button { width: 100%; min-height: 42px; margin-top: 10px; border: 1px solid var(--green); border-radius: 10px; color: white; background: var(--green-dark); font-weight: 800; }
+.registration-card p { color: var(--muted); font-size: 0.7rem; overflow-wrap: anywhere; }
 .message { min-height: 1.2em; margin: 10px 4px 0; color: var(--muted); text-align: center; font-size: 0.75rem; }
 
 @media (max-width: 340px) {

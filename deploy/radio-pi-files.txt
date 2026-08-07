@@ -3,3 +3,4 @@ config
 src
 systemd
 tools
+requirements.txt

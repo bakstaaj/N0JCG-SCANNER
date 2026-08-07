@@ -278,6 +278,9 @@ summary:focus-visible {
 }
 
 .drawer-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   color: var(--n0-color-text-muted);
 }
 
@@ -617,6 +620,201 @@ summary {
   .analog-live-controls {
     padding: 6px;
   }
+}
+
+/* N0JCG dark operations theme: shared with the Air Traffic Center. */
+:root {
+  color-scheme: dark;
+  --n0-color-navy: #08101d;
+  --n0-color-blue: #2778d4;
+  --n0-color-cyan: #42cf8a;
+  --n0-color-slate: #e8eef6;
+  --n0-color-mist: #08101d;
+  --n0-color-white: #101b2d;
+  --n0-color-text: #e8eef6;
+  --n0-color-text-secondary: #c6d3e3;
+  --n0-color-text-muted: #9bb0ca;
+  --n0-color-border: #293e59;
+  --n0-color-border-soft: #22344d;
+  --n0-color-success: #42cf8a;
+  --n0-color-warning: #f2c35c;
+  --n0-color-danger: #ff7b84;
+  --n0-radius-control: 6px;
+  --n0-radius-card: 9px;
+  --n0-focus: 0 0 0 3px rgba(66, 207, 138, 0.45);
+  --bg: var(--n0-color-mist);
+  --panel: var(--n0-color-white);
+  --panel-2: #18273d;
+  --ink: var(--n0-color-text);
+  --muted: var(--n0-color-text-muted);
+  --line: var(--n0-color-border);
+  --good: var(--n0-color-success);
+  --warn: var(--n0-color-warning);
+  --bad: var(--n0-color-danger);
+  --accent: var(--n0-color-blue);
+}
+
+html,
+body,
+.screen,
+.phone-shell {
+  background: var(--n0-color-mist);
+  color: var(--n0-color-text);
+}
+
+button,
+.button-link {
+  border-color: var(--n0-color-border);
+  background: var(--n0-color-blue);
+  color: #ffffff;
+}
+
+button:not(:disabled):hover,
+.button-link:hover {
+  border-color: var(--n0-color-cyan);
+  background: #3389e6;
+  color: #ffffff;
+}
+
+button:not(:disabled):active,
+.return-button:active {
+  background: #1e63ad;
+}
+
+button:disabled {
+  background: #425369;
+  color: #b6c0cd;
+}
+
+.topbar,
+.phone-header {
+  background: var(--n0-color-white);
+  border-bottom: 1px solid var(--n0-color-border);
+}
+
+.drawer {
+  background: var(--n0-color-white);
+  color: var(--n0-color-text);
+  border-right-color: var(--n0-color-border);
+  box-shadow: 6px 0 18px rgba(0, 0, 0, 0.42);
+}
+
+.drawer-head,
+.screen-title h1,
+summary,
+#activeTalkgroupLabel,
+.now-card h2,
+.section-heading strong,
+.scanner-summary strong,
+.counter-grid strong {
+  color: var(--n0-color-text);
+}
+
+.nav-item {
+  color: var(--n0-color-text);
+}
+
+.nav-item.active,
+.nav-item[aria-current="page"] {
+  background: #173f32;
+  color: var(--n0-color-cyan);
+}
+
+.screen-title,
+.activity-card,
+.profile-panel,
+.category-panel,
+.wizard-results,
+details,
+.last-event,
+.analog-live-controls,
+.now-card,
+.audio-controls,
+.analog-card,
+.scanner-summary {
+  border-color: var(--n0-color-border);
+  background: var(--n0-color-white);
+  color: var(--n0-color-text);
+}
+
+input,
+textarea,
+select {
+  border-color: var(--n0-color-border);
+  background: #091321;
+  color: var(--n0-color-text);
+}
+
+.activity-grid div,
+.stats-grid article,
+.details-grid article,
+.counter-grid article {
+  border-color: var(--n0-color-border);
+  background: var(--panel-2);
+  color: var(--n0-color-text);
+}
+
+.activity-grid strong,
+.stats-grid strong,
+.details-grid strong,
+.counter-grid strong,
+#voiceFrequency,
+#controlFrequency {
+  color: var(--n0-color-text);
+}
+
+pre {
+  color: var(--n0-color-text);
+}
+
+.pill,
+.badge {
+  border-color: var(--n0-color-border);
+  background: var(--panel-2);
+  color: var(--n0-color-text-secondary);
+}
+
+.pill.ok,
+.badge.online {
+  border-color: #286c4d;
+  background: #173f32;
+  color: var(--n0-color-success);
+}
+
+.pill.warn,
+.badge.scanning,
+.badge.pending {
+  border-color: #6b5520;
+  background: #40361a;
+  color: var(--n0-color-warning);
+}
+
+.pill.bad,
+.badge.offline {
+  border-color: #703640;
+  background: #3d2028;
+  color: #ff9fa7;
+}
+
+.badge.on-air {
+  border-color: #2d9070;
+  background: #173f32;
+  color: var(--n0-color-cyan);
+}
+
+.mute-button,
+.analog-actions button,
+.control-strip .audio-mute-button,
+.control-strip #stopBtn {
+  border-color: var(--n0-color-border);
+  background: var(--panel-2);
+  color: var(--n0-color-text);
+}
+
+.mute-button[aria-pressed="true"] {
+  border-color: #703640;
+  background: #3d2028;
+  color: #ff9fa7;
 }
 
 @media (max-width: 680px) {

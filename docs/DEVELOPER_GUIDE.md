@@ -29,6 +29,10 @@ python3 -m pip install -r requirements-dev.txt
 
 - `src/pi_p25_scanner/` contains the radio API, OP25 integration, audio
   arbitration, configuration, and VHF/UHF workers.
+- `src/n0jcg_licensing/` is the product-neutral phone-home client. Reuse this
+  package in other N0JCG Python applications by supplying a product slug,
+  application version, and private local state directory; keep each product's
+  trial policy outside the shared client.
 - `web/` contains application-host assets. It communicates through relative API
   and audio paths so deployments do not hardcode station addresses.
 - `deploy/`, `systemd/`, and role-specific tools define deployment ownership.
@@ -36,6 +40,9 @@ python3 -m pip install -r requirements-dev.txt
 
 Preserve serial-first receiver ownership. Keep browser clients independent of
 scanner service lifecycle: attaching a listener must not restart the radios.
+The browser must submit licenses only to its application backend. The backend
+owns public-service communication, signed-lease verification, local credential
+permissions, refresh scheduling, offline grace, and trial enforcement.
 
 ## Validation
 

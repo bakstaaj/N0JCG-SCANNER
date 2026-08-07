@@ -32,6 +32,16 @@ is not yet a stability-guaranteed third-party contract.
 | POST | `/api/config/save` | Validate and save active local configuration |
 | POST | `/api/config/init-local` | Initialize ignored local configuration |
 | GET | `/api/receivers/inventory` | Configured receiver-role inventory |
+| GET | `/api/license/status` | Registration, signed-lease, and grace state |
+| POST | `/api/license/activate` | Validate and bind a license S/N plus email |
+
+The `/api/status` response includes a `registration` object with the public
+installation `serial_number`, `registered` state, trial limit, active expiry,
+remaining seconds, and expired state. On an unregistered installation, the
+backend—not the browser—stops all three scanners when the trial expires.
+License activation is proxied by the radio backend so browser clients never
+contact the public licensing API directly. Responses never expose the stored
+email or complete license S/N.
 
 ## Analog scanner endpoints
 
