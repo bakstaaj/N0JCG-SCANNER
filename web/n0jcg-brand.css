@@ -692,6 +692,21 @@ button:disabled {
   border-bottom: 1px solid var(--n0-color-border);
 }
 
+/* Keep navigation glyphs distinct from the dark blue header/panel surface. */
+.topbar .icon-button,
+.topbar .return-button {
+  background: #18273d;
+  border-color: #526273;
+  color: #ffffff;
+}
+
+.topbar .icon-button:hover,
+.topbar .return-button:hover {
+  background: #243a56;
+  border-color: var(--n0-color-cyan);
+  color: #ffffff;
+}
+
 .drawer {
   background: var(--n0-color-white);
   color: var(--n0-color-text);
