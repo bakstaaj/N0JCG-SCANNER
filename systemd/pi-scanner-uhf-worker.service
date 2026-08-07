@@ -7,10 +7,10 @@ After=network-online.target
 Type=simple
 User=pi
 Group=pi
-WorkingDirectory=/home/pi/PI-SCANNER
-Environment=PYTHONPATH=/home/pi/PI-SCANNER/src
+WorkingDirectory=/home/pi/n0jcg-scanner
+Environment=PYTHONPATH=/home/pi/n0jcg-scanner/src
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 -m pi_p25_scanner.analog_uhf_worker --config /home/pi/PI-SCANNER/runtime/settings/analog_receivers.json --status-path /home/pi/PI-SCANNER/runtime/status/analog_70cm.json
+ExecStart=/usr/bin/python3 -m pi_p25_scanner.analog_uhf_worker --config /home/pi/n0jcg-scanner/runtime/settings/analog_receivers.json --status-path /home/pi/n0jcg-scanner/runtime/status/analog_70cm.json
 Restart=on-failure
 RestartSec=2
 KillSignal=SIGINT

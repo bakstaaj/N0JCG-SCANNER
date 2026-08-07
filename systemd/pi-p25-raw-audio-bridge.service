@@ -7,9 +7,9 @@ After=network-online.target pi-scanner-vhf-worker.service pi-scanner-uhf-worker.
 Type=simple
 User=pi
 Group=pi
-WorkingDirectory=/home/pi/PI-P25-SCANNER
+WorkingDirectory=/home/pi/n0jcg-scanner
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /home/pi/PI-P25-SCANNER/tools/pi_scanner_audio_arbitrator.py --host 0.0.0.0 --port 8072 --listen-host 127.0.0.1 --p25-port 23456 --vhf-port 23458 --uhf-port 23459 --release-seconds 1.5 --warmup-frames 2 --prebuffer-frames 3 --max-queue-frames 100
+ExecStart=/usr/bin/python3 /home/pi/n0jcg-scanner/tools/pi_scanner_audio_arbitrator.py --host 0.0.0.0 --port 8072 --listen-host 127.0.0.1 --p25-port 23456 --vhf-port 23458 --uhf-port 23459 --release-seconds 1.5 --warmup-frames 2 --prebuffer-frames 3 --max-queue-frames 100
 Restart=always
 RestartSec=2
 KillSignal=SIGINT

@@ -7,10 +7,10 @@
 window.__P25_REQUIRE_USER_START__ = true;
 window.__P25_USER_START_REQUESTED__ = false;
 window.__P25_DESKTOP_LAUNCHER_MODE__ = false;
-const PI_SCANNER_BASE_PATH = window.location.pathname === '/pi-scanner'
-  || window.location.pathname.startsWith('/pi-scanner/')
-  ? '/pi-scanner'
-  : '';
+const PI_SCANNER_BASE_PATH = (() => {
+  const match = window.location.pathname.match(/^\/(n0jcg-scanner|pi-scanner)(?:\/|$)/);
+  return match ? `/${match[1]}` : '';
+})();
 function p25ApplicationUrl(value) {
   const url = String(value || '');
   if (!PI_SCANNER_BASE_PATH || !url.startsWith('/')) return url;

@@ -37,10 +37,10 @@ function byId(id) { return document.getElementById(id); }
 function setText(id, value) { const node = byId(id); if (node) node.textContent = value ?? '-'; }
 function formatHz(value) { return value ? `${(Number(value) / 1e6).toFixed(5)} MHz` : 'Frequency unavailable'; }
 
-const PI_SCANNER_BASE_PATH = window.location.pathname === '/pi-scanner'
-  || window.location.pathname.startsWith('/pi-scanner/')
-  ? '/pi-scanner'
-  : '';
+const PI_SCANNER_BASE_PATH = (() => {
+  const match = window.location.pathname.match(/^\/(n0jcg-scanner|pi-scanner)(?:\/|$)/);
+  return match ? `/${match[1]}` : '';
+})();
 
 function applicationUrl(value) {
   const url = String(value || '');

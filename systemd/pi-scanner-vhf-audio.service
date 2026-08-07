@@ -7,9 +7,9 @@ After=network-online.target
 Type=simple
 User=pi
 Group=pi
-WorkingDirectory=/home/pi/PI-SCANNER
+WorkingDirectory=/home/pi/n0jcg-scanner
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /home/pi/PI-SCANNER/tools/pi_scanner_vhf_audio_bridge.py --host 0.0.0.0 --port 8073 --udp-host 127.0.0.1 --udp-port 23458
+ExecStart=/usr/bin/python3 /home/pi/n0jcg-scanner/tools/pi_scanner_vhf_audio_bridge.py --host 0.0.0.0 --port 8073 --udp-host 127.0.0.1 --udp-port 23458
 Restart=always
 RestartSec=2
 KillSignal=SIGINT

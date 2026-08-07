@@ -9,10 +9,8 @@
       if (params.get('desktop') === '1') return;
       const mobileHint = navigator.userAgentData?.mobile === true;
       const phoneUserAgent = /Android.*Mobile|iPhone|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const base = window.location.pathname === '/pi-scanner'
-        || window.location.pathname.startsWith('/pi-scanner/')
-        ? '/pi-scanner'
-        : '';
+      const match = window.location.pathname.match(/^\/(n0jcg-scanner|pi-scanner)(?:\/|$)/);
+      const base = match ? `/${match[1]}` : '';
       if (mobileHint || phoneUserAgent) window.location.replace(`${base}/mobile.html`);
     })();
   </script>

@@ -46,7 +46,7 @@ if [[ "$role" == "roc" ]]; then
 else
   target_user="${RADIO_USER:-${PI_USER:-pi}}"
   target_host="${RADIO_HOST:-${PI_HOST:-192.168.68.137}}"
-  target_repo="${RADIO_REPO:-${PI_REPO:-/home/pi/PI-SCANNER}}"
+  target_repo="${RADIO_REPO:-${PI_REPO:-/home/pi/n0jcg-scanner}}"
   target_password="${RADIO_PASSWORD:-${PI_PASSWORD:-}}"
   manifest="deploy/radio-pi-files.txt"
 fi
@@ -126,6 +126,17 @@ if [ "$role" = roc ]; then
   entries="web/pi-scanner"
 else
   entries="config src systemd tools requirements.txt"
+  if [ "$repo" = /home/pi/n0jcg-scanner ]; then
+    # Preserve the separate legacy P25 and analog runtime stores while
+    # consolidating both services under the canonical application root.
+    for legacy in /home/pi/PI-P25-SCANNER /home/pi/PI-SCANNER; do
+      if [ -d "$legacy/runtime" ]; then
+        mkdir -p "$repo/runtime" "$backup/legacy$(dirname "$legacy")"
+        cp -a "$legacy/runtime" "$backup/legacy$legacy"
+        cp -a "$legacy/runtime/." "$repo/runtime/"
+      fi
+    done
+  fi
 fi
 for entry in $entries; do
   if [ -e "$repo/$entry" ]; then
@@ -138,6 +149,13 @@ cd "$repo"
 sha256sum -c "$checksums"
 rm -f "$bundle" "$checksums"
 REMOTE_SCRIPT
+
+if [[ "$role" == radio ]]; then
+  printf '%s\n' "$target_password" | sshpass -e ssh "${ssh_options[@]}" "$target" \
+    sudo -S -p sudo: -- cp -a "$target_repo/systemd/." /etc/systemd/system/
+  printf '%s\n' "$target_password" | sshpass -e ssh "${ssh_options[@]}" "$target" \
+    sudo -S -p sudo: -- systemctl daemon-reload
+fi
 
 if ((restart == 1)); then
   if [[ "$role" == "roc" ]]; then

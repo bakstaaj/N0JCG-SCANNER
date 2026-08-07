@@ -6,8 +6,8 @@ REPO_ROOT="$(
   pwd
 )"
 
-P25_ROOT="${P25_ROOT:-/home/pi/PI-P25-SCANNER}"
-ANALOG_ROOT="${ANALOG_ROOT:-/home/pi/PI-SCANNER}"
+P25_ROOT="${P25_ROOT:-/home/pi/n0jcg-scanner}"
+ANALOG_ROOT="${ANALOG_ROOT:-/home/pi/n0jcg-scanner}"
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 
 fail() {
