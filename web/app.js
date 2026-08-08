@@ -16,8 +16,7 @@ function validReturnTarget(value) {
   try {
     const target = new URL(String(value || ''), window.location.href);
     if (!/^https?:$/.test(target.protocol)) return null;
-    const scannerPath = /^\/(n0jcg-scanner|pi-scanner)(?:\/|$)/.test(target.pathname);
-    if (target.origin === window.location.origin && scannerPath) return null;
+    if (target.origin === window.location.origin) return null;
     return target.href;
   } catch (_) {
     return null;
@@ -27,7 +26,11 @@ function configureReturnLink() {
   const link = document.querySelector('[data-return-link]');
   if (!link) return;
   let target = null;
-  try { target = validReturnTarget(window.sessionStorage.getItem(RETURN_TARGET_STORAGE_KEY)); } catch (_) { /* unavailable */ }
+  try {
+    const stored = window.sessionStorage.getItem(RETURN_TARGET_STORAGE_KEY);
+    target = validReturnTarget(stored);
+    if (!target && stored) window.sessionStorage.removeItem(RETURN_TARGET_STORAGE_KEY);
+  } catch (_) { /* unavailable */ }
   if (!target) target = validReturnTarget(document.referrer);
   if (target) {
     link.href = target;

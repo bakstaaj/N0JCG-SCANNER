@@ -8,9 +8,7 @@
       const returnKey = 'n0jcg-scanner.returnTarget';
       try {
         const source = document.referrer ? new URL(document.referrer) : null;
-        const scannerSource = source && source.origin === window.location.origin
-          && /^\/(n0jcg-scanner|pi-scanner)(?:\/|$)/.test(source.pathname);
-        if (source && /^https?:$/.test(source.protocol) && !scannerSource) {
+        if (source && /^https?:$/.test(source.protocol) && source.origin !== window.location.origin) {
           window.sessionStorage.setItem(returnKey, source.href);
         }
       } catch (_) { /* storage/referrer may be unavailable in private contexts */ }
@@ -232,7 +230,7 @@
       </section>
     </main>
   </div>
-  <script src="app.js?v=2.0.3-audio-arbitrator-status-2.1.0-csv-radio-profiles-2.0.0-voice-call-counter-2.1.1-desktop-listen-3.0.1-roc-subpath"></script>
+  <script src="app.js?v=2.0.4-dynamic-external-return"></script>
   <script src="pcm-ring-player.js?v=1.0.1-clock-recovery"></script>
   <script src="audio_arbitrator_live.js?v=2.2.2-clock-recovered-ring-player-3.0.1-roc-subpath"></script>
 </body>
