@@ -30,7 +30,8 @@ def test_html_assets_and_navigation_are_subpath_safe() -> None:
     assert 'src="app.js?' in desktop
     assert 'src="audio_arbitrator_live.js?' in desktop
     assert 'class="icon-button return-button"' in desktop
-    assert 'href="/" aria-label="Return to ROC dashboard"' in desktop
+    assert 'data-return-link' in desktop
+    assert 'RETURN_TARGET_STORAGE_KEY' in (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "`${base}/mobile.html`" in desktop
     assert 'href="mobile.css?' in mobile
     assert 'src="mobile.js?' in mobile

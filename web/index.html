@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <script>
     (() => {
+      const returnKey = 'n0jcg-scanner.returnTarget';
+      try {
+        const source = document.referrer ? new URL(document.referrer) : null;
+        const scannerSource = source && source.origin === window.location.origin
+          && /^\/(n0jcg-scanner|pi-scanner)(?:\/|$)/.test(source.pathname);
+        if (source && /^https?:$/.test(source.protocol) && !scannerSource) {
+          window.sessionStorage.setItem(returnKey, source.href);
+        }
+      } catch (_) { /* storage/referrer may be unavailable in private contexts */ }
       const params = new URLSearchParams(window.location.search);
       if (params.get('desktop') === '1') return;
       const mobileHint = navigator.userAgentData?.mobile === true;
@@ -24,7 +33,7 @@
   <div class="app-shell">
     <header class="topbar">
       <button id="menuBtn" class="icon-button" type="button" aria-label="Open menu">☰</button>
-      <a class="icon-button return-button" href="/" aria-label="Return to ROC dashboard" title="Return to ROC dashboard">
+      <a class="icon-button return-button" href="#" data-return-link aria-label="Return to previous application" title="Return to previous application">
         <svg class="return-icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
           <path d="M20 18v-2a7 7 0 0 0-7-7H5m4-4-4 4 4 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
         </svg>

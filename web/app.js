@@ -11,6 +11,37 @@ const PI_SCANNER_BASE_PATH = (() => {
   const match = window.location.pathname.match(/^\/(n0jcg-scanner|pi-scanner)(?:\/|$)/);
   return match ? `/${match[1]}` : '';
 })();
+const RETURN_TARGET_STORAGE_KEY = 'n0jcg-scanner.returnTarget';
+function validReturnTarget(value) {
+  try {
+    const target = new URL(String(value || ''), window.location.href);
+    if (!/^https?:$/.test(target.protocol)) return null;
+    const scannerPath = /^\/(n0jcg-scanner|pi-scanner)(?:\/|$)/.test(target.pathname);
+    if (target.origin === window.location.origin && scannerPath) return null;
+    return target.href;
+  } catch (_) {
+    return null;
+  }
+}
+function configureReturnLink() {
+  const link = document.querySelector('[data-return-link]');
+  if (!link) return;
+  let target = null;
+  try { target = validReturnTarget(window.sessionStorage.getItem(RETURN_TARGET_STORAGE_KEY)); } catch (_) { /* unavailable */ }
+  if (!target) target = validReturnTarget(document.referrer);
+  if (target) {
+    link.href = target;
+    link.setAttribute('aria-label', 'Return to previous application');
+    link.title = 'Return to previous application';
+    return;
+  }
+  link.addEventListener('click', (event) => {
+    if (window.history.length > 1) {
+      event.preventDefault();
+      window.history.back();
+    }
+  });
+}
 function p25ApplicationUrl(value) {
   const url = String(value || '');
   if (!PI_SCANNER_BASE_PATH || !url.startsWith('/')) return url;
@@ -898,6 +929,7 @@ function attachEventHandlers() {
 }
 
 function boot() {
+  configureReturnLink();
   attachEventHandlers();
 p25RemoveDashboardAutostartTuningRemnants();
   updateAudioPanel();
