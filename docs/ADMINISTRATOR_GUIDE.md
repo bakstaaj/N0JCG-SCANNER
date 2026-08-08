@@ -71,19 +71,18 @@ committed, packaged, or copied to another installation.
 Run both deployment tools without mutation first and review their manifests:
 
 ```bash
-./tools/deploy_application_to_roc.sh
 ./tools/deploy_radio_to_pi.sh
 ```
 
-Use each tool's documented confirmation flag only after the dry run names the
-correct host and files. Application files go to the ROC host; DSP, API, config,
-and systemd files go to the radio host.
+Use the tool's documented confirmation flag only after the dry run names the
+correct host and files. The complete scanner bundle, including application
+files, goes to the radio host at `/home/pi/n0jcg-scanner`.
 
 ## Verify
 
 1. Confirm the radio API status endpoint returns JSON.
 2. Confirm each systemd service is active and owns only its assigned serial.
-3. Open the ROC product route and press **Start Scanning + Audio**.
+3. Open the direct Pi scanner URL and press **Start Scanning + Audio**.
 4. Confirm P25, VHF, and UHF statuses enter scanning state.
 5. Attach a second browser with **Listen** and verify both clients receive clean
    audio without restarting scanner services.

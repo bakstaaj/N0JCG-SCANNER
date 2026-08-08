@@ -312,16 +312,16 @@ Main services:
 Install or refresh the analog/audio runtime units from the analog root:
 
 ```bash
-cd /home/pi/PI-SCANNER
+cd /home/pi/n0jcg-scanner
 sudo ./tools/install_audio_runtime_units.sh
 ```
 
 ## 9. Start PI Scanner and open the web application
 
-The production installation uses two hosts. The radio Pi at
-`<RADIO_HOST>` runs the backend, audio infrastructure, OP25, and analog
-workers. The N0JCG ROC at `<ROC_HOST>:8095` serves the scanner at
-`/pi-scanner/` and forwards its API and audio requests to the radio Pi.
+The production installation uses two hosts. The radio Pi at `<RADIO_HOST>`
+runs the complete scanner application: web UI, backend, audio infrastructure,
+OP25, and analog workers. The N0JCG ROC at `<ROC_HOST>:8095` remains the
+platform dashboard and links directly to the Pi scanner on port `8070`.
 
 On the radio Pi, enable the radio API and audio infrastructure at boot while
 keeping the receiver workers out of the boot target:
@@ -334,22 +334,22 @@ sudo systemctl disable --now pi-scanner-vhf-worker.service
 sudo systemctl disable --now pi-scanner-uhf-worker.service
 ```
 
-On the ROC, the existing `n0jcg-roc.service` owns the dashboard and scanner
-mount. PI-SCANNER does not install a second ROC web service.
+On the ROC, the existing `n0jcg-roc.service` owns only the dashboard. It does
+not host or proxy scanner assets.
 
 Open this address from a device on the same network:
 
 ```text
-http://<ROC_HOST>:8095/pi-scanner/
+http://<RADIO_HOST>:8070/
 ```
 
-The ROC and radio Pi should both have DHCP reservations. Direct access to
-`http://<RADIO_HOST>:8070` is reserved for radio-node maintenance.
+The ROC and radio Pi should both have DHCP reservations. The direct Pi URL is
+the normal scanner operator URL.
 
 For the separate compact phone dashboard, open:
 
 ```text
-http://<ROC_HOST>:8095/pi-scanner/mobile.html
+http://<RADIO_HOST>:8070/mobile.html
 ```
 
 Supported phone browsers are redirected to this page automatically when they
@@ -381,7 +381,7 @@ as failed and the application returns the other scanners to the stopped state.
 - **Scanning:** the system is ready and looking for activity.
 - **P25/VHF/UHF ON AIR:** the audio arbitrator is currently forwarding that
   source.
-- **Connected:** the browser can reach the ROC and the proxied radio API.
+- **Connected:** the browser can reach the Pi scanner API and audio services.
 - **Offline:** check the ROC application service, then its connection to the
   radio Pi.
 
@@ -824,9 +824,10 @@ Use this checklist after initial setup, a power cycle, or a major update:
 - [ ] Immediately after boot, the backend, audio bridge, and audio pool are
       active, while P25, VHF, and UHF scanning are stopped.
 - [ ] VHF and UHF worker services are not enabled for boot.
-- [ ] ROC `<ROC_HOST>:8095/pi-scanner/` loads the scanner and shows **Connected**.
+- [ ] ROC `<ROC_HOST>:8095/` shows an **Open Scanner** link to
+      `http://<RADIO_HOST>:8070/`.
 - [ ] ROC root `<ROC_HOST>:8095/` still loads the main dashboard.
-- [ ] ROC `/pi-scanner/api/status` matches the radio Pi scanner state.
+- [ ] Radio Pi `<RADIO_HOST>:8070/api/status` returns the scanner state.
 - [ ] Radio host `<RADIO_HOST>:8072/api/audio/status` reports `"ok": true`.
 - [ ] `./tools/validate_split_runtime.sh` reports `FINAL=PASS`.
 - [ ] **Start Scanning + Audio** starts P25, VHF, and UHF and connects browser

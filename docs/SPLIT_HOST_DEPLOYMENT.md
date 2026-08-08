@@ -1,29 +1,26 @@
-# Split-host deployment
+# Pi-host scanner deployment
 
 ## Hosts and public URL
 
 | Role | Address | Runtime responsibility |
 |---|---|---|
-| Existing N0JCG ROC | `<ROC_HOST>:8095` | ROC dashboard, PI Scanner web mount, API/audio proxy |
-| Radio Pi | `<RADIO_HOST>` | RTL radios, OP25, FFT scanners, radio API, audio fanout |
+| Existing N0JCG ROC | `<ROC_HOST>:8095` | ROC dashboard and direct Scanner link |
+| Radio Pi | `<RADIO_HOST>:8070` | Complete scanner UI, RTL radios, OP25, FFT scanners, API, audio |
 
 Open PI Scanner at:
 
 ```text
-http://<ROC_HOST>:8095/n0jcg-scanner/
+http://<RADIO_HOST>:8070/
 ```
 
-The ROC root dashboard remains at `http://<ROC_HOST>:8095/`.
+The ROC root dashboard remains at `http://<ROC_HOST>:8095/` and its **Open
+Scanner** action links directly to the Pi.
 
-## Existing ROC routes
+## Runtime ownership
 
-The `N0JCG-ROC` server already provides the required boundary:
-
-- `/n0jcg-scanner/` serves `N0JCG-ROC/web/pi-scanner/`;
-- `/n0jcg-scanner/api/*` proxies to `<RADIO_HOST>:8070`;
-- `/n0jcg-scanner/audio-api/*` proxies to `<RADIO_HOST>:8072`.
-
-PI-SCANNER does not install or operate a second web service on the ROC.
+The Pi backend serves `web/` from `/home/pi/n0jcg-scanner` on port `8070`.
+The browser uses same-origin API and audio paths. The ROC does not mirror or
+proxy scanner files and may remain online independently of scanner operation.
 
 ## Local `.env`
 
@@ -48,24 +45,14 @@ Keep `.env` ignored and never commit it.
 ./tools/deploy_radio_to_pi.sh --dry-run
 ```
 
-## Deploy scanner web assets to the ROC
-
-```bash
-./tools/deploy_application_to_roc.sh --deploy --yes
-```
-
-This maps this repository's `web/` directory into
-`N0JCG-ROC/web/pi-scanner/`, backs up the previous scanner bundle under the ROC
-runtime backup directory, and verifies all files by SHA-256. Static updates do
-not require a ROC service restart. Use `--restart` only when explicitly needed.
-
-## Deploy radio code to the Pi
+## Deploy the complete scanner to the Pi
 
 ```bash
 ./tools/deploy_radio_to_pi.sh --deploy --yes
 ```
 
-This updates radio-owned files without interrupting reception. When a change
+This updates web, API, configuration, workers, and systemd files under
+`/home/pi/n0jcg-scanner`, preserving a timestamped remote backup. When a change
 requires processes to reload:
 
 ```bash
@@ -81,15 +68,13 @@ VHF/UHF, so scanners that were stopped remain stopped.
 ./tools/validate_split_runtime.sh
 ```
 
-The validator checks the ROC dashboard, the mounted PI Scanner web bundle,
-ROC-proxied scanner and audio status, and both direct radio Pi endpoints. Its
-final line is `FINAL=PASS` only when the complete boundary is healthy.
+The validator checks the ROC dashboard link, the direct Pi web application,
+radio API, and audio fanout. Its final line is `FINAL=PASS` only when the
+complete boundary is healthy.
 
 ## Deployment rule
 
-- Browser/UI change: deploy `web/` to the ROC scanner mount only.
-- RTL, OP25, FFT, audio, scanner service, or radio configuration change:
-  deploy the radio manifest to `.137` only.
-- API contract change: update and test both sides in a compatible order.
-- ROC dashboard/server change: make it in the separate `N0JCG-ROC` repository.
+- Any scanner UI, API, RTL, OP25, FFT, audio, scanner service, or radio
+  configuration change: deploy the complete radio manifest to `.137`.
+- ROC dashboard/server changes remain in the separate `N0JCG-ROC` repository.
 - Documentation/test-only change: no runtime deployment.

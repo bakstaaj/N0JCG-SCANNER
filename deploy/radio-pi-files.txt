@@ -3,4 +3,5 @@ config
 src
 systemd
 tools
+web
 requirements.txt

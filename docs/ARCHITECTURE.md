@@ -5,7 +5,7 @@
 | Product | N0JCG Scanner |
 | Slug | scanner-architecture-guide |
 | Type | Architecture guide |
-| Version | 3.0.0 |
+| Version | 4.1.0 |
 | Status | Preview |
 | Last updated | 2026-08-07 |
 | Audience | Developers, integrators, and administrators |
@@ -17,16 +17,16 @@
 ## Production topology
 
 ```text
+ROC dashboard — <ROC_HOST>:8095
+  Open Scanner -> http://<RADIO_HOST>:8070/
+          |
+          v
 Desktop / phone browsers
           |
-          | http://<ROC_HOST>:8095/n0jcg-scanner/
-          v
-Existing N0JCG ROC application — <ROC_HOST>:8095
-  /n0jcg-scanner/              -> static PI-SCANNER web assets
-  /n0jcg-scanner/api/*         -> radio Pi :8070/api/*
-  /n0jcg-scanner/audio-api/*   -> radio Pi :8072/*
+          | http://<RADIO_HOST>:8070/
           v
 Radio Pi — <RADIO_HOST>
+  backend.py serves the complete web application on :8070
   backend.py / OP25 / radio API
   P25 audio pool and audio arbitrator
   VHF FFT scanner and UHF FFT scanner
@@ -39,10 +39,9 @@ Radio Pi backend -- HTTPS --> www.n0jcg.com licensing service
 
 ## Ownership boundary
 
-The existing `N0JCG-ROC` application owns the browser-facing server and
-navigation dashboard. This repository supplies only the scanner web bundle
-installed under its `web/pi-scanner/` directory. It does not install a second
-ROC web service.
+The `N0JCG-ROC` application owns only the platform dashboard. Its Scanner card
+is a direct link to the radio Pi; it does not host, proxy, or duplicate scanner
+web assets.
 
 The radio Pi owns every hardware or real-time function:
 
@@ -53,8 +52,9 @@ The radio Pi owns every hardware or real-time function:
 - audio pooling, arbitration, and fanout;
 - runtime radio configuration and EEPROM-serial role mapping.
 
-The radio Pi remains authoritative for scanner state and configuration. The
-ROC proxy forwards requests; it does not duplicate radio state.
+The radio Pi is authoritative for scanner state, configuration, browser assets,
+and audio. Browser API and audio requests stay same-origin on port `8070` (with
+the audio bridge kept internal to the Pi).
 
 The radio backend also owns licensing. It derives a stable, product-neutral
 installation S/N, submits activation and refresh requests over HTTPS, and
@@ -66,26 +66,20 @@ radio-control behavior.
 
 ## Browser contract
 
-The frontend detects whether it is mounted below `/n0jcg-scanner/`:
-
-- local/direct maintenance `/api/*` remains `/api/*`;
-- ROC-mounted `/api/*` becomes `/n0jcg-scanner/api/*`;
-- local/direct `/radio/*` remains `/radio/*`;
-- ROC-mounted `/radio/*` becomes `/n0jcg-scanner/audio-api/*`.
-
-Stylesheets, scripts, phone navigation, and the desktop override use relative
-paths so both `/` and `/n0jcg-scanner/` are supported by the same source files.
+The frontend is served directly from the Pi root. Relative assets and same-origin
+`/api/*` and `/radio/*` requests are the production contract; the former ROC
+subpath is no longer a supported scanner runtime.
 
 ## Repository/deployment boundary
 
 | Repository area | Owner | Deployment destination |
 |---|---|---|
-| `web/` | ROC `.114` | `N0JCG-ROC/web/pi-scanner/` |
-| `config/`, `src/`, `systemd/`, `tools/` | radio Pi `.137` | `/home/pi/n0jcg-scanner/` |
+| `web/`, `config/`, `src/`, `systemd/`, `tools/` | radio Pi `.137` | `/home/pi/n0jcg-scanner/` |
+| ROC dashboard link | ROC `.114` | direct `http://<RADIO_HOST>:8070/` |
 | `docs/`, `tests/`, `deploy/` | development/GitHub | not copied to runtime |
 
-An API contract change must remain compatible with the existing ROC proxy.
-Deploy radio-side support first when needed, followed by the ROC web bundle.
+Deploy the complete Pi bundle together. ROC changes are limited to dashboard
+link/settings changes and do not carry scanner runtime files.
 
 ## Radio model
 

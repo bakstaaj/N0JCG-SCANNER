@@ -125,7 +125,7 @@ mkdir -p "$repo" "$backup"
 if [ "$role" = roc ]; then
   entries="web/pi-scanner"
 else
-  entries="config src systemd tools requirements.txt"
+  entries="config src systemd tools web requirements.txt"
   if [ "$repo" = /home/pi/n0jcg-scanner ]; then
     # Preserve the separate legacy P25 and analog runtime stores while
     # consolidating both services under the canonical application root.

@@ -25,16 +25,22 @@ check_json() {
 }
 
 check_json "ROC dashboard health" "http://$roc_host:8095/api/health"
-check_json "ROC proxied radio status" "http://$roc_host:8095/pi-scanner/api/status"
-check_json "ROC proxied audio status" "http://$roc_host:8095/pi-scanner/audio-api/api/audio/status"
 check_json "radio Pi API" "http://$radio_host:8070/api/status"
 check_json "radio Pi audio fanout" "http://$radio_host:8072/api/audio/status"
 
-if scanner_page="$(curl -fsS --connect-timeout 3 --max-time 10 "http://$roc_host:8095/pi-scanner/")" \
-  && grep -q '3.0.1-roc-subpath' <<<"$scanner_page"; then
-  printf 'PASS: ROC PI Scanner web assets\n'
+if scanner_page="$(curl -fsS --connect-timeout 3 --max-time 10 "http://$radio_host:8070/")" \
+  && grep -q 'N0JCG Scanner' <<<"$scanner_page"; then
+  printf 'PASS: radio Pi scanner web application\n'
 else
-  printf 'FAIL: ROC PI Scanner web assets\n' >&2
+  printf 'FAIL: radio Pi scanner web application\n' >&2
+  failures=$((failures + 1))
+fi
+
+if roc_page="$(curl -fsS --connect-timeout 3 --max-time 10 "http://$roc_host:8095/")" \
+  && grep -q '192.168.68.137' <<<"$roc_page"; then
+  printf 'PASS: ROC dashboard links to radio Pi\n'
+else
+  printf 'FAIL: ROC dashboard radio Pi link\n' >&2
   failures=$((failures + 1))
 fi
 

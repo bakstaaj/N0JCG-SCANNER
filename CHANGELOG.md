@@ -5,6 +5,10 @@ notes are available in [`docs/releases/`](docs/releases/).
 
 ## Unreleased
 
+- Returned scanner runtime ownership to the Pi: the Pi now serves the complete
+  web application, API, radio workers, and audio while the ROC provides a
+  direct link to `http://<RADIO_HOST>:8070/`.
+
 ## 4.0.0 - 2026-08-07
 
 - Added reusable phone-home license activation using a stable installation S/N,

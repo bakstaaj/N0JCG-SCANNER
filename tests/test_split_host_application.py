@@ -45,7 +45,7 @@ def test_radio_backend_retains_direct_maintenance_audio_route() -> None:
     )
 
 
-def test_deployment_manifests_keep_host_ownership_separate() -> None:
+def test_deployment_manifests_put_complete_scanner_on_radio_pi() -> None:
     roc = (ROOT / "deploy" / "roc-files.txt").read_text(encoding="utf-8")
     radio = (ROOT / "deploy" / "radio-pi-files.txt").read_text(encoding="utf-8")
 
@@ -54,4 +54,4 @@ def test_deployment_manifests_keep_host_ownership_separate() -> None:
     assert "src" not in roc
     assert "src" in radio
     assert "config" in radio
-    assert "web" not in radio
+    assert "web" in radio

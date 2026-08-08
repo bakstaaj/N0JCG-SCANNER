@@ -78,22 +78,19 @@ runtime/                Ignored local settings, state, logs, and backups
 
 ## Deployment model
 
-The application has two explicit deployment roles:
-
-1. The **application host** serves the desktop/mobile interface beneath the ROC
-   product route and proxies radio API/audio requests.
-2. The **radio host** owns the RTL-SDR devices, OP25, analog scanner workers,
-   radio API, and PCM fanout.
+The radio Pi at `<RADIO_HOST>` owns the complete scanner application:
+desktop/mobile web UI, radio API, RTL-SDR devices, OP25, analog scanner
+workers, and PCM fanout. The ROC at `<ROC_HOST>:8095` remains the platform
+dashboard and provides a direct link to the Pi application at port `8070`.
 
 Deployment commands default to a non-mutating dry run:
 
 ```bash
-./tools/deploy_application_to_roc.sh
 ./tools/deploy_radio_to_pi.sh
 ```
 
 See the [Administrator Guide](docs/ADMINISTRATOR_GUIDE.md) and
-[split-host deployment reference](docs/SPLIT_HOST_DEPLOYMENT.md) before using a
+[Pi-host deployment reference](docs/SPLIT_HOST_DEPLOYMENT.md) before using a
 mutating deployment option.
 
 ## Project status and support boundary
