@@ -23,29 +23,23 @@ function validReturnTarget(value) {
   }
 }
 function configureReturnLink() {
-  const link = document.querySelector('[data-return-link]');
+  const link = document.querySelector('#returnButton');
   if (!link) return;
-  let target = null;
+  let target = validReturnTarget(document.referrer);
   try {
     const stored = window.sessionStorage.getItem(RETURN_TARGET_STORAGE_KEY);
-    target = validReturnTarget(stored);
+    if (!target) target = validReturnTarget(stored);
     if (!target && stored) window.sessionStorage.removeItem(RETURN_TARGET_STORAGE_KEY);
   } catch (_) { /* unavailable */ }
-  if (!target) target = validReturnTarget(document.referrer);
   if (target) {
-    link.dataset.returnTarget = target;
+    link.href = target;
     link.setAttribute('aria-label', 'Return to previous application');
     link.title = 'Return to previous application';
     return;
   }
   link.addEventListener('click', (event) => {
     event.preventDefault();
-    const destination = link.dataset.returnTarget;
-    if (destination) {
-      window.location.assign(destination);
-    } else if (window.history.length > 1) {
-      window.history.back();
-    }
+    if (window.history.length > 1) window.history.back();
   });
 }
 function p25ApplicationUrl(value) {
