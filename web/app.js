@@ -33,14 +33,17 @@ function configureReturnLink() {
   } catch (_) { /* unavailable */ }
   if (!target) target = validReturnTarget(document.referrer);
   if (target) {
-    link.href = target;
+    link.dataset.returnTarget = target;
     link.setAttribute('aria-label', 'Return to previous application');
     link.title = 'Return to previous application';
     return;
   }
   link.addEventListener('click', (event) => {
-    if (window.history.length > 1) {
-      event.preventDefault();
+    event.preventDefault();
+    const destination = link.dataset.returnTarget;
+    if (destination) {
+      window.location.assign(destination);
+    } else if (window.history.length > 1) {
       window.history.back();
     }
   });
