@@ -902,6 +902,10 @@ pre {
     scroll-behavior: auto !important;
   }
 }
-:where(#registrationBadge.registration-hidden) {
+:where(#registrationBadge) {
   display: none !important;
+}
+
+:where(#registrationBadge.registration-visible) {
+  display: inline-flex !important;
 }

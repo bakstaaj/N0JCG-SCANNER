@@ -37,7 +37,7 @@ def test_html_assets_and_navigation_are_subpath_safe() -> None:
     assert 'href="mobile.css?' in mobile
     assert 'src="mobile.js?' in mobile
     assert 'href="./?desktop=1"' in mobile
-    assert "2.0.10-hide-registered-badge-preserve-class" in desktop
+    assert "2.0.11-hide-registered-badge-default-hidden" in desktop
     assert "source.origin !== window.location.origin" in desktop
     assert "3.0.1-roc-subpath" in mobile
 

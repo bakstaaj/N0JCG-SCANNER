@@ -154,7 +154,7 @@ function registrationBadge(status) {
   const registration = status?.registration || {};
   const badge = field('registrationBadge');
   if (!badge) return;
-  badge.classList.toggle('registration-hidden', Boolean(registration.registered));
+  badge.classList.toggle('registration-visible', !registration.registered);
   setText('registrationSerial', `S/N ${registration.serial_number || '-'}`);
   setText(
     'registrationStatusText',
