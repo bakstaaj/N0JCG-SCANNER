@@ -25,7 +25,8 @@ function validReturnTarget(value) {
 function configureReturnLink() {
   const link = document.querySelector('#returnButton');
   if (!link) return;
-  let target = validReturnTarget(document.referrer);
+  const source = document.referrer;
+  let target = source && source !== window.location.href ? source : null;
   try {
     const stored = window.sessionStorage.getItem(RETURN_TARGET_STORAGE_KEY);
     if (!target) target = validReturnTarget(stored);
@@ -33,8 +34,14 @@ function configureReturnLink() {
   } catch (_) { /* unavailable */ }
   if (target) {
     link.href = target;
-    link.setAttribute('aria-label', 'Return to previous application');
-    link.title = 'Return to previous application';
+    try {
+      const sourceUrl = new URL(target);
+      link.setAttribute('aria-label', `Return to ${sourceUrl.hostname}`);
+      link.title = `Return to ${sourceUrl.hostname}`;
+    } catch (_) {
+      link.setAttribute('aria-label', 'Return to previous application');
+      link.title = 'Return to previous application';
+    }
     return;
   }
   link.addEventListener('click', (event) => {
@@ -93,7 +100,14 @@ let browserAudioLastEvent = 'Ready';
 
 function field(id) { return document.getElementById(id); }
 function setText(id, value) { const el = field(id); if (el) el.textContent = value ?? '-'; }
-function setBadge(id, text, kind) { const el = field(id); if (!el) return; el.textContent = text; el.className = `pill ${kind || ''}`.trim(); }
+function setBadge(id, text, kind) {
+  const el = field(id);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove('pill', 'ok', 'warn', 'bad');
+  el.classList.add('pill');
+  if (kind) el.classList.add(kind);
+}
 function formatHz(value) { return value ? `${(Number(value) / 1000000).toFixed(6)} MHz` : '-'; }
 function formatList(values) { return Array.isArray(values) && values.length ? values.join('\n') : '-'; }
 function commandText(command) { return Array.isArray(command) ? command.join(' ') : (typeof command === 'string' ? command : ''); }
