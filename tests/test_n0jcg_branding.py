@@ -13,7 +13,7 @@ def test_desktop_uses_approved_n0jcg_product_lockup() -> None:
     assert '<strong class="product-name">Scanner</strong>' in html
     assert 'href="n0jcg-brand.css?v=3.1.1"' in html
     assert 'class="return-icon"' in html
-    assert 'aria-label="Return to ROC dashboard"' in html
+    assert 'aria-label="Return to previous application"' in html
     assert "&#8592;" not in html
 
 

@@ -7,7 +7,7 @@ def test_audio_tile_reports_live_arbitrator_state() -> None:
 
     assert "Audio Arbitrator" in html
     assert 'id="browserAudioLastEvent">Checking' in html
-    assert "2.0.3-audio-arbitrator-status" in html
+    assert "audio_arbitrator_live.js?v=" in html
 
     assert "renderAudioArbitratorStatus" in app
     assert "audioStatus?.playback_started" in app

@@ -10,4 +10,4 @@ def test_same_origin_control_override() -> None:
     assert "fetchJson('/api/analog/controls')" in app
     assert "stopImmediatePropagation" in app
     assert "chooseActiveRole" in app
-    assert "2.0.3-audio-arbitrator-status" in html
+    assert "audio_arbitrator_live.js?v=" in html
