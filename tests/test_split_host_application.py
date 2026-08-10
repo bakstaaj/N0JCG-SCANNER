@@ -36,6 +36,7 @@ def test_html_assets_and_navigation_are_subpath_safe() -> None:
     assert "`${base}/mobile.html`" in desktop
     assert 'href="mobile.css?' in mobile
     assert 'src="mobile.js?' in mobile
+    assert "n0jcg-brand.css?v=3.1.2-registration-badge" in desktop
     assert 'href="./?desktop=1"' in mobile
     assert "2.0.11-hide-registered-badge-default-hidden" in desktop
     assert "source.origin !== window.location.origin" in desktop
