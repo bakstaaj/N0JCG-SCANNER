@@ -48,6 +48,10 @@ def test_unregistered_installation_defaults_to_five_minutes(tmp_path: Path) -> N
     assert status["trial_limit_seconds"] == 300
 
 
+def test_scanner_backend_uses_worker_contract_version() -> None:
+    assert backend.APP_VERSION == "3.1.0"
+
+
 class FakeHttpResponse:
     def __init__(self, payload: dict) -> None:
         self.payload = payload
