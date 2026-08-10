@@ -902,3 +902,6 @@ pre {
     scroll-behavior: auto !important;
   }
 }
+:where(#registrationBadge.registration-hidden) {
+  display: none !important;
+}
