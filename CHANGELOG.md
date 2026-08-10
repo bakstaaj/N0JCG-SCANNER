@@ -9,6 +9,13 @@ notes are available in [`docs/releases/`](docs/releases/).
   web application, API, radio workers, and audio while the ROC provides a
   direct link to `http://<RADIO_HOST>:8070/`.
 
+## 4.1.0 - 2026-08-10
+
+- Published the recombined Pi-only scanner runtime and deployment package.
+- Corrected licensing activation, browser navigation, registration-badge
+  visibility, and production asset cache invalidation.
+- Refreshed the release documentation and verification evidence.
+
 ## 4.0.0 - 2026-08-07
 
 - Added reusable phone-home license activation using a stable installation S/N,
