@@ -229,7 +229,11 @@ class LicenseClient:
         request = urllib.request.Request(
             self.api_url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": f"N0JCG-Scanner/{self.app_version}",
+            },
             method="POST",
         )
         try:

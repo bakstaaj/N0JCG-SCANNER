@@ -81,6 +81,7 @@ def test_phone_home_activation_verifies_and_caches_signed_lease(
     def opener(request, timeout):
         assert timeout == 10
         submitted = json.loads(request.data.decode("utf-8"))
+        assert request.get_header("User-agent") == "N0JCG-Scanner/3.1.0"
         lease = {
             "version": 1,
             "key_id": "test-key",
