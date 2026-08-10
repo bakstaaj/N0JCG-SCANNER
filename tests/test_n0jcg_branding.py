@@ -11,7 +11,7 @@ def test_desktop_uses_approved_n0jcg_product_lockup() -> None:
     assert 'alt="N0JCG Open Radio Platform"' in html
     assert "assets/brand/N0JCG_Header_Dark_Approved.png" in html
     assert '<strong class="product-name">Scanner</strong>' in html
-    assert 'href="n0jcg-brand.css?v=3.1.1"' in html
+    assert 'href="n0jcg-brand.css?v=3.1.2-registration-badge"' in html
     assert 'class="return-icon"' in html
     assert 'aria-label="Return to previous application"' in html
     assert "&#8592;" not in html
