@@ -5,16 +5,16 @@
 | Product | N0JCG Scanner |
 | Slug | scanner-user-guide |
 | Type | User guide |
-| Version | 3.0.0 |
-| Status | Preview |
-| Last updated | 2026-08-07 |
+| Version | 4.1.0 |
+| Status | Current |
+| Last updated | 2026-08-10 |
 | Audience | Scanner operators and installers |
 | Prerequisites | N0JCG Scanner hardware and network access |
 | Estimated time | 45 minutes for setup; 5 minutes for daily operation |
 | Related | [Product page](https://www.n0jcg.com/products/scanner/), [Hardware Guide](HARDWARE_GUIDE.md) |
 | Owner | N0JCG |
 
-This manual covers the N0JCG Scanner v3.0.0 production layout: P25 trunked radio,
+This manual covers the N0JCG Scanner v4.1.0 production layout: P25 trunked radio,
 FFT-directed VHF and UHF analog scanning, unified browser audio, radio profiles,
 and four dedicated RTL-SDR receiver assignments. It is written for both initial
 installation and normal daily operation.
@@ -130,7 +130,7 @@ Use the guarded project probes and installer workflow rather than guessing an
 OP25 command:
 
 ```bash
-cd /home/pi/PI-P25-SCANNER
+cd /home/pi/n0jcg-scanner
 ./tools/pi5_p25_op25_install_probe.sh
 ./tools/pi5_p25_op25_postinstall_probe.sh
 ./tools/pi5_p25_op25_live_command_probe.sh --dry-run
@@ -233,7 +233,7 @@ only the printed serial is persistent.
 From the P25 application directory, preview the role map:
 
 ```bash
-cd /home/pi/PI-P25-SCANNER
+cd /home/pi/n0jcg-scanner
 ./tools/pi5_apply_receiver_serial_map.sh --dry-run
 ```
 
@@ -246,7 +246,7 @@ Apply it after verifying the table:
 The tool validates uniqueness, backs up an existing registry, and writes:
 
 ```text
-/home/pi/PI-P25-SCANNER/runtime/settings/receiver_roles.json
+/home/pi/n0jcg-scanner/runtime/settings/receiver_roles.json
 ```
 
 ### 7.2 Verify the application inventory
@@ -268,7 +268,7 @@ by other applications; those devices are outside the scope of this manual.
 The analog runtime configuration is separate from the inventory registry:
 
 ```text
-/home/pi/PI-SCANNER/runtime/settings/analog_receivers.json
+/home/pi/n0jcg-scanner/runtime/settings/analog_receivers.json
 ```
 
 Check it through the application API:
@@ -289,12 +289,11 @@ Confirm:
 
 ## 8. Application files and services
 
-The validated Pi layout uses two application roots:
+The validated Pi layout uses one application root:
 
 | Path | Purpose |
 |---|---|
-| `/home/pi/PI-P25-SCANNER` | Web UI, backend, P25 configuration, profiles, receiver registry, and audio arbitrator |
-| `/home/pi/PI-SCANNER` | VHF/UHF workers, analog configuration, controls, status, and captured last-call diagnostics |
+| `/home/pi/n0jcg-scanner` | Complete web UI, backend, P25 and analog configuration, profiles, receiver registry, workers, audio arbitrator, controls, and runtime diagnostics |
 
 Runtime settings are intentionally not committed to Git. Back them up before
 replacing an SD card or performing a major upgrade.
@@ -309,7 +308,7 @@ Main services:
 | `pi-scanner-vhf-worker.service` | On-demand VHF FFT scanner using `<VHF_SERIAL>`; started and stopped by the dashboard |
 | `pi-scanner-uhf-worker.service` | On-demand UHF FFT scanner using `<UHF_SERIAL>`; started and stopped by the dashboard |
 
-Install or refresh the analog/audio runtime units from the analog root:
+Install or refresh the complete audio/runtime units from the application root:
 
 ```bash
 cd /home/pi/n0jcg-scanner
@@ -318,10 +317,10 @@ sudo ./tools/install_audio_runtime_units.sh
 
 ## 9. Start PI Scanner and open the web application
 
-The production installation uses two hosts. The radio Pi at `<RADIO_HOST>`
-runs the complete scanner application: web UI, backend, audio infrastructure,
-OP25, and analog workers. The N0JCG ROC at `<ROC_HOST>:8095` remains the
-platform dashboard and links directly to the Pi scanner on port `8070`.
+The radio Pi at `<RADIO_HOST>` runs the complete scanner application: web UI,
+backend, audio infrastructure, OP25, and analog workers. The N0JCG ROC at
+`<ROC_HOST>:8095` remains a separate platform dashboard and provides a direct
+link to the Pi scanner on port `8070`; it does not host or proxy scanner files.
 
 On the radio Pi, enable the radio API and audio infrastructure at boot while
 keeping the receiver workers out of the boot target:
@@ -382,8 +381,8 @@ as failed and the application returns the other scanners to the stopped state.
 - **P25/VHF/UHF ON AIR:** the audio arbitrator is currently forwarding that
   source.
 - **Connected:** the browser can reach the Pi scanner API and audio services.
-- **Offline:** check the ROC application service, then its connection to the
-  radio Pi.
+- **Offline:** check the Pi scanner service and the network path to the radio
+  Pi. The ROC dashboard is not required for direct Pi operation.
 
 ### Main controls
 
@@ -443,7 +442,7 @@ stuck but should remain eligible for future calls.
 Control state is stored atomically at:
 
 ```text
-/home/pi/PI-SCANNER/runtime/settings/analog_controls.json
+/home/pi/n0jcg-scanner/runtime/settings/analog_controls.json
 ```
 
 ## 12. Manage radio profiles
@@ -608,8 +607,7 @@ Interpret the results according to the dashboard state:
 At minimum, preserve:
 
 ```text
-/home/pi/PI-P25-SCANNER/runtime/settings/
-/home/pi/PI-SCANNER/runtime/settings/
+/home/pi/n0jcg-scanner/runtime/settings/
 ```
 
 Example:
@@ -617,14 +615,12 @@ Example:
 ```bash
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "/home/pi/scanner-backups/$stamp"
-cp -a /home/pi/PI-P25-SCANNER/runtime/settings \
-  "/home/pi/scanner-backups/$stamp/p25-settings"
-cp -a /home/pi/PI-SCANNER/runtime/settings \
-  "/home/pi/scanner-backups/$stamp/analog-settings"
+cp -a /home/pi/n0jcg-scanner/runtime/settings \
+  "/home/pi/scanner-backups/$stamp/settings"
 ```
 
-Named profiles are under the P25 runtime settings directory. Analog channel
-lists, skips, and blocks are under the analog runtime settings directory.
+Named profiles, P25 settings, analog channel lists, skips, and blocks are all
+under the application runtime settings directory.
 
 ### Restart after maintenance
 
@@ -771,16 +767,16 @@ frequency.
 
 | File | Purpose |
 |---|---|
-| `/home/pi/PI-P25-SCANNER/runtime/settings/p25_systems.json` | Active P25 system and talkgroups |
-| `/home/pi/PI-P25-SCANNER/runtime/settings/receiver_roles.json` | Stable PI Scanner receiver registry |
-| `/home/pi/PI-P25-SCANNER/runtime/settings/configs/` | Named radio profiles |
-| `/home/pi/PI-P25-SCANNER/runtime/settings/runtime_activity.json` | Persistent P25 Voice Calls total |
-| `/home/pi/PI-SCANNER/runtime/settings/analog_receivers.json` | Active VHF/UHF channels and worker settings |
-| `/home/pi/PI-SCANNER/runtime/settings/analog_controls.json` | Analog skips, blocks, and clear-lock requests |
-| `/home/pi/PI-SCANNER/runtime/status/analog_2m.json` | Current VHF worker status |
-| `/home/pi/PI-SCANNER/runtime/status/analog_70cm.json` | Current UHF worker status |
-| `/home/pi/PI-SCANNER/runtime/status/vhf_last_call.wav` | Most recent accepted VHF browser-audio capture |
-| `/home/pi/PI-SCANNER/runtime/status/uhf_last_call.wav` | Most recent accepted UHF browser-audio capture |
+| `/home/pi/n0jcg-scanner/runtime/settings/p25_systems.json` | Active P25 system and talkgroups |
+| `/home/pi/n0jcg-scanner/runtime/settings/receiver_roles.json` | Stable PI Scanner receiver registry |
+| `/home/pi/n0jcg-scanner/runtime/settings/configs/` | Named radio profiles |
+| `/home/pi/n0jcg-scanner/runtime/settings/runtime_activity.json` | Persistent P25 Voice Calls total |
+| `/home/pi/n0jcg-scanner/runtime/settings/analog_receivers.json` | Active VHF/UHF channels and worker settings |
+| `/home/pi/n0jcg-scanner/runtime/settings/analog_controls.json` | Analog skips, blocks, and clear-lock requests |
+| `/home/pi/n0jcg-scanner/runtime/status/analog_2m.json` | Current VHF worker status |
+| `/home/pi/n0jcg-scanner/runtime/status/analog_70cm.json` | Current UHF worker status |
+| `/home/pi/n0jcg-scanner/runtime/status/vhf_last_call.wav` | Most recent accepted VHF browser-audio capture |
+| `/home/pi/n0jcg-scanner/runtime/status/uhf_last_call.wav` | Most recent accepted UHF browser-audio capture |
 
 ### Useful API endpoints
 
@@ -829,7 +825,8 @@ Use this checklist after initial setup, a power cycle, or a major update:
 - [ ] ROC root `<ROC_HOST>:8095/` still loads the main dashboard.
 - [ ] Radio Pi `<RADIO_HOST>:8070/api/status` returns the scanner state.
 - [ ] Radio host `<RADIO_HOST>:8072/api/audio/status` reports `"ok": true`.
-- [ ] `./tools/validate_split_runtime.sh` reports `FINAL=PASS`.
+- [ ] `./tools/validate_split_runtime.sh` reports `FINAL=PASS` when the ROC
+      dashboard is available; direct Pi operation remains valid without ROC.
 - [ ] **Start Scanning + Audio** starts P25, VHF, and UHF and connects browser
       audio.
 - [ ] While scanning, `/api/status` reports P25 `running`, VHF `active`, and UHF

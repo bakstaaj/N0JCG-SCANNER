@@ -289,7 +289,7 @@ def add_running_furniture(section) -> None:
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p.paragraph_format.space_before = Pt(4)
     set_paragraph_border(p, bottom=CYAN, size=6, space=4)
-    left = p.add_run("N0JCG Open Radio Platform  |  N0JCG Scanner v3.0.0        ")
+    left = p.add_run("N0JCG Open Radio Platform  |  N0JCG Scanner v4.1.0        ")
     set_run_font(left, size=8.5, color=MUTED)
     page = p.add_run("Page ")
     set_run_font(page, size=8.5, color=MUTED)
@@ -335,7 +335,7 @@ def add_cover(doc: Document) -> None:
 
     meta = doc.add_table(rows=2, cols=2)
     set_table_geometry(meta, [4680, 4680], indent=0)
-    labels = (("RELEASE", "3.0.0"), ("PUBLICATION", "August 2026"), ("RADIO PATHS", "P25 / VHF / UHF"), ("AUDIENCE", "Operators and maintainers"))
+    labels = (("RELEASE", "4.1.0"), ("PUBLICATION", "August 2026"), ("RADIO PATHS", "P25 / VHF / UHF"), ("AUDIENCE", "Operators and maintainers"))
     for index, (label, value) in enumerate(labels):
         row, col = divmod(index, 2)
         cell = meta.cell(row, col)
