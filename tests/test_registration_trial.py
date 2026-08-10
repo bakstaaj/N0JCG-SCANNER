@@ -11,7 +11,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from n0jcg_licensing.client import LicenseClient, verify_rsa_sha256_signature
+from n0jcg_licensing.client import DEFAULT_API_URL, LicenseClient, verify_rsa_sha256_signature
 from pi_p25_scanner import backend
 from pi_p25_scanner.backend import ScannerManager, ScannerStatus
 from pi_p25_scanner.registration import (
@@ -50,6 +50,16 @@ def test_unregistered_installation_defaults_to_five_minutes(tmp_path: Path) -> N
 
 def test_scanner_backend_uses_worker_contract_version() -> None:
     assert backend.APP_VERSION == "3.1.0"
+
+
+def test_license_client_is_pinned_to_production_worker() -> None:
+    client = LicenseClient(
+        product_slug="scanner",
+        app_version="3.1.0",
+        state_root=Path("/tmp/n0jcg-license-test"),
+        environment={"N0JCG_LICENSE_API_URL": "https://stale.example.invalid"},
+    )
+    assert client.api_url == DEFAULT_API_URL
 
 
 class FakeHttpResponse:

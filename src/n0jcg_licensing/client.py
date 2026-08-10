@@ -136,7 +136,10 @@ class LicenseClient:
         self.app_version = str(app_version).strip()
         self.state_root = Path(state_root)
         self.environment = os.environ if environment is None else environment
-        self.api_url = str(self.environment.get("N0JCG_LICENSE_API_URL", api_url)).strip()
+        # Production licensing is intentionally pinned to the public Worker
+        # endpoint. Do not allow a stale service environment variable to send
+        # activation requests to another path or host.
+        self.api_url = DEFAULT_API_URL
         self.credentials_path = self.state_root / "license_credentials.json"
         self.lease_path = self.state_root / "license_lease.json"
         self._opener = opener
