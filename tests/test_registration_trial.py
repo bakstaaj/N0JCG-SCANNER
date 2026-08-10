@@ -83,7 +83,11 @@ def test_phone_home_activation_verifies_and_caches_signed_lease(
             "expires_at": now + 86400,
             "grace_until": now + 604800,
         }
+        assert submitted["license_serial"] == "N0JCG-SCN-ABCD-EFGH-JKLM-2345"
+        assert submitted["email"] == "user@example.com"
         assert submitted["installation_serial"] == installation
+        assert submitted["product_slug"] == "scanner"
+        assert submitted["app_version"] == "3.1.0"
         return FakeHttpResponse({"valid": True, "lease": lease, "signature": "test"})
 
     client = LicenseClient(
