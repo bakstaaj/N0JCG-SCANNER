@@ -77,6 +77,7 @@ function setBadge(id, label, style) {
 function renderRegistration(registration = {}) {
   const badge = byId('registrationBadge');
   if (!badge) return;
+  badge.hidden = Boolean(registration.registered);
   setText('registrationSerial', registration.serial_number || '-');
   setText(
     'registrationStatusText',
