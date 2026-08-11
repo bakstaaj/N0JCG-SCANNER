@@ -1,6 +1,6 @@
 # P25 Recovery Checkpoint — Confirmed 18081 UI
 
-This checkpoint restores the PI-P25-SCANNER source to the exact state selected
+This checkpoint restores the scanner source to the exact state selected
 through the isolated static UI review at:
 
 `http://127.0.0.1:18081/`
@@ -10,7 +10,7 @@ through the isolated static UI review at:
 - Source repository: `bakstaaj/PI-SCANNER`
 - Source commit: `559b05d0610fc09ec7cb2683d7e72c30067e77ab`
 - Source commit subject: `Add Phase 2 receiver inventory foundation`
-- Destination repository: `bakstaaj/PI-P25-SCANNER`
+- Destination repository: `bakstaaj/scanner`
 
 ## Raspberry Pi validation
 
@@ -18,7 +18,7 @@ Validated on July 22, 2026 against:
 
 - Host: `PI-SDR`
 - LAN address: `192.168.68.137`
-- Active application path: `/home/pi/PI-P25-SCANNER`
+- Active application path: `/home/pi/n0jcg-scanner`
 - Backend/UI port: `8070`
 - Raw browser-audio port: `8072`
 - OP25 audio UDP destination: `127.0.0.1:23456`

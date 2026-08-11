@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bounded backend live-launch validation for PI-P25-SCANNER.
+# Bounded backend live-launch validation for scanner.
 # Runs the backend on loopback, calls /api/scanner/start, verifies OP25 is running,
 # then calls /api/scanner/stop. Requires a validated OP25 marker.
 set -Eeuo pipefail
@@ -29,12 +29,12 @@ trap cleanup EXIT
 
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER backend live-launch probe ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner backend live-launch probe ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "tools" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi

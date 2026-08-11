@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scalable PI-P25-SCANNER OP25 multi_rx launcher.
+"""Scalable scanner OP25 multi_rx launcher.
 
 This program intentionally accepts the established rx.py command-line shape so
 the validated backend marker can point at it without changing the confirmed
@@ -246,6 +246,7 @@ def build_multi_rx_config(
     control_demod_type: str,
     voice_demod_type: str,
     voice_sample_rate: int,
+    control_center_hz: int,
     voice_center_hz: int,
     terminal_type: str,
     crypt_behavior: int,
@@ -275,7 +276,7 @@ def build_multi_rx_config(
             else voice_demod_type
         )
         receiver_sample_rate = sample_rate if role == "control" else voice_sample_rate
-        receiver_center_hz = initial_frequency if role == "control" else voice_center_hz
+        receiver_center_hz = control_center_hz if role == "control" else voice_center_hz
         device_name = f"rtl_{serial}"
         audio_port = serial_audio_port(serial, audio_base_port, audio_port_count)
         devices.append(
@@ -404,7 +405,7 @@ def sha256_file(path: Path) -> str:
 
 def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(
-        description="PI-P25-SCANNER rx.py-compatible scalable multi_rx launcher",
+        description="scanner rx.py-compatible scalable multi_rx launcher",
         allow_abbrev=False,
     )
     parser.add_argument("--args", dest="device_args", default="rtl=00000251")
@@ -435,6 +436,7 @@ def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[
     parser.add_argument("--audio-port-count", type=int, default=None)
     parser.add_argument("--connected-serial", action="append", default=[])
     parser.add_argument("--multi-rx-dry-run", action="store_true")
+    parser.add_argument("--require-multi-rx", action="store_true")
     return parser.parse_known_args(argv)
 
 
@@ -502,8 +504,15 @@ def main(argv: list[str] | None = None) -> int:
         or marker.get("P25_VOICE_CENTER_HZ", "")
         or "0"
     )
+    control_center_hz = int(
+        os.environ.get("P25_CONTROL_CENTER_HZ", "")
+        or marker.get("P25_CONTROL_CENTER_HZ", "")
+        or "0"
+    )
     if not 250_000 <= voice_sample_rate <= 3_200_000:
         raise MultiRxConfigError("P25_VOICE_SAMPLE_RATE must be 250000..3200000")
+    if control_center_hz <= 0:
+        control_center_hz = int(select_system(load_json_object(manifest_path, "OP25 manifest"))["control_channels_hz"][0])
 
     excluded_control_channels_hz = parse_frequency_hz_list(
         os.environ.get("P25_CONTROL_CHANNEL_EXCLUDE_HZ", "")
@@ -597,6 +606,8 @@ def main(argv: list[str] | None = None) -> int:
         }
         atomic_write_json(state_output, state)
         print(json.dumps(state, indent=2, sort_keys=True), flush=True)
+        if args.require_multi_rx:
+            raise MultiRxConfigError("required multi-rx unavailable: " + "; ".join(fallback_reasons))
         if args.multi_rx_dry_run:
             return 0
         if not single_rx_app.exists():
@@ -647,6 +658,7 @@ def main(argv: list[str] | None = None) -> int:
         control_demod_type=control_demod_type,
         voice_demod_type=voice_demod_type,
         voice_sample_rate=voice_sample_rate,
+        control_center_hz=control_center_hz,
         voice_center_hz=voice_center_hz,
         terminal_type=terminal_type,
         crypt_behavior=int(args.crypt_behavior),

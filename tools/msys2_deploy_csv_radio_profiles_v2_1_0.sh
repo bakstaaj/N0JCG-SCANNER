@@ -14,7 +14,7 @@ set +a
 : "${PI_USER:?missing PI_USER}"
 : "${PI_HOST:?missing PI_HOST}"
 : "${PI_PASSWORD:?missing PI_PASSWORD}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 
 files=(
   src/pi_p25_scanner/analog_channels.py

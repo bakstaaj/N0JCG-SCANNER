@@ -87,7 +87,7 @@ The runtime channel file is checked between sweeps, so a successful channel
 upload becomes active without restarting the worker.
 
 The P25 web backend runs from a separate checkout on the deployed Pi. Its
-`PI_SCANNER_ANALOG_ROOT=/home/pi/PI-SCANNER` service environment is honored by
+`PI_SCANNER_ANALOG_ROOT=/home/pi/n0jcg-scanner` service environment is honored by
 the channel-import module, ensuring `/api/analog/channels` and CSV uploads use
 the same runtime configuration as this UHF worker. The runtime-unit installer
 updates that small backend module along with the analog services.

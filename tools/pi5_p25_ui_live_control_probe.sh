@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bounded UI live-control/static validation for PI-P25-SCANNER V0.2C.
+# Bounded UI live-control/static validation for scanner V0.2C.
 # Runs the backend on loopback and verifies the web UI exposes live-control fields.
 set -Eeuo pipefail
 
@@ -28,12 +28,12 @@ trap cleanup EXIT
 
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER UI live-control probe ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner UI live-control probe ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "web" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
 fi
 
 for cmd in python3 timeout; do

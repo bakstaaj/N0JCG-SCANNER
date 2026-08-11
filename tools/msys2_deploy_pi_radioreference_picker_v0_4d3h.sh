@@ -20,11 +20,11 @@ echo "=== Deploy V0.4D3H RadioReference picker non-interactive ==="
 
 if [[ -d .git && -f src/pi_p25_scanner/backend.py ]]; then
   REPO_ROOT="$PWD"
-elif [[ -d "$HOME/sdrdev/PI-P25-SCANNER/.git" ]]; then
-  REPO_ROOT="$HOME/sdrdev/PI-P25-SCANNER"
+elif [[ -d "$HOME/sdrdev/scanner/.git" ]]; then
+  REPO_ROOT="$HOME/sdrdev/scanner"
   cd "$REPO_ROOT"
 else
-  fail "repo root not found; run from ~/sdrdev/PI-P25-SCANNER"
+  fail "repo root not found; run from ~/sdrdev/scanner"
 fi
 pass "repo root detected: $REPO_ROOT"
 
@@ -40,7 +40,7 @@ fi
 
 PI_USER="${PI_USER:-pi}"
 PI_HOST="192.168.254.63"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 
 # Non-interactive auth policy:
 # 1. Use SSHPASS if already exported.
@@ -105,7 +105,7 @@ pass "copied deploy tar to Pi"
 
 "${SSH_CMD[@]}" "${PI_USER}@${PI_HOST}" "bash -s" <<'REMOTE'
 set -Eeuo pipefail
-cd /home/pi/PI-P25-SCANNER
+cd /home/pi/n0jcg-scanner
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP_DIR="runtime/patch_backups/deploy_v0_4d3h_radioreference_picker_${STAMP}"
 mkdir -p "$BACKUP_DIR"

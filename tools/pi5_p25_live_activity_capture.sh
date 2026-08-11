@@ -214,7 +214,7 @@ summary = {
 }
 summary_json.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 lines = [
-    "PI-P25-SCANNER live activity capture summary",
+    "scanner live activity capture summary",
     f"Snapshots: {summary['snapshot_count']}",
     f"Running snapshots: {summary['running_snapshot_count']}",
     f"States seen: {', '.join(states) if states else '-'}",
@@ -267,7 +267,7 @@ PYCHECK
 }
 
 if [ ! -d .git ] || [ ! -d tools ] || [ ! -d src/pi_p25_scanner ]; then
-  fail "run this script from the PI-P25-SCANNER repository root"
+  fail "run this script from the scanner repository root"
   exit 0
 fi
 pass "running from repository root"

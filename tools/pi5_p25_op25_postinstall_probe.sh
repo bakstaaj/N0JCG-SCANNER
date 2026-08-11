@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Validate OP25 post-install command evidence without launching live decode.
-# Run from the PI-P25-SCANNER repository root on Raspberry Pi.
+# Run from the scanner repository root on Raspberry Pi.
 
 set -Eeuo pipefail
 
@@ -22,12 +22,12 @@ fail() { printf 'FAIL: %s\n' "$*" | tee -a "$REPORT_FILE"; FAIL_COUNT=$((FAIL_CO
 
 mkdir -p "$REPORT_DIR" "$HELP_DIR" runtime/settings runtime/op25
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER OP25 post-install probe ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner OP25 post-install probe ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "tools" && -d "src/pi_p25_scanner" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi

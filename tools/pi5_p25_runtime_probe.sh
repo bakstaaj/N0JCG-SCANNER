@@ -34,7 +34,7 @@ printf '=== Pi 5 P25 scanner V0.1B runtime probe ===\n' | tee -a "$REPORT_FILE"
 if [[ -f "DEV_GUARDRAILS.md" && -d "tools" && -d "src/pi_p25_scanner" ]]; then
   pass "running from repository root"
 else
-  fail "run this script from the PI-P25-SCANNER repository root"
+  fail "run this script from the scanner repository root"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi

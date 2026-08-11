@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Validate PI-P25-SCANNER config API/UI backend endpoints without live decoder launch.
+# Validate scanner config API/UI backend endpoints without live decoder launch.
 # This smoke test preserves and restores the operator's runtime config.
-# Run from the PI-P25-SCANNER repository root.
+# Run from the scanner repository root.
 
 set -Eeuo pipefail
 
@@ -51,17 +51,17 @@ sock.close()
 PY
 }
 
-printf '=== PI-P25-SCANNER config API validation ===\n'
+printf '=== scanner config API validation ===\n'
 mkdir -p "$REPORT_DIR" runtime/settings
 : > "$REPORT_FILE"
 : > "$BACKEND_LOG"
 : > "$CLIENT_LOG"
-printf '=== PI-P25-SCANNER config API validation ===\n' >> "$REPORT_FILE"
+printf '=== scanner config API validation ===\n' >> "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "web" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi

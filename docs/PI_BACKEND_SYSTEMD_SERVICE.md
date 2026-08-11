@@ -13,7 +13,7 @@ runtime/settings/op25_validated_rx_command.env
 From the Raspberry Pi repository root:
 
 ```bash
-cd ~/PI-P25-SCANNER
+cd ~/scanner
 ./tools/pi5_p25_backend_service_install.sh --dry-run
 ```
 
@@ -22,7 +22,7 @@ The dry run writes a unit preview under `.p25_backend_service_reports/` and make
 ## Install and start on boot
 
 ```bash
-cd ~/PI-P25-SCANNER
+cd ~/scanner
 ./tools/pi5_p25_backend_service_install.sh --install --yes
 ./tools/pi5_p25_backend_service_probe.sh
 ```
@@ -44,7 +44,7 @@ sudo systemctl stop pi-p25-scanner.service
 ## Uninstall
 
 ```bash
-cd ~/PI-P25-SCANNER
+cd ~/scanner
 ./tools/pi5_p25_backend_service_install.sh --uninstall --yes
 ```
 

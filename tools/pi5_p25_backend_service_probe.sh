@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate the installed PI-P25-SCANNER backend systemd service and port 8070 UI.
+# Validate the installed scanner backend systemd service and port 8070 UI.
 set -Eeuo pipefail
 
 PASS_COUNT=0
@@ -20,12 +20,12 @@ fail() { printf 'FAIL: %s\n' "$*" | tee -a "$REPORT_FILE"; FAIL_COUNT=$((FAIL_CO
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
 : > "$CLIENT_LOG"
-printf '=== PI-P25-SCANNER backend service probe ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner backend service probe ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "web" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
 fi
 
 for cmd in python3 systemctl; do

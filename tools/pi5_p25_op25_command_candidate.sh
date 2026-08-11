@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generate non-invasive OP25 command-path evidence for PI-P25-SCANNER.
+# Generate non-invasive OP25 command-path evidence for scanner.
 # This does not launch OP25 as a decoder.
 
 set -Eeuo pipefail
@@ -20,12 +20,12 @@ fail() { printf 'FAIL: %s\n' "$*" | tee -a "$REPORT_FILE"; FAIL_COUNT=$((FAIL_CO
 
 mkdir -p "$REPORT_DIR" runtime/settings
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER OP25 command candidate probe ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner OP25 command candidate probe ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "tools" && -d "src/pi_p25_scanner" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi
@@ -119,7 +119,7 @@ payload = {
     "notes": [
         "Do not enable backend live OP25 launch from this file alone.",
         "Validate exact rx.py or multi_rx.py command manually on the Pi first.",
-        "Encrypted calls remain mute/log only in PI-P25-SCANNER scope.",
+        "Encrypted calls remain mute/log only in scanner scope.",
     ],
 }
 out_path.parent.mkdir(parents=True, exist_ok=True)

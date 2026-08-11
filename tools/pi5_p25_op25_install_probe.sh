@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pi-side OP25 install/capability evidence probe.
-# Run from the PI-P25-SCANNER repository root on Raspberry Pi 5.
+# Run from the scanner repository root on Raspberry Pi 5.
 #
 # This script is non-invasive. It does not install, build, clone, or start a
 # persistent decoder.
@@ -44,9 +44,9 @@ mkdir -p "$REPORT_DIR"
 printf '=== Pi P25 OP25 install/capability probe ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "tools" ]]; then
-  pass "running from PI-P25-SCANNER repository root"
+  pass "running from scanner repository root"
 else
-  fail "run this script from the PI-P25-SCANNER repository root"
+  fail "run this script from the scanner repository root"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi

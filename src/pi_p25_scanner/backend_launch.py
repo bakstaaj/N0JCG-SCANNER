@@ -261,6 +261,38 @@ def build_validated_op25_command(project_root: Path) -> ValidatedOp25Command | N
     if not trunk_tsv.exists():
         raise LaunchConfigError(f"validated OP25 trunk TSV does not exist: {trunk_tsv}")
 
+    # Multi-radio mode must be selected by the persisted probe marker.  Keep
+    # this branch here (rather than relying on a wrapper fallback) so a reboot
+    # or service restart cannot quietly revert to a control-only rx.py.
+    if values.get("P25_VALIDATED_RX_MODE", "").strip().lower() == "multi_rx":
+        multi_wrapper = Path(values.get("P25_MULTI_RX_WRAPPER", str(app)))
+        if not multi_wrapper.exists():
+            raise LaunchConfigError(f"validated OP25 multi-rx wrapper does not exist: {multi_wrapper}")
+        command = [str(multi_wrapper), "-T", str(trunk_tsv)]
+        option_paths = {
+            "--project-root": values.get("P25_MULTI_RX_PROJECT_ROOT", str(project_root)),
+            "--marker": str(marker),
+            "--receiver-roles": values.get("P25_MULTI_RX_RECEIVER_ROLES", ""),
+            "--manifest": values.get("P25_MULTI_RX_MANIFEST", ""),
+            "--multi-rx-config": values.get("P25_MULTI_RX_CONFIG", ""),
+            "--multi-rx-state": values.get("P25_MULTI_RX_STATE", ""),
+            "--multi-rx-app": values.get("P25_VALIDATED_MULTI_RX_APP", ""),
+            "--single-rx-app": values.get("P25_VALIDATED_SINGLE_RX_APP", ""),
+        }
+        for option, value in option_paths.items():
+            if value:
+                command.extend([option, value])
+        for option, key in (("--serial-regex", "P25_MULTI_RX_RECEIVER_REGEX"),):
+            if values.get(key, "").strip():
+                command.extend([option, values[key].strip()])
+        for option, key in (("--audio-base-port", "P25_MULTI_RX_AUDIO_BASE_PORT"), ("--audio-port-count", "P25_MULTI_RX_AUDIO_PORT_COUNT")):
+            if values.get(key, "").strip():
+                command.extend([option, values[key].strip()])
+        command.extend(["-S", values["P25_VALIDATED_RX_SAMPLE_RATE"], "-q", values["P25_VALIDATED_RX_PPM"], "-N", values["P25_VALIDATED_RX_GAIN"], "-l", values.get("P25_VALIDATED_RX_TERMINAL", "http:127.0.0.1:18091"), "--crypt-behavior", values.get("P25_VALIDATED_RX_CRYPT_BEHAVIOR", "2"), "-V", "-2", "-w", "-W", values.get("P25_VALIDATED_RX_AUDIO_HOST", DEFAULT_AUDIO_HOST), "-u", values.get("P25_VALIDATED_RX_AUDIO_PORT", DEFAULT_AUDIO_PORT), "-v", "5", "--require-multi-rx"])
+        env = os.environ.copy()
+        env["PYTHONPATH"] = prepend_pythonpath(values["P25_VALIDATED_RX_PYTHONPATH"], env.get("PYTHONPATH", ""))
+        return ValidatedOp25Command(command=command, cwd=str(multi_wrapper.parent), env=env, marker_path=str(marker), app=str(multi_wrapper), device_args=values["P25_VALIDATED_RX_ARGS"], trunk_tsv=str(trunk_tsv), pythonpath=values["P25_VALIDATED_RX_PYTHONPATH"], report=values.get("P25_VALIDATED_RX_REPORT", ""), log=values.get("P25_VALIDATED_RX_LOG", ""))
+
     command = [
         str(app),
         "--args",

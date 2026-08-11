@@ -9,7 +9,7 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 REPORT_FILE="$REPORT_DIR/v0_3q_deploy_app_load_recovery_${STAMP}.txt"
 PI_HOST="${PI_HOST:-PI-SDR}"
 PI_USER="${PI_USER:-pi}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 SSH_TARGET="${PI_USER}@${PI_HOST}"
 
 mkdir -p "$REPORT_DIR"
@@ -28,7 +28,7 @@ finish() {
   exit 1
 }
 
-printf '=== PI-P25-SCANNER V0.3Q deploy app-load recovery ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner V0.3Q deploy app-load recovery ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 printf 'SSH target: %s\n' "$SSH_TARGET" | tee -a "$REPORT_FILE"
 

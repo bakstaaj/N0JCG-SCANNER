@@ -1,6 +1,6 @@
 # OP25 Live Command Validation
 
-V0.1K adds a bounded Pi-side probe for validating the exact OP25 foreground command before PI-P25-SCANNER enables backend live launch.
+V0.1K adds a bounded Pi-side probe for validating the exact OP25 foreground command before scanner enables backend live launch.
 
 ## Purpose
 
@@ -11,7 +11,7 @@ The guarded source install proves that OP25 source and installed components are 
 Run from the Raspberry Pi repository root:
 
 ```bash
-cd ~/PI-P25-SCANNER
+cd ~/scanner
 ./tools/pi5_p25_op25_live_command_probe.sh --dry-run
 ./tools/pi5_p25_op25_live_command_probe.sh --rx-smoke --seconds 20 --yes
 ```

@@ -40,7 +40,7 @@ PROFILE="exact"
 usage() {
   cat <<USAGE
 Usage:
-  ./tools/msys2_upload_pi_known_working_tgids.sh [--profile exact|clear] [--host PI-SDR] [--user pi] [--repo /home/pi/PI-P25-SCANNER]
+  ./tools/msys2_upload_pi_known_working_tgids.sh [--profile exact|clear] [--host PI-SDR] [--user pi] [--repo /home/pi/n0jcg-scanner]
 
 Profiles:
   exact  Restore the original known-working specific TGID list, including encrypted/problem TGIDs enabled.
@@ -59,13 +59,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-printf '=== PI-P25-SCANNER V0.4F known-working TGID upload ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner V0.4F known-working TGID upload ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "config/templates" && -d "src/pi_p25_scanner" ]]; then
-  pass "running from PI-P25-SCANNER repository root"
+  pass "running from scanner repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   finish
 fi
 
@@ -101,7 +101,7 @@ fi
 
 export PI_HOST="${PI_HOST_ARG:-${PI_HOST:-PI-SDR}}"
 export PI_USER="${PI_USER_ARG:-${PI_USER:-pi}}"
-export PI_REPO="${PI_REPO_ARG:-${PI_REPO:-/home/pi/PI-P25-SCANNER}}"
+export PI_REPO="${PI_REPO_ARG:-${PI_REPO:-/home/pi/n0jcg-scanner}}"
 export PI_PASSWORD="${PI_PASSWORD:-${SSHPASS:-}}"
 
 if [[ -z "${PI_PASSWORD:-}" ]]; then

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Upload/apply a PI-P25-SCANNER JSON config template from MSYS2 to the Raspberry Pi.
+# Upload/apply a scanner JSON config template from MSYS2 to the Raspberry Pi.
 set -Eeuo pipefail
 
 PASS_COUNT=0
@@ -33,7 +33,7 @@ trap 'rc=$?; if [[ $rc -ne 0 ]]; then fail "upload/apply aborted unexpectedly at
 usage() {
   cat <<USAGE
 Usage:
-  ./tools/msys2_upload_pi_config_template.sh [--template config/templates/topaz_trwc_mesa_discovery_2500_4500.json] [--host PI-SDR] [--user pi] [--repo /home/pi/PI-P25-SCANNER] [--restart-backend]
+  ./tools/msys2_upload_pi_config_template.sh [--template config/templates/topaz_trwc_mesa_discovery_2500_4500.json] [--host PI-SDR] [--user pi] [--repo /home/pi/n0jcg-scanner] [--restart-backend]
 
 Uploads the selected JSON config template to the Pi, applies it as runtime/settings/p25_systems.json, backs up the previous runtime config, and regenerates OP25 runtime files.
 USAGE
@@ -50,11 +50,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-printf '=== PI-P25-SCANNER upload/apply config template ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner upload/apply config template ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 
-if [[ -f DEV_GUARDRAILS.md && -d src/pi_p25_scanner && -d tools ]]; then pass "running from PI-P25-SCANNER repository root"; else fail "run from PI-P25-SCANNER repository root"; finish; fi
+if [[ -f DEV_GUARDRAILS.md && -d src/pi_p25_scanner && -d tools ]]; then pass "running from scanner repository root"; else fail "run from scanner repository root"; finish; fi
 case "$(uname -s 2>/dev/null || true)" in MINGW*|MSYS*) pass "MSYS2 shell detected" ;; *) warn "shell does not look like MSYS2" ;; esac
 
 if [[ -f .env ]]; then
@@ -68,7 +68,7 @@ else
 fi
 PI_HOST="${PI_HOST_ARG:-${PI_HOST:-PI-SDR}}"
 PI_USER="${PI_USER_ARG:-${PI_USER:-pi}}"
-PI_REPO="${PI_REPO_ARG:-${PI_REPO:-/home/pi/PI-P25-SCANNER}}"
+PI_REPO="${PI_REPO_ARG:-${PI_REPO:-/home/pi/n0jcg-scanner}}"
 if [[ -n "${PI_PASSWORD:-}" ]]; then :; elif [[ -n "${SSHPASS:-}" ]]; then PI_PASSWORD="$SSHPASS"; else read -r -s -p "Pi password for ${PI_USER}@${PI_HOST}: " PI_PASSWORD; echo; fi
 if [[ -z "${PI_PASSWORD:-}" ]]; then fail "empty Pi password"; finish; fi
 export PI_PASSWORD

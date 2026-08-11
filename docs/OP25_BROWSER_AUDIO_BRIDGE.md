@@ -26,7 +26,7 @@ http://<pi-ip>:8072/audio.wav
 ## How to run from MSYS2
 
 ```bash
-cd ~/sdrdev/PI-P25-SCANNER
+cd ~/sdrdev/scanner
 ./tools/msys2_run_pi_browser_audio_live_test.sh --seconds 600
 ```
 

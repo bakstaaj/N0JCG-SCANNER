@@ -15,12 +15,12 @@ fail() { printf 'FAIL: %s\n' "$*" | tee -a "$REPORT_FILE"; FAIL_COUNT=$((FAIL_CO
 
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER runtime status parser probe ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner runtime status parser probe ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
 fi
 
 if command -v python3 >/dev/null 2>&1; then

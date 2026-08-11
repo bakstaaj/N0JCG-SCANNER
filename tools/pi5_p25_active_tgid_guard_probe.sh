@@ -19,9 +19,9 @@ finish() {
 }
 trap finish EXIT
 
-echo "=== PI-P25-SCANNER active TGID guard probe ==="
+echo "=== scanner active TGID guard probe ==="
 if [ ! -d .git ] || [ ! -d src/pi_p25_scanner ]; then
-  fail "run this script from the PI-P25-SCANNER repository root"
+  fail "run this script from the scanner repository root"
   exit 0
 fi
 pass "running from repository root"
@@ -41,9 +41,9 @@ parser = RuntimeStatusParser()
 tracker = RuntimeActivityTracker()
 
 config_lines = [
-    'added talkgroup 3105 from /home/pi/PI-P25-SCANNER/runtime/op25/TOPAZ_TRWC_Mesa_Simulcast_Test_whitelist.tsv',
-    'loading talkgroup 3840 from /home/pi/PI-P25-SCANNER/runtime/op25/TOPAZ_TRWC_Mesa_Simulcast_Test_whiteli',
-    'tgid 3899 from /home/pi/PI-P25-SCANNER/runtime/op25/TOPAZ_TRWC_Mesa_Simulcast_Test_blacklist.tsv',
+    'added talkgroup 3105 from /home/pi/n0jcg-scanner/runtime/op25/TOPAZ_TRWC_Mesa_Simulcast_Test_whitelist.tsv',
+    'loading talkgroup 3840 from /home/pi/n0jcg-scanner/runtime/op25/TOPAZ_TRWC_Mesa_Simulcast_Test_whiteli',
+    'tgid 3899 from /home/pi/n0jcg-scanner/runtime/op25/TOPAZ_TRWC_Mesa_Simulcast_Test_blacklist.tsv',
 ]
 config_summary = tracker.snapshot()
 for config_line in config_lines:

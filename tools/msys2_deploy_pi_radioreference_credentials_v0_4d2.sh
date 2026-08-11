@@ -22,15 +22,15 @@ trap 'finish' EXIT
 log "=== Deploy V0.4D2 RadioReference credential/login fix ==="
 PI_USER="${PI_USER:-pi}"
 PI_HOST="192.168.254.63"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 pass "using fixed Pi target ${PI_USER}@${PI_HOST}:${PI_REPO}"
 
 if [[ -f "src/pi_p25_scanner/radioreference_import.py" && -f "web/app.js" ]]; then
   REPO_ROOT="$PWD"
-elif [[ -f "$HOME/sdrdev/PI-P25-SCANNER/src/pi_p25_scanner/radioreference_import.py" ]]; then
-  REPO_ROOT="$HOME/sdrdev/PI-P25-SCANNER"
+elif [[ -f "$HOME/sdrdev/scanner/src/pi_p25_scanner/radioreference_import.py" ]]; then
+  REPO_ROOT="$HOME/sdrdev/scanner"
 else
-  fail "could not locate PI-P25-SCANNER repo root"
+  fail "could not locate scanner repo root"
   exit 1
 fi
 cd "$REPO_ROOT"
@@ -101,7 +101,7 @@ pass "remote API probes passed"
 
 if "${SSH_BASE[@]}" "$REMOTE" "python3 - <<'PY'
 from pathlib import Path
-p=Path('/home/pi/PI-P25-SCANNER/runtime/settings/radioreference.env')
+p=Path('/home/pi/n0jcg-scanner/runtime/settings/radioreference.env')
 print('credentials_file_exists', p.exists())
 if p.exists():
     text=p.read_text(encoding='utf-8', errors='replace')

@@ -28,10 +28,10 @@ log "=== Deploy V0.4H2B fast talkgroup activity ==="
 
 if [[ -d .git && -f src/pi_p25_scanner/backend.py && -f web/app.js ]]; then
   REPO_ROOT="$PWD"
-elif [[ -d "$HOME/sdrdev/PI-P25-SCANNER/.git" ]]; then
-  REPO_ROOT="$HOME/sdrdev/PI-P25-SCANNER"
+elif [[ -d "$HOME/sdrdev/scanner/.git" ]]; then
+  REPO_ROOT="$HOME/sdrdev/scanner"
 else
-  fail "could not locate PI-P25-SCANNER repo root"
+  fail "could not locate scanner repo root"
   exit 1
 fi
 cd "$REPO_ROOT"
@@ -40,7 +40,7 @@ pass "repo root detected: $REPO_ROOT"
 [[ -f .env ]] && set -a && source ./.env && set +a || true
 PI_HOST="${PI_HOST:-192.168.254.63}"
 PI_USER="${PI_USER:-pi}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 PI_PASSWORD="${PI_PASSWORD:-${SSHPASS:-}}"
 pass "deploy target: ${PI_USER}@${PI_HOST}:${PI_REPO}"
 

@@ -40,7 +40,7 @@ fi
 
 PI_HOST="192.168.254.63"
 PI_USER="${PI_USER:-pi}"
-PI_ROOT="/home/pi/PI-P25-SCANNER"
+PI_ROOT="/home/pi/n0jcg-scanner"
 pass "target fixed to ${PI_USER}@${PI_HOST}:${PI_ROOT}"
 
 SSH_BASE=(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=12)
@@ -180,7 +180,7 @@ pass "verified V0.5E marker is served by /app.js"
 from __future__ import annotations
 import json, re, sys
 from pathlib import Path
-root = Path('/home/pi/PI-P25-SCANNER')
+root = Path('/home/pi/n0jcg-scanner')
 config = root / 'runtime' / 'settings' / 'p25_systems.json'
 marker = root / 'runtime' / 'settings' / 'op25_validated_rx_command.env'
 allowed = re.compile(r'^0000025\\d$')

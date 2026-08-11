@@ -43,7 +43,7 @@ trap 'rc=$?; if [[ $rc -ne 0 ]]; then fail "deploy aborted unexpectedly at line 
 usage() {
   cat <<USAGE
 Usage:
-  ./tools/msys2_deploy_pi_raw_audio_service_v0_3s.sh [--host PI-SDR] [--user pi] [--repo /home/pi/PI-P25-SCANNER] [--password PASSWORD]
+  ./tools/msys2_deploy_pi_raw_audio_service_v0_3s.sh [--host PI-SDR] [--user pi] [--repo /home/pi/n0jcg-scanner] [--password PASSWORD]
 
 Uses .env / PI_PASSWORD with sshpass. If PI_PASSWORD is missing, it prompts once and saves it to .env.
 USAGE
@@ -60,14 +60,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-printf '=== PI-P25-SCANNER V0.3S raw audio service deploy ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner V0.3S raw audio service deploy ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "tools" ]]; then
-  pass "running from PI-P25-SCANNER repository root"
+  pass "running from scanner repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   finish
 fi
 case "$(uname -s 2>/dev/null || true)" in
@@ -120,7 +120,7 @@ p25_deploy_require_password() {
   local prompted=0
   : "${PI_USER:=pi}"
   : "${PI_HOST:=PI-SDR}"
-  : "${PI_REPO:=/home/pi/PI-P25-SCANNER}"
+  : "${PI_REPO:=/home/pi/n0jcg-scanner}"
   if [[ -n "$PI_PASSWORD_ARG" ]]; then
     PI_PASSWORD="$PI_PASSWORD_ARG"
   elif [[ -n "${PI_PASSWORD:-}" ]]; then
@@ -153,7 +153,7 @@ if [[ -n "$PI_USER_ARG" ]]; then export PI_USER="$PI_USER_ARG"; fi
 if [[ -n "$PI_REPO_ARG" ]]; then export PI_REPO="$PI_REPO_ARG"; fi
 : "${PI_USER:=pi}"
 : "${PI_HOST:=PI-SDR}"
-: "${PI_REPO:=/home/pi/PI-P25-SCANNER}"
+: "${PI_REPO:=/home/pi/n0jcg-scanner}"
 p25_deploy_require_password
 pass "Pi connection settings loaded for ${PI_USER}@${PI_HOST}:${PI_REPO}"
 

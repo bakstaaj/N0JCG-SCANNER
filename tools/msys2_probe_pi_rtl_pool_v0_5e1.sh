@@ -3,7 +3,7 @@ set -Eeuo pipefail
 if [[ -f .env ]]; then set -a; source .env; set +a; fi
 PI_HOST="192.168.254.63"
 PI_USER="${PI_USER:-pi}"
-PI_ROOT="/home/pi/PI-P25-SCANNER"
+PI_ROOT="/home/pi/n0jcg-scanner"
 SSH_BASE=(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=12)
 if [[ -n "${PI_PASSWORD:-}" ]]; then export SSHPASS="$PI_PASSWORD"; SSH=(sshpass -e "${SSH_BASE[@]}");
 elif [[ -n "${SSHPASS:-}" ]]; then SSH=(sshpass -e "${SSH_BASE[@]}");

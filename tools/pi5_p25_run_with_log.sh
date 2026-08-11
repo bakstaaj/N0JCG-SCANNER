@@ -86,7 +86,7 @@ fi
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 START_EPOCH="$(date +%s)"
-echo "=== PI-P25-SCANNER upload-ready command log ==="
+echo "=== scanner upload-ready command log ==="
 echo "Log directory: $LOG_DIR"
 echo "Log file: $LOG_FILE"
 echo "Started UTC: $STAMP"

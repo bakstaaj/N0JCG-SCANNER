@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the current PI-P25-SCANNER Pi bring-up acceptance checks.
+# Run the current scanner Pi bring-up acceptance checks.
 # This script is non-invasive: no package install, no OP25 build, no live decoder launch.
 
 set -Eeuo pipefail
@@ -18,12 +18,12 @@ fail() { printf 'FAIL: %s\n' "$*" | tee -a "$REPORT_FILE"; FAIL_COUNT=$((FAIL_CO
 
 mkdir -p "$REPORT_DIR" "$STEP_DIR"
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER Pi bring-up acceptance ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner Pi bring-up acceptance ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "tools" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi

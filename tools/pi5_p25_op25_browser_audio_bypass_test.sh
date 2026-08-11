@@ -90,7 +90,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-printf '=== PI-P25-SCANNER V0.3M raw browser audio bypass test ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner V0.3M raw browser audio bypass test ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 
@@ -110,7 +110,7 @@ if [[ "$SECONDS_TO_RUN" -le 0 || "$HTTP_PORT" -le 0 || "$UDP_PORT" -le 0 ]]; the
   exit 2
 fi
 if [[ ! -f "DEV_GUARDRAILS.md" || ! -d "tools" ]]; then
-  fail "run from PI-P25-SCANNER repository root on the Pi"
+  fail "run from scanner repository root on the Pi"
   exit 1
 fi
 pass "running from repository root"

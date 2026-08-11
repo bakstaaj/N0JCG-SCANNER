@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Apply a PI-P25-SCANNER JSON config template on the Raspberry Pi.
+# Apply a scanner JSON config template on the Raspberry Pi.
 set -Eeuo pipefail
 
 TEMPLATE_PATH=""
@@ -11,7 +11,7 @@ RESTART_BACKEND=0
 usage() {
   cat <<USAGE
 Usage:
-  ./tools/pi5_p25_apply_config_template.sh --template /path/to/template.json --yes [--repo /home/pi/PI-P25-SCANNER] [--no-generate] [--restart-backend]
+  ./tools/pi5_p25_apply_config_template.sh --template /path/to/template.json --yes [--repo /home/pi/n0jcg-scanner] [--no-generate] [--restart-backend]
 
 Copies a validated template into runtime/settings/p25_systems.json, backs up the previous runtime config, and regenerates OP25 runtime files.
 USAGE
@@ -43,7 +43,7 @@ fi
 
 cd "$REPO"
 if [[ ! -d src/pi_p25_scanner ]]; then
-  printf 'FAIL: not a PI-P25-SCANNER repo: %s\n' "$REPO" >&2
+  printf 'FAIL: not a scanner repo: %s\n' "$REPO" >&2
   exit 2
 fi
 

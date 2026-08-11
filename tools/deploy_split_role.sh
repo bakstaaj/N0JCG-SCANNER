@@ -126,17 +126,6 @@ if [ "$role" = roc ]; then
   entries="web/pi-scanner"
 else
   entries="config src systemd tools web requirements.txt"
-  if [ "$repo" = /home/pi/n0jcg-scanner ]; then
-    # Preserve the separate legacy P25 and analog runtime stores while
-    # consolidating both services under the canonical application root.
-    for legacy in /home/pi/PI-P25-SCANNER /home/pi/PI-SCANNER; do
-      if [ -d "$legacy/runtime" ]; then
-        mkdir -p "$repo/runtime" "$backup/legacy$(dirname "$legacy")"
-        cp -a "$legacy/runtime" "$backup/legacy$legacy"
-        cp -a "$legacy/runtime/." "$repo/runtime/"
-      fi
-    done
-  fi
 fi
 for entry in $entries; do
   if [ -e "$repo/$entry" ]; then

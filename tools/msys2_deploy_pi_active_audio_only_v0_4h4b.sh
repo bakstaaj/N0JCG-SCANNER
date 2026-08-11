@@ -37,7 +37,7 @@ if [[ -f .env ]]; then
 fi
 PI_USER="${PI_USER:-pi}"
 PI_HOST="192.168.254.63"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 SSHPASS_VALUE="${SSHPASS:-${PI_PASSWORD:-}}"
 if [[ -z "$SSHPASS_VALUE" ]]; then
   read -r -s -p "Password for ${PI_USER}@${PI_HOST}: " SSHPASS_VALUE

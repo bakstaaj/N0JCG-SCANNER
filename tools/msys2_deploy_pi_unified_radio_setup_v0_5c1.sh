@@ -24,7 +24,7 @@ log "=== Deploy V0.5C1 force unified Radio Setup UI ==="
 if [[ -f .env ]]; then set -a; source .env; set +a; pass "loaded .env"; else warn ".env not found"; fi
 PI_HOST="192.168.254.63"
 PI_USER="${PI_USER:-pi}"
-PI_PATH="/home/pi/PI-P25-SCANNER"
+PI_PATH="/home/pi/n0jcg-scanner"
 REMOTE="${PI_USER}@${PI_HOST}"
 pass "target fixed to ${REMOTE}:${PI_PATH}"
 SSH_BASE=(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8)

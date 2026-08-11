@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Raspberry Pi 5 P25 scanner preflight.
-# Run from the PI-P25-SCANNER repository root on the target Pi.
+# Run from the scanner repository root on the target Pi.
 
 set -Eeuo pipefail
 
@@ -33,7 +33,7 @@ printf '=== Pi 5 P25 scanner preflight ===\n' | tee -a "$REPORT_FILE"
 if [[ -f "DEV_GUARDRAILS.md" && -d "tools" && -d "config" ]]; then
   pass "running from repository root"
 else
-  fail "run this script from the PI-P25-SCANNER repository root"
+  fail "run this script from the scanner repository root"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi

@@ -44,12 +44,12 @@ finish() {
 }
 trap finish EXIT
 
-printf '=== PI-P25-SCANNER backend default port 8070 probe ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner backend default port 8070 probe ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "web" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   exit 1
 fi
 

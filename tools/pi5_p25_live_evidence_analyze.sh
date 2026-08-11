@@ -300,7 +300,7 @@ def make_report(summary: dict[str, Any], evidence_root: Path, strict: bool) -> t
     warns = 0
     fails = 0
     lines: list[str] = []
-    lines.append("# PI-P25-SCANNER Live Evidence Analysis")
+    lines.append("# scanner Live Evidence Analysis")
     lines.append("")
     lines.append(f"- Evidence root: `{evidence_root}`")
     lines.append(f"- Snapshot count: {summary['snapshot_count']}")
@@ -544,7 +544,7 @@ def run_self_test(keep: bool) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Analyze PI-P25-SCANNER live activity evidence snapshots")
+    parser = argparse.ArgumentParser(description="Analyze scanner live activity evidence snapshots")
     parser.add_argument("--path", help="Evidence file or directory to analyze")
     parser.add_argument("--latest", action="store_true", help="Analyze the newest runtime/evidence or capture-report path")
     parser.add_argument("--strict", action="store_true", help="Fail when no talkgroup evidence is found")

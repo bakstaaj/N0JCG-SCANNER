@@ -197,6 +197,17 @@ class ControlChannelHuntStatusTests(unittest.TestCase):
         update = self.parser.parse_line("tsbk network status broadcast nac=0xd11")
         self.assertEqual("locked", update.control_channel_state)
 
+    def test_op25_tgid_assignment_is_lock_and_voice_activity(self) -> None:
+        update = self.parser.parse_line("08/10/26 new tgid=1107  prio 3")
+        self.assertEqual(1107, update.tgid)
+        self.assertTrue(update.voice_call)
+        self.assertEqual("locked", update.control_channel_state)
+
+    def test_op25_new_frequency_is_control_activity(self) -> None:
+        update = self.parser.parse_line("08/10/26 new freq=852.225000")
+        self.assertEqual(852225000, update.voice_frequency_hz)
+        self.assertEqual("locked", update.control_channel_state)
+
     def test_nac_reconfiguration_is_locked(self) -> None:
         update = self.parser.parse_line(
             "Reconfiguring NAC from 0x000 to 0xd11"

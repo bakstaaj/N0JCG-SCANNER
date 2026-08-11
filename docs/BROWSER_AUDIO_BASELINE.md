@@ -20,7 +20,7 @@ diagnostic-only until a more precise talkgroup-aware clear/encrypted gate is bui
 From MSYS2 UCRT64 on the development machine:
 
 ```bash
-cd ~/sdrdev/PI-P25-SCANNER
+cd ~/sdrdev/scanner
 ./tools/msys2_run_pi_browser_audio_clear_test.sh --seconds 300 --op25-verbosity 0
 ```
 

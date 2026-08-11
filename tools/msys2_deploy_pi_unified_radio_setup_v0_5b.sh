@@ -33,7 +33,7 @@ fi
 
 PI_HOST="192.168.254.63"
 PI_USER="${PI_USER:-pi}"
-REMOTE_ROOT="/home/pi/PI-P25-SCANNER"
+REMOTE_ROOT="/home/pi/n0jcg-scanner"
 pass "target fixed to ${PI_USER}@${PI_HOST}:${REMOTE_ROOT}"
 
 SSH_BASE=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=8)

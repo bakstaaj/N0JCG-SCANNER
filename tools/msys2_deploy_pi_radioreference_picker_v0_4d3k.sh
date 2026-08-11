@@ -24,7 +24,7 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 [[ -f .env ]] && set -a && source .env && set +a && pass "loaded .env" || warn ".env not found; using shell environment only"
 PI_USER="${PI_USER:-pi}"
 PI_HOST="192.168.254.63"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 pass "target fixed to ${PI_USER}@${PI_HOST}:${PI_REPO}"
 
 SSH_BASE=(ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=8)

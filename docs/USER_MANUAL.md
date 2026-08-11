@@ -5,16 +5,16 @@
 | Product | N0JCG Scanner |
 | Slug | scanner-user-guide |
 | Type | User guide |
-| Version | 4.1.0 |
+| Version | 4.2.0 |
 | Status | Current |
-| Last updated | 2026-08-10 |
+| Last updated | 2026-08-11 |
 | Audience | Scanner operators and installers |
 | Prerequisites | N0JCG Scanner hardware and network access |
 | Estimated time | 45 minutes for setup; 5 minutes for daily operation |
 | Related | [Product page](https://www.n0jcg.com/products/scanner/), [Hardware Guide](HARDWARE_GUIDE.md) |
 | Owner | N0JCG |
 
-This manual covers the N0JCG Scanner v4.1.0 production layout: P25 trunked radio,
+This manual covers the N0JCG Scanner v4.2.0 production layout: P25 trunked radio,
 FFT-directed VHF and UHF analog scanning, unified browser audio, radio profiles,
 and four dedicated RTL-SDR receiver assignments. It is written for both initial
 installation and normal daily operation.
@@ -47,7 +47,9 @@ PI Scanner combines three scanning paths, using four dedicated RTL-SDR
 receivers, in one touch-friendly web application:
 
 - **P25:** follows permitted, clear P25 talkgroups using dedicated control and
-  voice RTL-SDR receivers.
+  voice RTL-SDR receivers. The production P25 assignment is control `00000251`
+  and voice `00000252`; the launch path fails closed rather than silently
+  reverting to a single-radio decoder.
 - **VHF:** surveys only uploaded VHF channels with an FFT, validates an active
   carrier, demodulates NFM audio, and returns to scanning when the call ends.
 - **UHF:** uses the same FFT-directed workflow for uploaded UHF channels.
@@ -93,10 +95,10 @@ serial stored in each RTL-SDR EEPROM.
 
 | Role | Required serial | Operational use |
 |---|---:|---|
-| P25 control | `<P25_CONTROL_SERIAL>` | Remains on the trunked-system control channel |
-| P25 voice | `<P25_VOICE_SERIAL>` | Follows P25 voice-channel grants |
-| VHF / analog 2 m | `<VHF_SERIAL>` | FFT-directed VHF NFM scanner |
-| UHF / analog 70 cm | `<UHF_SERIAL>` | FFT-directed UHF NFM scanner |
+| P25 control | `00000251` | Remains on the trunked-system control channel |
+| P25 voice | `00000252` | Follows P25 voice-channel grants |
+| VHF / analog 2 m | `00000144` | FFT-directed VHF NFM scanner |
+| UHF / analog 70 cm | `00000440` | FFT-directed UHF NFM scanner |
 
 Keep the two analog assignments distinct and do not swap them. The VHF and UHF
 workers fail closed if their
@@ -614,9 +616,9 @@ Example:
 
 ```bash
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-mkdir -p "/home/pi/scanner-backups/$stamp"
+mkdir -p "/home/pi/n0jcg-scanner-backups/$stamp"
 cp -a /home/pi/n0jcg-scanner/runtime/settings \
-  "/home/pi/scanner-backups/$stamp/settings"
+  "/home/pi/n0jcg-scanner-backups/$stamp/settings"
 ```
 
 Named profiles, P25 settings, analog channel lists, skips, and blocks are all

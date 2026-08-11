@@ -25,7 +25,7 @@ if [[ -f .env ]]; then
 fi
 PI_USER="${PI_USER:-pi}"
 PI_HOST="192.168.254.63"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 pass "target fixed to ${PI_USER}@${PI_HOST}:${PI_REPO}"
 
 SSH_BASE=(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8)

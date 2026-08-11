@@ -14,7 +14,7 @@ trap 'fail "deploy aborted unexpectedly at line $LINENO rc=$?"' ERR
 
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-192.168.254.63}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 if [[ -f .env ]]; then
   set -a
   # shellcheck disable=SC1091
@@ -22,7 +22,7 @@ if [[ -f .env ]]; then
   set +a
   PI_USER="${PI_USER:-pi}"
   PI_HOST="${PI_HOST:-192.168.254.63}"
-  PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+  PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 fi
 # Force known-good IP unless explicitly overridden by setting PI_HOST before run.
 PI_HOST="${PI_HOST:-192.168.254.63}"

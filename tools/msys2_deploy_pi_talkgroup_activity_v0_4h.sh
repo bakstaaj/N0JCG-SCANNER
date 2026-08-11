@@ -16,7 +16,7 @@ fail(){ echo "FAIL: $*"; FAIL_COUNT=$((FAIL_COUNT+1)); echo "UPLOAD_FILE_MSYS=$L
 trap 'fail "deploy aborted unexpectedly at line $LINENO rc=$?"' ERR
 
 if [[ ! -f src/pi_p25_scanner/backend.py || ! -f src/pi_p25_scanner/talkgroup_activity.py ]]; then
-  fail "run this from the PI-P25-SCANNER repo root after applying V0.4H"
+  fail "run this from the scanner repo root after applying V0.4H"
 fi
 pass "repo root detected"
 
@@ -28,7 +28,7 @@ if [[ -f .env ]]; then
 fi
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-192.168.254.63}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 SSHPASS_VALUE="${PI_PASSWORD:-${SSHPASS:-}}"
 if [[ -z "$SSHPASS_VALUE" ]]; then
   read -r -s -p "Pi password for ${PI_USER}@${PI_HOST}: " SSHPASS_VALUE

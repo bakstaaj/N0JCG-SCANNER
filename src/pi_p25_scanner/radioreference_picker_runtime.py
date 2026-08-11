@@ -1,4 +1,4 @@
-"""Runtime RadioReference system/site picker helpers for PI-P25-SCANNER.
+"""Runtime RadioReference system/site picker helpers for scanner.
 
 This module intentionally uses explicit SOAP method signatures observed from the
 RadioReference WSDL instead of relying on older loose positional call guesses.

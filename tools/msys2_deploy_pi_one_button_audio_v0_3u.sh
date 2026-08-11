@@ -40,7 +40,7 @@ trap 'rc=$?; if [[ $rc -ne 0 ]]; then fail "deploy aborted unexpectedly at line 
 usage() {
   cat <<USAGE
 Usage:
-  ./tools/msys2_deploy_pi_one_button_audio_v0_3u.sh [--host PI-SDR] [--user pi] [--repo /home/pi/PI-P25-SCANNER]
+  ./tools/msys2_deploy_pi_one_button_audio_v0_3u.sh [--host PI-SDR] [--user pi] [--repo /home/pi/n0jcg-scanner]
 USAGE
 }
 while [[ $# -gt 0 ]]; do
@@ -53,14 +53,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-printf '=== PI-P25-SCANNER V0.3U one-button audio deploy ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner V0.3U one-button audio deploy ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "web" ]]; then
-  pass "running from PI-P25-SCANNER repository root"
+  pass "running from scanner repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   finish
 fi
 case "$(uname -s 2>/dev/null || true)" in
@@ -79,7 +79,7 @@ else
 fi
 export PI_HOST="${PI_HOST_ARG:-${PI_HOST:-PI-SDR}}"
 export PI_USER="${PI_USER_ARG:-${PI_USER:-pi}}"
-export PI_REPO="${PI_REPO_ARG:-${PI_REPO:-/home/pi/PI-P25-SCANNER}}"
+export PI_REPO="${PI_REPO_ARG:-${PI_REPO:-/home/pi/n0jcg-scanner}}"
 if [[ -z "${PI_PASSWORD:-}" && -n "${SSHPASS:-}" ]]; then
   export PI_PASSWORD="$SSHPASS"
 fi

@@ -69,12 +69,12 @@ mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
 : > "$CLIENT_LOG"
 : > "$STATUS_JSONL"
-printf '=== PI-P25-SCANNER TOPAZ/TRWC live RF probe ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner TOPAZ/TRWC live RF probe ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "runtime" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root on the Raspberry Pi"
+  fail "run from scanner repository root on the Raspberry Pi"
 fi
 
 if [[ "$YES" -eq 1 ]]; then

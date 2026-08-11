@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bounded OP25 live command probe for PI-P25-SCANNER.
+# Bounded OP25 live command probe for scanner.
 # Run from the Raspberry Pi repository root. Default mode is dry-run only.
 
 set -Eeuo pipefail
@@ -94,12 +94,12 @@ done
 
 mkdir -p "$REPORT_DIR" runtime/settings runtime/op25
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER OP25 live command probe ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner OP25 live command probe ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "tools" && -d "src/pi_p25_scanner" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi
@@ -460,6 +460,21 @@ P25_CONTROL_DEMOD_TYPE=$control_demod
 P25_VOICE_DEMOD_TYPE=$voice_demod
 P25_VOICE_SAMPLE_RATE=$voice_sample_rate
 P25_VOICE_CENTER_HZ=$voice_center_hz
+# Keep the production launch on the dedicated control/voice receiver pair.
+# The backend consumes this mode explicitly and fails closed if 00000252 is
+# unavailable; a later single-rx probe must not silently undo multi-rx.
+P25_VALIDATED_RX_MODE=multi_rx
+P25_MULTI_RX_WRAPPER=/home/pi/n0jcg-scanner/tools/p25_scalable_multi_rx_wrapper.py
+P25_VALIDATED_MULTI_RX_APP=/home/pi/op25/op25/gr-op25_repeater/apps/multi_rx.py
+P25_VALIDATED_SINGLE_RX_APP=/home/pi/op25/op25/gr-op25_repeater/apps/rx.py
+P25_MULTI_RX_PROJECT_ROOT=/home/pi/n0jcg-scanner
+P25_MULTI_RX_RECEIVER_ROLES=/home/pi/n0jcg-scanner/runtime/settings/receiver_roles.json
+P25_MULTI_RX_MANIFEST=/home/pi/n0jcg-scanner/runtime/op25/manifest.json
+P25_MULTI_RX_CONFIG=/home/pi/n0jcg-scanner/runtime/op25/multi_rx.json
+P25_MULTI_RX_STATE=/home/pi/n0jcg-scanner/runtime/op25/multi_rx_state.json
+P25_MULTI_RX_RECEIVER_REGEX=^0000025[0-9]$
+P25_MULTI_RX_AUDIO_BASE_PORT=23500
+P25_MULTI_RX_AUDIO_PORT_COUNT=10
 ENV
   pass "wrote validated command evidence marker: runtime/settings/op25_validated_rx_command.env"
 }

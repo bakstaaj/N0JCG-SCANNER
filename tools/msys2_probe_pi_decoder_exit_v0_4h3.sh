@@ -5,9 +5,9 @@ LOG_DIR="/c/Users/jim/Downloads/pi-p25-command-logs"
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 LOG_FILE="$LOG_DIR/probe_v0_4h3_decoder_exit_${TS}.txt"
 exec > >(tee -a "$LOG_FILE") 2>&1
-PI_USER="${PI_USER:-pi}"; PI_HOST="${PI_HOST:-192.168.254.63}"; PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_USER="${PI_USER:-pi}"; PI_HOST="${PI_HOST:-192.168.254.63}"; PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 if [[ -f .env ]]; then set -a; source .env || true; set +a; fi
-PI_USER="${PI_USER:-pi}"; PI_HOST="${PI_HOST:-192.168.254.63}"; PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_USER="${PI_USER:-pi}"; PI_HOST="${PI_HOST:-192.168.254.63}"; PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 ssh_cmd=(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "${PI_USER}@${PI_HOST}")
 if [[ -n "${SSHPASS:-${PI_PASSWORD:-}}" ]] && command -v sshpass >/dev/null 2>&1; then export SSHPASS="${SSHPASS:-$PI_PASSWORD}"; ssh_cmd=(sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "${PI_USER}@${PI_HOST}"); fi
 "${ssh_cmd[@]}" bash -s -- "$PI_REPO" <<'REMOTE'

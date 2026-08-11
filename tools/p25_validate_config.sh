@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate a PI-P25-SCANNER config JSON file.
+# Validate a scanner config JSON file.
 # Default path: runtime/settings/p25_systems.json when present, otherwise config/p25_systems.example.json.
 
 set -Eeuo pipefail
@@ -11,12 +11,12 @@ pass() { printf 'PASS: %s\n' "$*"; PASS_COUNT=$((PASS_COUNT + 1)); return 0; }
 warn() { printf 'WARN: %s\n' "$*"; WARN_COUNT=$((WARN_COUNT + 1)); return 0; }
 fail() { printf 'FAIL: %s\n' "$*"; FAIL_COUNT=$((FAIL_COUNT + 1)); return 0; }
 
-printf '=== PI-P25-SCANNER config validation ===\n'
+printf '=== scanner config validation ===\n'
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   printf 'FINAL: FAIL\n'
   exit 1
 fi

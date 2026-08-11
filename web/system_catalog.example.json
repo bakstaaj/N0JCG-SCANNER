@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "source_note": "Local starter catalog for PI-P25-SCANNER. This V0.4F entry restores the specific Mesa/TOPAZ TGIDs from the known-working project test profile while RadioReference API access is pending.",
+  "source_note": "Local starter catalog for scanner. This V0.4F entry restores the specific Mesa/TOPAZ TGIDs from the known-working project test profile while RadioReference API access is pending.",
   "categories": [
     "Fire",
     "EMS",

@@ -21,7 +21,7 @@ print('===== /api/radioreference/sites =====')
 url=base + '/api/radioreference/sites?system_id=' + urllib.parse.quote(system_id)
 print(json.dumps(json.load(urllib.request.urlopen(url, timeout=20)), indent=2, sort_keys=True))
 print('===== import parser marker from source =====')
-text=open('/home/pi/PI-P25-SCANNER/src/pi_p25_scanner/radioreference_import.py', encoding='utf-8').read()
+text=open('/home/pi/n0jcg-scanner/src/pi_p25_scanner/radioreference_import.py', encoding='utf-8').read()
 print('explicit-site-frequency-v0.4d5' in text)
 if site_id:
     print('NOTE: This probe does not import automatically. Use the UI Import and Save button for system', system_id, 'site', site_id)

@@ -46,7 +46,7 @@ sshpass -e ssh \
   "${PI_USER}@${PI_HOST}" bash -s <<'REMOTE'
 set -Eeuo pipefail
 
-root=/home/pi/PI-SCANNER
+root=/home/pi/n0jcg-scanner
 config="$root/runtime/settings/analog_receivers.json"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup="$root/runtime/patch_backups/add_k0esd_kc0cvu_ka4eps_${stamp}"

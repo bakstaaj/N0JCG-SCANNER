@@ -75,14 +75,14 @@ sudo_cmd() {
   sudo "$@"
 }
 
-printf '=== PI-P25-SCANNER V0.3S raw browser-audio service install ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner V0.3S raw browser-audio service install ===\n' | tee -a "$REPORT_FILE"
 printf 'Mode: %s\n' "$MODE" | tee -a "$REPORT_FILE"
 printf 'Repo: %s\n' "$REPO_ROOT" | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "tools" ]]; then
-  pass "running from PI-P25-SCANNER repository root"
+  pass "running from scanner repository root"
 else
-  fail "run from PI-P25-SCANNER repository root on the Pi"
+  fail "run from scanner repository root on the Pi"
 fi
 if [[ "$(uname -s 2>/dev/null || true)" == "Linux" ]]; then
   pass "Linux host detected"

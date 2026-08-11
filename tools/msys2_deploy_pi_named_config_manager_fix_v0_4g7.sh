@@ -34,7 +34,7 @@ trap finish EXIT
 trap 'fail "deploy aborted unexpectedly at line $LINENO rc=$?"; exit 1' ERR
 
 if [[ ! -d .git || ! -f src/pi_p25_scanner/backend.py ]]; then
-  fail "run this from the PI-P25-SCANNER repository root"
+  fail "run this from the scanner repository root"
   exit 1
 fi
 pass "repo root detected"
@@ -47,7 +47,7 @@ if [[ -f .env ]]; then
 fi
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 PI_PASSWORD="${PI_PASSWORD:-${SSHPASS:-}}"
 if [[ -z "$PI_PASSWORD" ]]; then
   fail "PI_PASSWORD or SSHPASS must be set in .env or environment"

@@ -5,7 +5,7 @@ set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT/.env}"
-P25_ROOT="${P25_ROOT:-/home/pi/PI-P25-SCANNER}"
+P25_ROOT="${P25_ROOT:-/home/pi/n0jcg-scanner}"
 LOCAL_ARCHIVE="${TMPDIR:-/tmp}/pi-scanner-dashboard-v2.0.2.tar.gz"
 REMOTE_ARCHIVE="/tmp/pi-scanner-dashboard-v2.0.2.tar.gz"
 

@@ -61,6 +61,7 @@
       </div>
       <button class="nav-item active" data-screen="dashboardScreen" type="button">Dashboard</button>
       <button class="nav-item" data-screen="radioSetupScreen" type="button">Radio setup</button>
+      <button class="nav-item" data-screen="alignmentScreen" type="button">Antenna alignment</button>
       <button class="nav-item" data-screen="registrationScreen" type="button">Registration</button>
       <button class="nav-item" data-screen="logsScreen" type="button">Logs and details</button>
       <a class="nav-item" href="mobile.html">Phone interface</a>
@@ -193,6 +194,31 @@
         </div>
       </section>
 
+      <section id="alignmentScreen" class="screen" aria-label="antenna alignment">
+        <div class="screen-title">
+          <h1>P25 antenna alignment</h1>
+          <p>Rotate the Tram/Browning Yagi manually. Hold each heading steady while the scanner scores live control-channel reception.</p>
+        </div>
+        <section class="profile-panel alignment-panel">
+          <div class="section-row">
+            <div><strong>Objective receive score</strong><p>Scores control-channel lock time, decoded control updates, and voice activity. No transmission or antenna movement is performed.</p></div>
+            <span id="alignmentBadge" class="pill warn">Ready</span>
+          </div>
+          <div class="alignment-controls">
+            <label>Current azimuth (degrees)<input id="alignmentAzimuth" type="number" min="0" max="359" step="1" placeholder="0–359"></label>
+            <button id="alignmentSampleBtn" type="button" class="primary">Record 30-second direction</button>
+            <button id="alignmentClearBtn" type="button">Clear results</button>
+          </div>
+          <div class="alignment-live-grid">
+            <article><span>Control lock</span><strong id="alignmentLock">-</strong></article>
+            <article><span>Live score</span><strong id="alignmentLiveScore">-</strong></article>
+            <article><span>Best direction</span><strong id="alignmentBest">-</strong></article>
+          </div>
+          <p id="alignmentStatusText" class="alignment-status">Enter the antenna heading, then record a direction.</p>
+          <div class="table-scroll"><table class="alignment-table"><thead><tr><th>Azimuth</th><th>Samples</th><th>Median score</th><th>Median lock</th><th>Score range</th><th>Last recorded</th></tr></thead><tbody id="alignmentResults"><tr><td colspan="6">No directions recorded yet.</td></tr></tbody></table></div>
+        </section>
+      </section>
+
       <section id="registrationScreen" class="screen" aria-label="registration">
         <div class="screen-title">
           <h1>Product registration</h1>
@@ -230,8 +256,8 @@
       </section>
     </main>
   </div>
-  <script src="app.js?v=2.0.11-hide-registered-badge-default-hidden"></script>
-  <script src="pcm-ring-player.js?v=1.0.1-clock-recovery"></script>
-  <script src="audio_arbitrator_live.js?v=2.2.2-clock-recovered-ring-player-3.0.1-roc-subpath"></script>
+  <script src="app.js?v=2.0.14-antenna-alignment-median-20260811-audio-reload"></script>
+  <script src="pcm-ring-player.js?v=1.0.1-clock-recovery-20260811-audio-reload"></script>
+  <script src="audio_arbitrator_live.js?v=2.2.2-clock-recovered-ring-player-3.0.1-roc-subpath-20260811-audio-reload"></script>
 </body>
 </html>

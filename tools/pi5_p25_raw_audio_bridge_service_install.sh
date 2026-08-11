@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install/uninstall the independent raw browser-audio bridge systemd service.
-# Run on the Raspberry Pi from the PI-P25-SCANNER repository root.
+# Run on the Raspberry Pi from the scanner repository root.
 set -Eeuo pipefail
 
 PASS_COUNT=0
@@ -65,13 +65,13 @@ done
 
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER raw audio bridge service installer ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner raw audio bridge service installer ===\n' | tee -a "$REPORT_FILE"
 printf 'Mode: %s\n' "$MODE" | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "tools" ]]; then
   pass "running from repository root: $REPO_ROOT"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
 fi
 if [[ "$(uname -s 2>/dev/null || true)" == "Linux" ]]; then
   pass "Linux host detected"

@@ -3,7 +3,7 @@ set -Eeuo pipefail
 if [[ -f .env ]]; then set -a; source .env; set +a; fi
 PI_USER="${PI_USER:-pi}"
 PI_HOST="192.168.254.63"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 SSH_BASE=(ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts")
 if [[ -n "${SSHPASS:-}" && $(command -v sshpass || true) ]]; then
   SSH_BASE=(sshpass -e ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts")

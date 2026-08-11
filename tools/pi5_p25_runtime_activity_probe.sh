@@ -26,7 +26,7 @@ finish() {
 }
 trap finish EXIT
 
-log "=== PI-P25-SCANNER runtime activity probe ==="
+log "=== scanner runtime activity probe ==="
 
 if [ ! -d .git ] || [ ! -d src/pi_p25_scanner ]; then
   fail "run from repository root"

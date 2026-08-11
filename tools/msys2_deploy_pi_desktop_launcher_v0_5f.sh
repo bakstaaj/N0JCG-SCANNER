@@ -37,7 +37,7 @@ else
 fi
 PI_HOST="192.168.254.63"
 PI_USER="${PI_USER:-pi}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 TARGET="$PI_USER@$PI_HOST"
 pass "target fixed to $TARGET:$PI_REPO"
 
@@ -99,14 +99,14 @@ cat > tools/start_p25_scanner_desktop.sh <<'STARTER'
 set -euo pipefail
 URL="http://127.0.0.1:8070/"
 STATUS="http://127.0.0.1:8070/api/status"
-LOG_DIR="$HOME/PI-P25-SCANNER/runtime/logs"
+LOG_DIR="$HOME/scanner/runtime/logs"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/desktop_launcher.log"
 {
   echo "===== $(date -Is) P25 desktop launcher ====="
   if ! curl -fsS --max-time 3 "$STATUS" >/dev/null; then
     echo "Backend status endpoint is not reachable at $STATUS"
-    echo "Open the PI-P25-SCANNER service/backend first, then retry this launcher."
+    echo "Open the scanner service/backend first, then retry this launcher."
   else
     echo "Backend reachable; opening the stopped dashboard."
   fi
@@ -129,8 +129,8 @@ cat > /home/pi/Desktop/P25-Scanner.desktop <<'DESKTOP'
 Type=Application
 Name=P25 Scanner
 Comment=Open PI Scanner; use Start Scanning and Audio to begin reception
-Exec=/home/pi/PI-P25-SCANNER/tools/start_p25_scanner_desktop.sh
-Path=/home/pi/PI-P25-SCANNER
+Exec=/home/pi/n0jcg-scanner/tools/start_p25_scanner_desktop.sh
+Path=/home/pi/n0jcg-scanner
 Icon=network-wireless
 Terminal=false
 Categories=Network;HamRadio;

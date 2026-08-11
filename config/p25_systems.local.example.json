@@ -16,6 +16,11 @@
           "tgid": 1001,
           "label": "Dispatch",
           "enabled": true
+        },
+        {
+          "tgid": 4377,
+          "label": "Fremont SO 1",
+          "enabled": true
         }
       ],
       "receiver_roles": {

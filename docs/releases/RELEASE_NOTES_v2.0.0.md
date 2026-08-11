@@ -53,7 +53,7 @@ single-owner FFT-directed NFM scanner validated on the deployed Raspberry Pi.
   FFT sweep, service state, and web channel API checks pass.
 - The deployment workflow creates a recoverable Pi backup before replacing
   files. The final acceptance deployment backup is under
-  `/home/pi/PI-SCANNER/runtime/patch_backups/`.
+  `/home/pi/n0jcg-scanner/runtime/patch_backups/`.
 
 ## Upgrade note
 

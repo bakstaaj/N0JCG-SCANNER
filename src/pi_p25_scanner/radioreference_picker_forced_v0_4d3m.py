@@ -1,4 +1,4 @@
-"""Forced RadioReference picker routes for PI-P25-SCANNER V0.4D3M.
+"""Forced RadioReference picker routes for scanner V0.4D3M.
 
 This module deliberately uses the SOAP signatures observed on the target Pi:
   getCountryInfo(coid: int, authInfo)

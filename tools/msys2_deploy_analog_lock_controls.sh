@@ -5,8 +5,8 @@ set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT/.env}"
-ANALOG_ROOT="${ANALOG_ROOT:-/home/pi/PI-SCANNER}"
-P25_ROOT="${P25_ROOT:-/home/pi/PI-P25-SCANNER}"
+ANALOG_ROOT="${ANALOG_ROOT:-/home/pi/n0jcg-scanner}"
+P25_ROOT="${P25_ROOT:-/home/pi/n0jcg-scanner}"
 LOCAL_ARCHIVE="${TMPDIR:-/tmp}/pi-scanner-analog-lock-controls.tar.gz"
 REMOTE_ARCHIVE="/tmp/pi-scanner-analog-lock-controls.tar.gz"
 PYTHON_BIN="${PYTHON_BIN:-/ucrt64/bin/python.exe}"

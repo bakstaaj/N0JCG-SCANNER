@@ -21,7 +21,7 @@ trap 'finish' EXIT
 
 PI_USER="${PI_USER:-pi}"
 PI_HOST="192.168.254.63"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 [ -f .env ] && set -a && . ./.env && set +a && pass "loaded .env" || warn ".env not found; continuing"
 PI_HOST="192.168.254.63"
 pass "target fixed to ${PI_USER}@${PI_HOST}:${PI_REPO}"

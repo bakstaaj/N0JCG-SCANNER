@@ -36,7 +36,7 @@ The remaining TGIDs are enabled with placeholder labels such as `Discovery TGID 
 From MSYS2 UCRT64:
 
 ```bash
-cd ~/sdrdev/PI-P25-SCANNER
+cd ~/sdrdev/scanner
 ./tools/msys2_upload_pi_config_template.sh
 ```
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Guarded OP25 source installer/helper for PI-P25-SCANNER.
+# Guarded OP25 source installer/helper for scanner.
 # Default mode is dry-run. Full upstream install requires --run-upstream-install --yes.
 
 set -Eeuo pipefail
@@ -53,12 +53,12 @@ done
 
 mkdir -p "$REPORT_DIR" runtime/settings
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER guarded OP25 source install helper ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner guarded OP25 source install helper ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "tools" && -d "src/pi_p25_scanner" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi

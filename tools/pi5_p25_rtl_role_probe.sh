@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Probe RTL-SDR receiver serial/index evidence for PI-P25-SCANNER.
+# Probe RTL-SDR receiver serial/index evidence for scanner.
 # Run from the repository root on Raspberry Pi 5.
 
 set -Eeuo pipefail
@@ -20,12 +20,12 @@ fail() { printf 'FAIL: %s\n' "$*" | tee -a "$REPORT_FILE"; FAIL_COUNT=$((FAIL_CO
 
 mkdir -p "$REPORT_DIR" "$EEPROM_DIR" runtime/settings
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER RTL role probe ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner RTL role probe ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "tools" && -d "config" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi

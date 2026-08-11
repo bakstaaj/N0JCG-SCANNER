@@ -36,7 +36,7 @@ trap 'rc=$?; if [[ $rc -ne 0 ]]; then fail "deploy aborted unexpectedly at line 
 usage() {
   cat <<USAGE
 Usage:
-  ./tools/msys2_deploy_pi_touch_ui_v0_4a.sh [--host PI-SDR] [--user pi] [--repo /home/pi/PI-P25-SCANNER]
+  ./tools/msys2_deploy_pi_touch_ui_v0_4a.sh [--host PI-SDR] [--user pi] [--repo /home/pi/n0jcg-scanner]
 USAGE
 }
 while [[ $# -gt 0 ]]; do
@@ -49,7 +49,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-printf '=== PI-P25-SCANNER V0.4A touch UI deploy ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner V0.4A touch UI deploy ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 
@@ -59,7 +59,7 @@ case "$(uname -s 2>/dev/null || true)" in MINGW*|MSYS*) pass "MSYS2 shell detect
 if [[ -f .env ]]; then set -a; . ./.env; set +a; pass "loaded .env"; else warn ".env not found; defaults will be used and password may be required"; fi
 PI_HOST="${PI_HOST_ARG:-${PI_HOST:-PI-SDR}}"
 PI_USER="${PI_USER_ARG:-${PI_USER:-pi}}"
-PI_REPO="${PI_REPO_ARG:-${PI_REPO:-/home/pi/PI-P25-SCANNER}}"
+PI_REPO="${PI_REPO_ARG:-${PI_REPO:-/home/pi/n0jcg-scanner}}"
 if [[ -z "${PI_PASSWORD:-}" && -n "${SSHPASS:-}" ]]; then PI_PASSWORD="$SSHPASS"; fi
 if [[ -z "${PI_PASSWORD:-}" ]]; then read -r -s -p "Pi password for ${PI_USER}@${PI_HOST}: " PI_PASSWORD; echo; fi
 if [[ -z "${PI_PASSWORD:-}" ]]; then fail "empty Pi password"; finish; fi

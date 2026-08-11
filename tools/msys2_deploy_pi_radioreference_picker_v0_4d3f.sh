@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 PI_USER="${PI_USER:-pi}"
 PI_HOST="192.168.254.63"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG_DIR="/c/Users/jim/Downloads/pi-p25-command-logs"
 LOG_FILE="$LOG_DIR/deploy_v0_4d3f_radioreference_picker_${STAMP}.txt"

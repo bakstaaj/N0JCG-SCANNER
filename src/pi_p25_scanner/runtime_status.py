@@ -106,7 +106,7 @@ class RuntimeStatusParser:
         elif any(token in lower for token in (
             "tsbk", "network status broadcast", "rfss status broadcast",
             "identifier update", "voice update", "voice grant",
-            "reconfiguring nac",
+            "reconfiguring nac", "new tgid=", "set tgid=", "new freq=",
         )):
             update.control_channel_state = "locked"
             update.parser_notes.append("control_channel_activity")
@@ -116,6 +116,7 @@ class RuntimeStatusParser:
         if (
             re.search(r"\]\s+voice update\s*:", lower)
             or lower.startswith("voice update:")
+            or "new tgid=" in lower
         ):
             update.voice_call = True
             update.parser_notes.append("voice_call_assignment")

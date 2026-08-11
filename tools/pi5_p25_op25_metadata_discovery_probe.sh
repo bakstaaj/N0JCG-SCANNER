@@ -229,7 +229,7 @@ def report_text(summary: dict[str, Any], root: str) -> tuple[str, int, int, int]
     warns = 0
     fails = 0
     lines: list[str] = []
-    lines.append("# PI-P25-SCANNER OP25 Metadata Discovery")
+    lines.append("# scanner OP25 Metadata Discovery")
     lines.append("")
     lines.append(f"- Evidence source: `{root}`")
     lines.append(f"- Snapshot count: {summary['snapshot_count']}")

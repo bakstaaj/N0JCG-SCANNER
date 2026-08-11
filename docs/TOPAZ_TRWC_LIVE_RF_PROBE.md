@@ -7,7 +7,7 @@ The probe uses the existing backend API on port 8070 and the validated OP25 comm
 ## Intended sequence
 
 ```bash
-cd ~/PI-P25-SCANNER
+cd ~/scanner
 ./tools/p25_init_topaz_trwc_test_config.sh --apply --yes
 ./tools/pi5_p25_op25_live_command_probe.sh --rx-smoke --seconds 20 --yes
 ./tools/pi5_p25_topaz_trwc_live_rf_probe.sh --seconds 90 --yes

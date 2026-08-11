@@ -8,7 +8,7 @@ p25_load_dotenv
 
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 LOCAL_DOWNLOAD_DIR="${LOCAL_DOWNLOAD_DIR:-/c/Users/jim/Downloads/pi-p25-command-logs}"
 LABEL="http_runtime_probe"
 SECONDS_TO_RUN=30
@@ -30,13 +30,13 @@ Password handling:
 Defaults:
   Pi user: pi
   Pi host: PI-SDR
-  Pi repo: /home/pi/PI-P25-SCANNER
+  Pi repo: /home/pi/n0jcg-scanner
   Windows/MSYS2 downloads: /c/Users/jim/Downloads/pi-p25-command-logs
 
 Options:
   --host HOST       Pi host name or pi@HOST. Default: PI-SDR
   --user USER       Pi SSH user. Default: pi
-  --repo PATH       Pi repo path. Default: /home/pi/PI-P25-SCANNER
+  --repo PATH       Pi repo path. Default: /home/pi/n0jcg-scanner
   --seconds N       Probe duration. Default: 30
   --interval N      Probe interval. Default: 1
   --dest PATH       Local MSYS2 destination directory
@@ -111,7 +111,7 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
   echo "PI_REPO=$PI_REPO"
   echo "LOCAL_DOWNLOAD_DIR=$LOCAL_DOWNLOAD_DIR"
   [[ "$PI_USER" == "pi" ]]
-  [[ "$PI_REPO" == "/home/pi/PI-P25-SCANNER" ]]
+  [[ "$PI_REPO" == "/home/pi/n0jcg-scanner" ]]
   [[ "$LOCAL_DOWNLOAD_DIR" == /c/Users/jim/Downloads/* ]]
   echo "FINAL: PASS"
   exit 0

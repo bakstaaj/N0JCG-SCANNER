@@ -1,6 +1,6 @@
 # OP25 Command Validation
 
-This document records the guarded post-install command validation path for PI-P25-SCANNER.
+This document records the guarded post-install command validation path for scanner.
 
 ## Purpose
 

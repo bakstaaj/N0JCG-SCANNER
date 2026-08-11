@@ -3,7 +3,7 @@ set -euo pipefail
 
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 PI_PASSWORD_ARG=""
 
 if [[ -f .env ]]; then
@@ -25,7 +25,7 @@ Usage:
 Options:
   --host HOST       Pi host name or pi@HOST. Default: PI-SDR
   --user USER       SSH user. Default: pi
-  --repo PATH       Pi repo path. Default: /home/pi/PI-P25-SCANNER
+  --repo PATH       Pi repo path. Default: /home/pi/n0jcg-scanner
   --password PASS   Pi password for sshpass. Prefer PI_PASSWORD in .env.
   -h, --help        Show help
 USAGE

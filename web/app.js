@@ -97,6 +97,7 @@ let latestStatus = null;
 let currentConfig = null;
 let latestProfilesPayload = null;
 let browserAudioLastEvent = 'Ready';
+const alignmentState = { window: null, samples: [] };
 
 function field(id) { return document.getElementById(id); }
 function setText(id, value) { const el = field(id); if (el) el.textContent = value ?? '-'; }
@@ -114,6 +115,76 @@ function commandText(command) { return Array.isArray(command) ? command.join(' '
 function audioStreamUrl() { return '/radio/audio.wav'; }
 function testToneUrl() { return '/radio/test-tone.wav'; }
 function safeJson(value) { try { return JSON.stringify(value, null, 2); } catch { return String(value); } }
+
+function alignmentCounters(status) {
+  const activity = status?.activity_summary || {};
+  return {
+    control: Number(activity.control_frequency_updates || 0),
+    calls: Number(activity.distinct_voice_calls || activity.voice_call_events || 0),
+    clear: Number(activity.clear_voice_events || 0),
+  };
+}
+function alignmentScore(window) {
+  const lockRatio = Math.min(1, window.lockSamples / Math.max(1, window.samplesSeen));
+  const controlDelta = Math.max(0, window.latest.control - window.base.control);
+  const callDelta = Math.max(0, window.latest.calls - window.base.calls);
+  const clearDelta = Math.max(0, window.latest.clear - window.base.clear);
+  return Math.min(100, Math.round(lockRatio * 70 + Math.min(25, controlDelta * 2) + Math.min(5, callDelta * 5) + Math.min(5, clearDelta)));
+}
+function renderAlignmentResults() {
+  const body = field('alignmentResults');
+  if (!body) return;
+  const median = (values) => { const sorted = [...values].sort((a, b) => a - b); return sorted.length ? sorted[Math.floor((sorted.length - 1) / 2)] : 0; };
+  const grouped = new Map();
+  alignmentState.samples.forEach((sample) => {
+    const bucket = grouped.get(sample.azimuth) || [];
+    bucket.push(sample);
+    grouped.set(sample.azimuth, bucket);
+  });
+  const rows = [...grouped.entries()].map(([azimuth, samples]) => {
+    const scores = samples.map((sample) => sample.score);
+    const locks = samples.map((sample) => Number.parseInt(sample.lock, 10) || 0);
+    return { azimuth, count: samples.length, score: median(scores), lock: median(locks), range: `${Math.min(...scores)}–${Math.max(...scores)}`, recorded: samples[samples.length - 1].recorded };
+  }).sort((a, b) => b.score - a.score);
+  body.innerHTML = rows.length ? rows.map((row) => `<tr><td>${row.azimuth}°</td><td>${row.count}</td><td>${row.score}</td><td>${row.lock}%</td><td>${row.range}</td><td>${row.recorded}</td></tr>`).join('') : '<tr><td colspan="6">No directions recorded yet.</td></tr>';
+  const best = rows[0];
+  setText('alignmentBest', best ? `${best.azimuth}° · median ${best.score}` : '-');
+}
+function updateAlignment(status) {
+  const lock = Boolean(status?.control_channel_locked);
+  setText('alignmentLock', lock ? 'LOCKED' : 'Searching');
+  const lockEl = field('alignmentLock');
+  if (lockEl) lockEl.className = lock ? 'ok-text' : 'warn-text';
+  const active = alignmentState.window;
+  if (!active) return;
+  active.latest = alignmentCounters(status);
+  active.samplesSeen += 1;
+  if (lock) active.lockSamples += 1;
+  setText('alignmentLiveScore', alignmentScore(active));
+  if (Date.now() >= active.ends) {
+    const score = alignmentScore(active);
+    const delta = { control: active.latest.control - active.base.control, calls: active.latest.calls - active.base.calls };
+    alignmentState.samples.push({ azimuth: active.azimuth, score, lock: `${Math.round(Math.min(1, active.lockSamples / Math.max(1, active.samplesSeen)) * 100)}%`, control: Math.max(0, delta.control), calls: Math.max(0, delta.calls), recorded: new Date().toLocaleTimeString() });
+    alignmentState.window = null;
+    setBadge('alignmentBadge', 'Ready', 'ok');
+    setText('alignmentStatusText', `Direction ${active.azimuth}° recorded with score ${score}. Rotate to the next heading.`);
+    const button = field('alignmentSampleBtn');
+    if (button) { button.disabled = false; button.textContent = 'Record 30-second direction'; }
+    renderAlignmentResults();
+  } else {
+    setText('alignmentStatusText', `Hold ${active.azimuth}° steady · ${Math.ceil((active.ends - Date.now()) / 1000)} seconds remaining.`);
+  }
+}
+function startAlignmentSample() {
+  const raw = Number(field('alignmentAzimuth')?.value);
+  if (!Number.isInteger(raw) || raw < 0 || raw > 359) { setText('alignmentStatusText', 'Enter an azimuth from 0 through 359 degrees.'); return; }
+  alignmentState.window = { azimuth: raw, started: Date.now(), ends: Date.now() + 30000, base: alignmentCounters(latestStatus), latest: alignmentCounters(latestStatus), lockSamples: 0, samplesSeen: 0 };
+  setBadge('alignmentBadge', 'Measuring', 'warn');
+  const button = field('alignmentSampleBtn');
+  if (button) { button.disabled = true; button.textContent = 'Measuring…'; }
+  setText('alignmentStatusText', `Hold ${raw}° steady while the live score is measured.`);
+}
+function clearAlignmentResults() { alignmentState.window = null; alignmentState.samples = []; setBadge('alignmentBadge', 'Ready', 'warn'); setText('alignmentLiveScore', '-'); setText('alignmentStatusText', 'Enter the antenna heading, then record a direction.'); renderAlignmentResults(); }
 
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, { cache: 'no-store', ...options });
@@ -322,6 +393,7 @@ function renderDashboard(status) {
   setBadge('connectionStatus', 'Connected', 'ok');
   registrationBadge(status);
   renderActivitySummary(status?.activity_summary || {});
+  updateAlignment(status);
   updateAudioPanel();
   setButtonsForState(status || {});
 }
@@ -922,6 +994,8 @@ function attachEventHandlers() {
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => showScreen(button.dataset.screen)));
   field('startBtn')?.addEventListener('click', (event) => { if (p25AllowManualStart(event)) startScannerAndAudio(); });
   field('stopBtn')?.addEventListener('click', stopScanner);
+  field('alignmentSampleBtn')?.addEventListener('click', startAlignmentSample);
+  field('alignmentClearBtn')?.addEventListener('click', clearAlignmentResults);
   field('activateLicenseBtn')?.addEventListener('click', activateLicense);
   field('refreshProfilesBtn')?.addEventListener('click', refreshProfiles);
   field('profileSelect')?.addEventListener('change', () => {

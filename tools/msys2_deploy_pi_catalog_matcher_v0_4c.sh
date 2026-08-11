@@ -27,11 +27,11 @@ finish() {
 }
 trap 'rc=$?; if [[ $rc -ne 0 ]]; then fail "deploy aborted unexpectedly at line $LINENO rc=$rc"; finish; fi' ERR
 
-printf '=== PI-P25-SCANNER V0.4C catalog matcher deploy ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner V0.4C catalog matcher deploy ===\n' | tee -a "$REPORT_FILE"
 if [[ -f .env ]]; then set -a; . ./.env; set +a; pass "loaded .env"; else warn ".env not found; using defaults/env"; fi
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 PI_PASSWORD="${PI_PASSWORD:-${SSHPASS:-}}"
 if [[ -z "$PI_PASSWORD" ]]; then fail "PI_PASSWORD or SSHPASS missing in .env/environment"; finish; fi
 for cmd in sshpass ssh scp tar python3; do

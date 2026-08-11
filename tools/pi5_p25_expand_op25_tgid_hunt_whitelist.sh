@@ -76,14 +76,14 @@ done
 
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER V0.3L OP25 TGID hunt whitelist expansion ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner V0.3L OP25 TGID hunt whitelist expansion ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "runtime" && -d "tools" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   finish
 fi
 if command -v python3 >/dev/null 2>&1; then

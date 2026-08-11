@@ -29,7 +29,7 @@ find_repo_root(){
     if [[ -d "$d/.git" && -f "$d/src/pi_p25_scanner/backend.py" ]]; then printf '%s\n' "$d"; return 0; fi
     d="$(dirname "$d")"
   done
-  for d in "$HOME/sdrdev/PI-P25-SCANNER" "/home/jim/sdrdev/PI-P25-SCANNER"; do
+  for d in "$HOME/sdrdev/scanner" "/home/jim/sdrdev/n0jcg-scanner"; do
     if [[ -d "$d/.git" && -f "$d/src/pi_p25_scanner/backend.py" ]]; then printf '%s\n' "$d"; return 0; fi
   done
   return 1
@@ -46,7 +46,7 @@ if [[ -f .env ]]; then
 fi
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 SSHPASS_VALUE="${PI_PASSWORD:-${SSHPASS:-}}"
 if [[ -z "$SSHPASS_VALUE" ]]; then
   fail "PI_PASSWORD or SSHPASS must be set in .env or environment"

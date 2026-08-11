@@ -21,7 +21,7 @@ finish() {
 trap 'rc=$?; if [[ $rc -ne 0 ]]; then fail "deploy aborted unexpectedly at line ${LINENO} rc=$rc"; fi; finish; exit $rc' EXIT
 
 if [[ ! -d .git ]]; then
-  fail "run this from the PI-P25-SCANNER repo root"
+  fail "run this from the scanner repo root"
   exit 1
 fi
 pass "repo root detected"
@@ -41,7 +41,7 @@ fi
 
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 PI_PASSWORD="${PI_PASSWORD:-${SSHPASS:-}}"
 REMOTE_TAR="/tmp/pi_p25_v0_4g4_named_configs_${STAMP}.tar.gz"
 LOCAL_TAR="/tmp/pi_p25_v0_4g4_named_configs_${STAMP}.tar.gz"

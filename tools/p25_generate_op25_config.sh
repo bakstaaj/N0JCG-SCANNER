@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generate OP25 runtime files from PI P25 Scanner JSON config.
-# Run from the PI-P25-SCANNER repository root.
+# Run from the scanner repository root.
 
 set -Eeuo pipefail
 
@@ -17,12 +17,12 @@ fail() { printf 'FAIL: %s\n' "$*" | tee -a "$REPORT_FILE"; FAIL_COUNT=$((FAIL_CO
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
 
-printf '=== PI-P25-SCANNER OP25 config generation ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner OP25 config generation ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -f "config/p25_systems.example.json" ]]; then
   pass "running from repository root"
 else
-  fail "run this script from the PI-P25-SCANNER repository root"
+  fail "run this script from the scanner repository root"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi

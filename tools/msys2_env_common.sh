@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Common local .env helpers for PI-P25-SCANNER MSYS2-to-Pi workflows.
+# Common local .env helpers for scanner MSYS2-to-Pi workflows.
 # This file is meant to be sourced by MSYS2 helper scripts.
 
 p25_env_file() {

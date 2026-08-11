@@ -20,10 +20,10 @@ finish() {
 }
 trap finish EXIT
 
-echo "=== PI-P25-SCANNER OP25 voice frame parser probe ==="
+echo "=== scanner OP25 voice frame parser probe ==="
 
 if [ ! -d .git ] || [ ! -d src/pi_p25_scanner ]; then
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   exit 0
 fi
 pass "running from repository root"

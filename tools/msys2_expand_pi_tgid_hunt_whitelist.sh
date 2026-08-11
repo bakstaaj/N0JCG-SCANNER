@@ -4,7 +4,7 @@ set -euo pipefail
 
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 LOCAL_DOWNLOAD_DIR="${LOCAL_DOWNLOAD_DIR:-/c/Users/jim/Downloads/pi-p25-command-logs}"
 START_TGID=2500
 END_TGID=4500
@@ -34,7 +34,7 @@ Default range is 2500-4500 and known encrypted TGIDs are blacklisted.
 Options:
   --host HOST                  Pi host name or pi@HOST. Default: PI-SDR
   --user USER                  Pi SSH user. Default: pi
-  --repo PATH                  Pi repo path. Default: /home/pi/PI-P25-SCANNER
+  --repo PATH                  Pi repo path. Default: /home/pi/n0jcg-scanner
   --start N                    First TGID to include. Default: 2500
   --end N                      Last TGID to include. Default: 4500
   --include-known-encrypted    Do not blacklist known encrypted TGIDs

@@ -25,7 +25,7 @@ printf '=== no-blocking Git output validation ===\n'
 if [[ -f DEV_GUARDRAILS.md && -d tools ]]; then
   pass "running from repository root"
 else
-  fail "run this script from the PI-P25-SCANNER repository root"
+  fail "run this script from the scanner repository root"
   printf 'FINAL: FAIL\n'
   exit 1
 fi

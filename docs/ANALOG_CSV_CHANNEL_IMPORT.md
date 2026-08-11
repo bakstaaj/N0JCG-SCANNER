@@ -1,6 +1,6 @@
 # Analog 2 m / 70 cm CSV Channel Import
 
-This branch starts from the current `PI-P25-SCANNER/main` baseline. It adds the
+This branch starts from the current `scanner/main` baseline. It adds the
 CSV channel-list configuration boundary only; analog SDR workers are connected
 in the next feature phase.
 

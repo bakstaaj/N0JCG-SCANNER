@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Validate generated OP25 trunk TSV file references are absolute and readable.
-# Run from PI-P25-SCANNER repository root.
+# Run from scanner repository root.
 
 set -Eeuo pipefail
 
@@ -20,12 +20,12 @@ pass() { printf 'PASS: %s\n' "$*" | tee -a "$REPORT_FILE"; PASS_COUNT=$((PASS_CO
 warn() { printf 'WARN: %s\n' "$*" | tee -a "$REPORT_FILE"; WARN_COUNT=$((WARN_COUNT + 1)); }
 fail() { printf 'FAIL: %s\n' "$*" | tee -a "$REPORT_FILE"; FAIL_COUNT=$((FAIL_COUNT + 1)); }
 
-printf '=== PI-P25-SCANNER OP25 runtime path validation ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner OP25 runtime path validation ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
 fi
 
 if command -v python3 >/dev/null 2>&1; then

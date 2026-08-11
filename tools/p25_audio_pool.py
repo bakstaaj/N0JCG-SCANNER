@@ -600,7 +600,7 @@ def main() -> int:
     parser.add_argument("--output-port", type=int, default=23456)
     parser.add_argument(
         "--state",
-        default="/home/pi/PI-P25-SCANNER/runtime/op25/audio_pool_state.json",
+        default="/home/pi/n0jcg-scanner/runtime/op25/audio_pool_state.json",
     )
     parser.add_argument("--min-rms", type=int, default=25)
     parser.add_argument("--release-seconds", type=float, default=1.0)

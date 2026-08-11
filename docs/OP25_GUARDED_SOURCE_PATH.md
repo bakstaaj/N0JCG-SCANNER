@@ -8,7 +8,7 @@ The current source candidate is the `boatbod/op25` repository. This path is sele
 
 ## Guarded workflow
 
-Run these on the Raspberry Pi from the PI-P25-SCANNER repository root.
+Run these on the Raspberry Pi from the scanner repository root.
 
 Dry-run the planned source path first:
 

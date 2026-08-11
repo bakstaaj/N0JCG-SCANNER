@@ -13,7 +13,7 @@ It is intentionally non-invasive:
 ## Run on the Raspberry Pi
 
 ```bash
-cd ~/sdrdev/PI-P25-SCANNER
+cd ~/sdrdev/scanner
 ./tools/pi5_p25_bringup_acceptance.sh
 ```
 

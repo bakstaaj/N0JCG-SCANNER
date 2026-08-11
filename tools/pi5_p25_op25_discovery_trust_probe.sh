@@ -26,9 +26,9 @@ finish() {
 }
 trap finish EXIT
 
-echo "=== PI-P25-SCANNER OP25 discovery trust probe ==="
+echo "=== scanner OP25 discovery trust probe ==="
 if [ ! -d .git ] || [ ! -d src/pi_p25_scanner ]; then
-  fail "run this script from the PI-P25-SCANNER repository root"
+  fail "run this script from the scanner repository root"
   exit 0
 fi
 pass "running from repository root"

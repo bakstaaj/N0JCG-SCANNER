@@ -32,7 +32,7 @@ printf '=== Deploy V0.4G6 named config startup fix ===\n'
 if [[ -d .git && -f DEV_GUARDRAILS.md && -f src/pi_p25_scanner/config_store.py ]]; then
   pass "repo root detected"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   exit 1
 fi
 
@@ -48,7 +48,7 @@ fi
 
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 PI_PASSWORD_VALUE="${PI_PASSWORD:-${SSHPASS:-}}"
 REMOTE="${PI_USER}@${PI_HOST}"
 REMOTE_TARBALL="/tmp/pi_p25_v0_4g6_named_config_startup_fix_${STAMP}.tar.gz"

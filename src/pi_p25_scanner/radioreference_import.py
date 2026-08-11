@@ -424,7 +424,7 @@ def _rr_v0_4d2_write_credentials(creds: RadioReferenceCredentials) -> None:
     SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
     text = "\n".join(
         [
-            "# Local RadioReference credentials for PI-P25-SCANNER.",
+            "# Local RadioReference credentials for scanner.",
             "# This file must stay local on the Pi and must not be committed.",
             f"RADIOREFERENCE_APP_KEY={_quote_env(creds.app_key)}",
             f"RADIOREFERENCE_USERNAME={_quote_env(creds.username)}",

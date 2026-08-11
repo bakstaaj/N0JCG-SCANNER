@@ -49,12 +49,12 @@ done
 
 mkdir -p "$REPORT_DIR" runtime/settings runtime/op25
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER TOPAZ/TRWC runtime config initializer ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner TOPAZ/TRWC runtime config initializer ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "tools" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   finish
 fi
 

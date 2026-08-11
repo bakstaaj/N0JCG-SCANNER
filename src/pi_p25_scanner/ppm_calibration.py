@@ -1,4 +1,4 @@
-"""Bounded OP25 PPM calibration helper for PI-P25-SCANNER.
+"""Bounded OP25 PPM calibration helper for scanner.
 
 This module deliberately performs calibration as an explicit stopped-scanner
 workflow. It does not continuously retune while monitoring and it never

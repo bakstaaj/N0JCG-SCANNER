@@ -3,7 +3,7 @@ set -euo pipefail
 
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 LOCAL_DOWNLOAD_DIR="${LOCAL_DOWNLOAD_DIR:-/c/Users/jim/Downloads/pi-p25-command-logs}"
 SECONDS_TO_RUN=120
 HTTP_PORT=8072
@@ -38,7 +38,7 @@ pulls the log back to /c/Users/jim/Downloads/pi-p25-command-logs after it finish
 Options:
   --host HOST                 Pi host name or pi@HOST. Default: PI-SDR
   --user USER                 Pi SSH user. Default: pi
-  --repo PATH                 Pi repo path. Default: /home/pi/PI-P25-SCANNER
+  --repo PATH                 Pi repo path. Default: /home/pi/n0jcg-scanner
   --seconds N                 Test duration. Default: 120
   --http-port N               Browser audio HTTP port. Default: 8072
   --udp-port N                OP25 UDP PCM port. Default: 23456

@@ -592,8 +592,27 @@ class ScannerManager:
             self._display_suppressed_tgid_until.pop(parsed_tgid, None)
 
         if update.control_channel_state:
-            self.status.control_channel_state = update.control_channel_state
-            self.status.control_channel_locked = update.control_channel_state == "locked"
+            if update.control_channel_state == "locked":
+                # Voice-assignment metadata (set/new tgid and new freq) is
+                # useful for activity display but is not proof that the
+                # control channel is decoding. Only trust OP25's actual
+                # control-block evidence for the lock indicator/alignment
+                # score.
+                lower_line = update.line.lower()
+                metadata_only = any(
+                    token in lower_line
+                    for token in ("new tgid=", "set tgid=", "new freq=")
+                )
+                if not metadata_only:
+                    self.status.control_channel_state = "locked"
+                    self.status.control_channel_locked = True
+            elif update.control_channel_state == "searching":
+                # A timeout is authoritative. OP25 may repeat stale
+                # set-tgid metadata for encrypted/blocked calls, but that is
+                # not control-channel decode evidence and must not hold the
+                # UI in a false locked state.
+                self.status.control_channel_state = "searching"
+                self.status.control_channel_locked = False
 
         # Do not promote encrypted/blocked/muted calls into the active-audio panel.
         if encrypted_or_muted or label_blocked or temporarily_suppressed:

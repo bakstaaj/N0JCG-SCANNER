@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Normalize tracked/project text files to LF/no trailing spaces and refresh the Git index.
-# Run from the PI-P25-SCANNER repository root.
+# Run from the scanner repository root.
 
 set -Eeuo pipefail
 
@@ -17,12 +17,12 @@ fail() { printf 'FAIL: %s\n' "$*" | tee -a "$REPORT_FILE"; FAIL_COUNT=$((FAIL_CO
 
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER text policy normalizer ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner text policy normalizer ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -f ".gitattributes" && -d "tools" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root after .gitattributes exists"
+  fail "run from scanner repository root after .gitattributes exists"
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"
   exit 1
 fi

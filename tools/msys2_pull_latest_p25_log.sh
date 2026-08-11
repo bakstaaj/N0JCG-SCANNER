@@ -8,7 +8,7 @@ p25_load_dotenv
 
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-PI-SDR}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 LOCAL_DOWNLOAD_DIR="${LOCAL_DOWNLOAD_DIR:-/c/Users/jim/Downloads/pi-p25-command-logs}"
 LABEL="http_runtime_probe"
 REMOTE_FILE=""
@@ -23,13 +23,13 @@ Usage:
 Defaults are intentionally matched to Jim's workflow:
   Pi user: pi
   Pi host: PI-SDR
-  Pi repo: /home/pi/PI-P25-SCANNER
+  Pi repo: /home/pi/n0jcg-scanner
   Windows/MSYS2 downloads: /c/Users/jim/Downloads/pi-p25-command-logs
 
 Options:
   --host HOST             Pi host name or pi@HOST. Default: PI-SDR
   --user USER             Pi SSH user. Default: pi
-  --repo PATH             Pi repo path. Default: /home/pi/PI-P25-SCANNER
+  --repo PATH             Pi repo path. Default: /home/pi/n0jcg-scanner
   --label NAME            Log label prefix. Default: http_runtime_probe
   --remote-file PATH      Pull this exact Pi-side file instead of latest by label
   --dest PATH             Local MSYS2 destination directory. Default: /c/Users/jim/Downloads/pi-p25-command-logs

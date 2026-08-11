@@ -15,7 +15,7 @@ already exposed by the backend.
 Typical Pi workflow:
 
 ```bash
-cd ~/PI-P25-SCANNER
+cd ~/scanner
 ./tools/p25_init_topaz_trwc_test_config.sh --apply --yes
 ./tools/pi5_p25_live_activity_capture.sh --seconds 180 --interval 3 --yes
 ./tools/pi5_p25_live_evidence_analyze.sh --latest

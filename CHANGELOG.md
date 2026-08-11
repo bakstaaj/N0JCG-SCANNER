@@ -9,6 +9,15 @@ notes are available in [`docs/releases/`](docs/releases/).
   web application, API, radio workers, and audio while the ROC provides a
   direct link to `http://<RADIO_HOST>:8070/`.
 
+## 4.2.0 - 2026-08-11
+
+- Made the P25 control/voice receiver split persistent: `00000251` remains the
+  control receiver and `00000252` is always launched as the dedicated voice
+  receiver through the scalable `multi_rx` path.
+- Added fail-closed launch protection so a missing voice receiver cannot
+  silently revert the scanner to single-radio mode.
+- Added live antenna-alignment scoring and refreshed the branded user guide.
+
 ## 4.1.0 - 2026-08-10
 
 - Published the recombined Pi-only scanner runtime and deployment package.

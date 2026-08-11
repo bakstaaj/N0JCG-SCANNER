@@ -364,7 +364,7 @@ def make_report(summary: dict[str, Any]) -> tuple[str, int, int, int]:
     warns = 0
     fails = 0
     lines: list[str] = []
-    lines.append('# PI-P25-SCANNER OP25 Interface Discovery')
+    lines.append('# scanner OP25 Interface Discovery')
     lines.append('')
     def add(level: str, text: str) -> None:
         nonlocal passes, warns, fails

@@ -24,7 +24,7 @@ pass() { echo "PASS: $*"; PASS_COUNT=$((PASS_COUNT+1)); }
 warn() { echo "WARN: $*"; WARN_COUNT=$((WARN_COUNT+1)); }
 fail() { echo "FAIL: $*"; FAIL_COUNT=$((FAIL_COUNT+1)); finish; exit 1; }
 
-[[ -f src/pi_p25_scanner/backend.py && -f src/pi_p25_scanner/config_store.py && -d web ]] || fail "run from PI-P25-SCANNER repo root"
+[[ -f src/pi_p25_scanner/backend.py && -f src/pi_p25_scanner/config_store.py && -d web ]] || fail "run from scanner repo root"
 pass "repo root detected"
 
 if [[ -f .env ]]; then
@@ -35,7 +35,7 @@ if [[ -f .env ]]; then
 fi
 PI_HOST="${PI_HOST:-192.168.254.63}"
 PI_USER="${PI_USER:-pi}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 PI_PASSWORD="${PI_PASSWORD:-${SSHPASS:-}}"
 [[ -n "$PI_PASSWORD" ]] || fail "PI_PASSWORD or SSHPASS is required in .env or environment"
 export SSHPASS="$PI_PASSWORD"

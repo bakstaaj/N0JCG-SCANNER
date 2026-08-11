@@ -15,7 +15,7 @@ trap 'rc=$?; if [[ $rc -ne 0 ]]; then fail "deploy aborted unexpectedly at line 
 echo "=== Deploy V0.4D3G RadioReference explicit picker ==="
 PI_USER="${PI_USER:-pi}"
 PI_HOST="192.168.254.63"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 
 [[ -f src/pi_p25_scanner/backend.py ]] || { fail "run from repo root"; exit 1; }
 for f in src/pi_p25_scanner/backend.py src/pi_p25_scanner/radioreference_import.py web/app.js; do [[ -f "$f" ]] || { fail "missing $f"; exit 1; }; done

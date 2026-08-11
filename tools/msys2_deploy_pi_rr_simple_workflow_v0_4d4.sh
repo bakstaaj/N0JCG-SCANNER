@@ -23,7 +23,7 @@ find_repo_root(){
   done
   return 1
 }
-REPO_ROOT="$(find_repo_root)" || fail "run from PI-P25-SCANNER repo"
+REPO_ROOT="$(find_repo_root)" || fail "run from scanner repo"
 cd "$REPO_ROOT"
 
 if [[ -f .env ]]; then
@@ -38,7 +38,7 @@ fi
 
 PI_USER="${PI_USER:-pi}"
 PI_HOST="192.168.254.63"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 pass "target fixed to ${PI_USER}@${PI_HOST}:${PI_REPO}"
 
 SSH_BASE=(ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts")

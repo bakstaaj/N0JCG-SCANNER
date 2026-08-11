@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Deploy V0.3R stable dashboard recovery to the Raspberry Pi and verify /api/status.
-# Run from MSYS2 UCRT64 at ~/sdrdev/PI-P25-SCANNER.
+# Run from MSYS2 UCRT64 at ~/sdrdev/scanner.
 set -Eeuo pipefail
 
 HOST="PI-SDR"
 USER="pi"
-PI_REPO="/home/pi/PI-P25-SCANNER"
+PI_REPO="/home/pi/n0jcg-scanner"
 PASSWORD="${PI_PASSWORD:-}"
 DEST="/c/Users/jim/Downloads/pi-p25-command-logs"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
     --dest) shift; DEST="$1"; shift ;;
     -h|--help)
       cat <<USAGE
-Usage: ./tools/msys2_deploy_pi_dashboard_recovery_v0_3r.sh [--host PI-SDR] [--user pi] [--repo /home/pi/PI-P25-SCANNER]
+Usage: ./tools/msys2_deploy_pi_dashboard_recovery_v0_3r.sh [--host PI-SDR] [--user pi] [--repo /home/pi/n0jcg-scanner]
 USAGE
       exit 0
       ;;
@@ -70,7 +70,7 @@ cat > "/tmp/pi_p25_v0_3r_dashboard_recovery_${STAMP}.sh" <<REMOTE
 #!/usr/bin/env bash
 set -Eeuo pipefail
 cd "$PI_REPO"
-printf '=== PI-P25-SCANNER V0.3R Pi dashboard recovery deploy ===\\n'
+printf '=== scanner V0.3R Pi dashboard recovery deploy ===\\n'
 printf 'Working directory: %s\\n' "\$(pwd)"
 git fetch --all --prune
 git pull --ff-only

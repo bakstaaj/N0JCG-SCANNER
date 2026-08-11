@@ -26,12 +26,12 @@ finish() {
 
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER TOPAZ/TRWC profile probe ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner TOPAZ/TRWC profile probe ===\n' | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "tools" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
 fi
 
 for cmd in python3; do

@@ -8,7 +8,7 @@ Because OP25 parses `trunk.tsv` from that process working directory, all generat
 - `Whitelist`
 - `Blacklist`
 
-The PI-P25-SCANNER generator writes these values as absolute paths under `runtime/op25`. This avoids failures where OP25 starts correctly, opens the RTL-SDR, then fails while loading a relative whitelist path from the wrong working directory.
+The scanner generator writes these values as absolute paths under `runtime/op25`. This avoids failures where OP25 starts correctly, opens the RTL-SDR, then fails while loading a relative whitelist path from the wrong working directory.
 
 Validate with:
 

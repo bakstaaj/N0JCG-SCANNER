@@ -15,7 +15,7 @@ import numpy as np
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", type=Path, default=Path("/home/pi/PI-SCANNER"))
+    parser.add_argument("--root", type=Path, default=Path("/home/pi/n0jcg-scanner"))
     parser.add_argument("--frequency-hz", type=int, required=True)
     parser.add_argument("--seconds", type=float, default=8.0)
     args = parser.parse_args()

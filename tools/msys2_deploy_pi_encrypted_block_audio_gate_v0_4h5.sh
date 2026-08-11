@@ -27,14 +27,14 @@ trap finish EXIT
 echo "=== Deploy V0.4H5 encrypted/blocked TGID audio gate ==="
 
 if [[ ! -f "src/pi_p25_scanner/backend.py" || ! -f "src/pi_p25_scanner/op25_config.py" ]]; then
-  echo "ERROR: run this from the PI-P25-SCANNER repo root"
+  echo "ERROR: run this from the scanner repo root"
   exit 1
 fi
 pass "repo root detected: $(pwd)"
 
 PI_USER="${PI_USER:-pi}"
 PI_HOST="192.168.254.63"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 if [[ -f .env ]]; then
   # Only consume password/user/repo. Host is intentionally forced to the LAN IP.
   set -a

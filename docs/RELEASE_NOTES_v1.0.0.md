@@ -1,6 +1,6 @@
-# PI-P25-SCANNER v1.0.0
+# scanner v1.0.0
 
-PI-P25-SCANNER v1.0.0 is the first major stable release of the dedicated
+scanner v1.0.0 is the first major stable release of the dedicated
 Raspberry Pi P25 trunked-radio scanner. It establishes a validated
 multi-receiver OP25 architecture with independent control and voice
 demodulation, reliable browser audio, receiver-role protection, and truthful

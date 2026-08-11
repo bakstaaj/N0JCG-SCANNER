@@ -105,7 +105,7 @@ These guardrails capture project-specific lessons learned while building and val
 
 ## GUARDRAIL: MSYS2 Pi log pulls must use sshpass and Jim/Pi paths
 
-For Pi-hosted probes, do not ask the user to manually copy files from the Pi. The Pi user is `pi`, the Windows/MSYS2 user is `jim`, the Pi repo path is `/home/pi/PI-P25-SCANNER`, and local upload logs must be copied to `/c/Users/jim/Downloads/pi-p25-command-logs` before asking the user to upload them. MSYS2-side helper commands must use `sshpass` plus `scp -O`/`ssh`, not generic `ssh`/`scp` instructions that assume agent auth. Prefer `tools/msys2_run_pi_http_runtime_probe_and_pull_log.sh` or `tools/msys2_pull_latest_p25_log.sh` so the final output prints `UPLOAD_FILE_MSYS` and `UPLOAD_FILE_WINDOWS`.
+For Pi-hosted probes, do not ask the user to manually copy files from the Pi. The Pi user is `pi`, the Windows/MSYS2 user is `jim`, the Pi repo path is `/home/pi/n0jcg-scanner`, and local upload logs must be copied to `/c/Users/jim/Downloads/pi-p25-command-logs` before asking the user to upload them. MSYS2-side helper commands must use `sshpass` plus `scp -O`/`ssh`, not generic `ssh`/`scp` instructions that assume agent auth. Prefer `tools/msys2_run_pi_http_runtime_probe_and_pull_log.sh` or `tools/msys2_pull_latest_p25_log.sh` so the final output prints `UPLOAD_FILE_MSYS` and `UPLOAD_FILE_WINDOWS`.
 
 ## Backend readiness after service restart
 
@@ -119,7 +119,7 @@ MSYS2 helper scripts that connect to the Pi must use Jim's standard defaults unl
 
 - Windows/MSYS2 user path: `/c/Users/jim/Downloads/pi-p25-command-logs`
 - Pi user: `pi`
-- Pi repo path: `/home/pi/PI-P25-SCANNER`
+- Pi repo path: `/home/pi/n0jcg-scanner`
 - Copy method: `sshpass` plus `scp -O`
 
 Helpers must source `tools/msys2_env_common.sh`, load local `.env` values, and create `.env` with mode `600` when prompting for `PI_PASSWORD`. The `.env` file must remain ignored by git, must never be staged, and scripts must never print the password value. Tracked examples belong in `.env.example` only.

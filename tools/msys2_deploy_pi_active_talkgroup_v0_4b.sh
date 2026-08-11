@@ -29,7 +29,7 @@ finish() {
   printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"; exit 1
 }
 trap 'rc=$?; if [[ $rc -ne 0 ]]; then fail "deploy aborted unexpectedly at line $LINENO rc=$rc"; finish; fi' ERR
-usage() { printf 'Usage: %s [--host PI-SDR] [--user pi] [--repo /home/pi/PI-P25-SCANNER]\n' "$0"; }
+usage() { printf 'Usage: %s [--host PI-SDR] [--user pi] [--repo /home/pi/n0jcg-scanner]\n' "$0"; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --host) shift; PI_HOST_ARG="$1"; shift ;;
@@ -39,14 +39,14 @@ while [[ $# -gt 0 ]]; do
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
 done
-printf '=== PI-P25-SCANNER V0.4B active talkgroup deploy ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner V0.4B active talkgroup deploy ===\n' | tee -a "$REPORT_FILE"
 printf 'Started UTC: %s\n' "$STAMP" | tee -a "$REPORT_FILE"
 printf 'Working directory: %s\n' "$(pwd)" | tee -a "$REPORT_FILE"
 if [[ -f DEV_GUARDRAILS.md && -d src/pi_p25_scanner && -d web ]]; then pass "running from repo root"; else fail "run from repo root"; finish; fi
 if [[ -f .env ]]; then set -a; . ./.env; set +a; pass "loaded .env"; else warn ".env not found; using defaults and existing environment"; fi
 PI_HOST="${PI_HOST_ARG:-${PI_HOST:-PI-SDR}}"
 PI_USER="${PI_USER_ARG:-${PI_USER:-pi}}"
-PI_REPO="${PI_REPO_ARG:-${PI_REPO:-/home/pi/PI-P25-SCANNER}}"
+PI_REPO="${PI_REPO_ARG:-${PI_REPO:-/home/pi/n0jcg-scanner}}"
 if [[ -z "${PI_PASSWORD:-}" && -n "${SSHPASS:-}" ]]; then PI_PASSWORD="$SSHPASS"; fi
 if [[ -z "${PI_PASSWORD:-}" ]]; then fail "PI_PASSWORD missing; run one of the earlier env setup scripts or set PI_PASSWORD in .env"; finish; fi
 export PI_PASSWORD

@@ -19,11 +19,11 @@ finish(){
 trap 'rc=$?; if [ $rc -ne 0 ]; then fail "deploy aborted unexpectedly at line $LINENO rc=$rc"; fi; finish; exit $rc' EXIT
 
 log "=== Deploy V0.5D emergency UI restore ==="
-if [ ! -d web ] || [ ! -f web/index.html ] || [ ! -f web/app.js ]; then fail "run from PI-P25-SCANNER repo root after applying V0.5D"; exit 1; fi
+if [ ! -d web ] || [ ! -f web/index.html ] || [ ! -f web/app.js ]; then fail "run from scanner repo root after applying V0.5D"; exit 1; fi
 pass "local UI files found"
 
 if [ -f .env ]; then set -a; . ./.env; set +a; pass "loaded .env"; else warn ".env not found"; fi
-PI_HOST="192.168.254.63"; PI_USER="${PI_USER:-pi}"; PI_ROOT="${PI_ROOT:-/home/pi/PI-P25-SCANNER}"
+PI_HOST="192.168.254.63"; PI_USER="${PI_USER:-pi}"; PI_ROOT="${PI_ROOT:-/home/pi/n0jcg-scanner}"
 TARGET="${PI_USER}@${PI_HOST}"
 pass "target fixed to ${TARGET}:${PI_ROOT}"
 

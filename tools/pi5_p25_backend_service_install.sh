@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Guarded systemd service installer for the PI-P25-SCANNER backend.
+# Guarded systemd service installer for the scanner backend.
 # Default mode is dry-run. Use --install --yes on the Raspberry Pi to install/start.
 set -Eeuo pipefail
 
@@ -32,7 +32,7 @@ Usage:
   ./tools/pi5_p25_backend_service_install.sh --install --yes --no-start
   ./tools/pi5_p25_backend_service_install.sh --uninstall --yes
 
-Installs a systemd service for the PI-P25-SCANNER backend on port 8070.
+Installs a systemd service for the scanner backend on port 8070.
 The scanner/OP25 start action still uses the validated runtime marker:
   runtime/settings/op25_validated_rx_command.env
 USAGE
@@ -74,13 +74,13 @@ done
 
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_FILE"
-printf '=== PI-P25-SCANNER backend systemd service installer ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner backend systemd service installer ===\n' | tee -a "$REPORT_FILE"
 printf 'Mode: %s\n' "$MODE" | tee -a "$REPORT_FILE"
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "src/pi_p25_scanner" && -d "web" ]]; then
   pass "running from repository root: $REPO_ROOT"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
 fi
 
 if [[ "$(uname -s 2>/dev/null || true)" == "Linux" ]]; then

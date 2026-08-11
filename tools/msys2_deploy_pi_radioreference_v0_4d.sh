@@ -23,7 +23,7 @@ fail(){ printf 'FAIL: %s\n' "$*" | tee -a "$REPORT_FILE"; FAIL_COUNT=$((FAIL_COU
 finish(){ local wp; wp="$(cygpath -w "$REPORT_FILE" 2>/dev/null || printf '%s' "$REPORT_FILE")"; printf 'UPLOAD_FILE_MSYS=%s\n' "$REPORT_FILE" | tee -a "$REPORT_FILE"; printf 'UPLOAD_FILE_WINDOWS=%s\n' "$wp" | tee -a "$REPORT_FILE"; printf 'SUMMARY: PASS=%s WARN=%s FAIL=%s\n' "$PASS_COUNT" "$WARN_COUNT" "$FAIL_COUNT" | tee -a "$REPORT_FILE"; [[ "$FAIL_COUNT" -eq 0 ]] && { printf 'FINAL: PASS\n' | tee -a "$REPORT_FILE"; exit 0; }; printf 'FINAL: FAIL\n' | tee -a "$REPORT_FILE"; exit 1; }
 trap 'rc=$?; if [[ $rc -ne 0 ]]; then fail "deploy aborted unexpectedly at line $LINENO rc=$rc"; finish; fi' ERR
 usage(){ cat <<USAGE
-Usage: ./tools/msys2_deploy_pi_radioreference_v0_4d.sh [--host PI-SDR] [--user pi] [--repo /home/pi/PI-P25-SCANNER] [--skip-deps]
+Usage: ./tools/msys2_deploy_pi_radioreference_v0_4d.sh [--host PI-SDR] [--user pi] [--repo /home/pi/n0jcg-scanner] [--skip-deps]
 USAGE
 }
 while [[ $# -gt 0 ]]; do
@@ -36,12 +36,12 @@ while [[ $# -gt 0 ]]; do
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
 done
-printf '=== PI-P25-SCANNER V0.4D RadioReference deploy ===\n' | tee -a "$REPORT_FILE"
+printf '=== scanner V0.4D RadioReference deploy ===\n' | tee -a "$REPORT_FILE"
 if [[ -f DEV_GUARDRAILS.md && -d src/pi_p25_scanner && -d web && -d tools ]]; then pass "running from repo root"; else fail "run from repo root"; finish; fi
 if [[ -f .env ]]; then set -a; . ./.env; set +a; pass "loaded .env"; else warn "no .env found"; fi
 PI_HOST="${PI_HOST_ARG:-${PI_HOST:-PI-SDR}}"
 PI_USER="${PI_USER_ARG:-${PI_USER:-pi}}"
-PI_REPO="${PI_REPO_ARG:-${PI_REPO:-/home/pi/PI-P25-SCANNER}}"
+PI_REPO="${PI_REPO_ARG:-${PI_REPO:-/home/pi/n0jcg-scanner}}"
 PI_PASSWORD="${PI_PASSWORD:-${SSHPASS:-}}"
 if [[ -z "$PI_PASSWORD" ]]; then fail "PI_PASSWORD missing in .env"; finish; fi
 for cmd in sshpass ssh scp tar python3; do command -v "$cmd" >/dev/null 2>&1 && pass "command available: $cmd" || fail "missing command: $cmd"; done

@@ -23,7 +23,7 @@ finish(){
 trap 'rc=$?; if [[ $rc -ne 0 ]]; then fail "deploy aborted unexpectedly at line $LINENO rc=$rc"; fi; finish $rc' EXIT
 
 if [[ ! -d .git || ! -f src/pi_p25_scanner/backend.py || ! -f src/pi_p25_scanner/config_store.py ]]; then
-  fail "run this deploy helper from the PI-P25-SCANNER repo root"
+  fail "run this deploy helper from the scanner repo root"
   exit 1
 fi
 pass "repo root detected"
@@ -36,7 +36,7 @@ if [[ -f .env ]]; then
 fi
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-192.168.254.63}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 PI_PASSWORD="${PI_PASSWORD:-${SSHPASS:-}}"
 if [[ -z "$PI_PASSWORD" ]]; then
   read -r -s -p "Password for ${PI_USER}@${PI_HOST}: " PI_PASSWORD
@@ -120,9 +120,9 @@ sudo journalctl -u pi-p25-scanner.service -n 160 --no-pager
 echo PORTS_BEGIN
 (ss -ltnp || netstat -ltnp) 2>/dev/null | grep -E '(:8070|:8072|:18091)' || true
 echo BACKEND_HEAD_BEGIN
-nl -ba /home/pi/PI-P25-SCANNER/src/pi_p25_scanner/backend.py | sed -n '1,120p'
+nl -ba /home/pi/n0jcg-scanner/src/pi_p25_scanner/backend.py | sed -n '1,120p'
 echo BACKEND_STATUS_AREA_BEGIN
-nl -ba /home/pi/PI-P25-SCANNER/src/pi_p25_scanner/backend.py | grep -n 'status_payload\|api/status\|MANAGER = ScannerManager' | head -20
+nl -ba /home/pi/n0jcg-scanner/src/pi_p25_scanner/backend.py | grep -n 'status_payload\|api/status\|MANAGER = ScannerManager' | head -20
 REMOTE
 )
   "${SSH_BASE[@]}" bash -s <<< "$diag" || true

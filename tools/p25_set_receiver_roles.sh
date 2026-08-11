@@ -11,12 +11,12 @@ pass() { printf 'PASS: %s\n' "$*"; PASS_COUNT=$((PASS_COUNT + 1)); return 0; }
 warn() { printf 'WARN: %s\n' "$*"; WARN_COUNT=$((WARN_COUNT + 1)); return 0; }
 fail() { printf 'FAIL: %s\n' "$*"; FAIL_COUNT=$((FAIL_COUNT + 1)); return 0; }
 
-printf '=== PI-P25-SCANNER set receiver roles ===\n'
+printf '=== scanner set receiver roles ===\n'
 
 if [[ -f "DEV_GUARDRAILS.md" && -d "config" && -d "tools" ]]; then
   pass "running from repository root"
 else
-  fail "run from PI-P25-SCANNER repository root"
+  fail "run from scanner repository root"
   printf 'FINAL: FAIL\n'
   exit 1
 fi

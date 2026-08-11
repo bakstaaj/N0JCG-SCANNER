@@ -3,7 +3,7 @@ set -u
 if [[ -f .env ]]; then set -a; source .env; set +a; fi
 PI_HOST="192.168.254.63"
 PI_USER="${PI_USER:-pi}"
-PI_REPO="${PI_REPO:-/home/pi/PI-P25-SCANNER}"
+PI_REPO="${PI_REPO:-/home/pi/n0jcg-scanner}"
 TARGET="$PI_USER@$PI_HOST"
 SSH_BASE=(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8)
 if [[ -n "${PI_PASSWORD:-}" ]]; then export SSHPASS="$PI_PASSWORD"; fi
