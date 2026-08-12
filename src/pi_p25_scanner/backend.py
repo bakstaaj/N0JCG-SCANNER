@@ -1564,6 +1564,13 @@ if hasattr(ScannerManager, "_apply_runtime_status_update"):
                     self.status.runtime_status = update.to_status_dict()
                 except Exception:
                     pass
+                # Preserve activity accounting for suppressed calls. The
+                # wrapper returns before the normal update path, so record
+                # encrypted/blacklisted calls explicitly as muted events.
+                try:
+                    self.status.activity_summary = self.activity_tracker.record(update)
+                except Exception:
+                    pass
                 self.status.last_event = f"Suppressed {reason} TGID {tgid} from active audio display and gated browser audio"
                 self.status.updated_utc = time.time()
             return

@@ -69,6 +69,22 @@ def test_repeated_voice_updates_count_as_one_distinct_call() -> None:
     assert snapshot["distinct_voice_calls"] == 1
 
 
+def test_encrypted_voice_call_counts_as_muted_not_voice() -> None:
+    tracker = RuntimeActivityTracker()
+    tracker.record(RuntimeStatusUpdate(
+        line="encrypted voice tgid=6132",
+        tgid=6132,
+        voice_call=True,
+        encrypted=True,
+        muted=True,
+    ))
+
+    snapshot = tracker.snapshot()
+    assert snapshot["voice_call_events"] == 0
+    assert snapshot["distinct_voice_calls"] == 0
+    assert snapshot["muted_events"] == 1
+
+
 def test_voice_call_counts_again_after_quiet_gap() -> None:
     tracker = RuntimeActivityTracker()
     update = RuntimeStatusUpdate(

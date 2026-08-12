@@ -175,7 +175,10 @@ class RuntimeActivityTracker:
             if update.tgid is not None:
                 self.talkgroup_updates += 1
                 self._record_unique_tgid(update.tgid)
-            if update.voice_call:
+            # Suppressed calls are activity events, but they are not audible
+            # voice calls. Count them in muted_events instead of the voice
+            # call counters.
+            if update.voice_call and update.muted is not True and update.encrypted is not True:
                 self.voice_call_events += 1
                 signature = (update.tgid, update.voice_frequency_hz)
                 if self._last_voice_call_signature is not None:
