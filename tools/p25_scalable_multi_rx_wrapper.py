@@ -681,7 +681,7 @@ def main(argv: list[str] | None = None) -> int:
     sticky_retries = int(
         os.environ.get(
             "P25_CC_TIMEOUT_RETRIES",
-            "10",
+            "4",
         )
     )
     if not 4 <= sticky_retries <= 30:

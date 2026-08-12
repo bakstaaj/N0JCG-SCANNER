@@ -135,7 +135,7 @@ def _self_test() -> int:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cc-timeout-retries", type=int, default=10)
+    parser.add_argument("--cc-timeout-retries", type=int, default=4)
     parser.add_argument("--app", type=Path)
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("app_args", nargs=argparse.REMAINDER)
