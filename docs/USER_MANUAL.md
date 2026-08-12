@@ -47,8 +47,8 @@ PI Scanner combines three scanning paths, using four dedicated RTL-SDR
 receivers, in one touch-friendly web application:
 
 - **P25:** follows permitted, clear P25 talkgroups using dedicated control and
-  voice RTL-SDR receivers. The production P25 assignment is control `00000251`
-  and voice `00000252`; the launch path fails closed rather than silently
+  voice RTL-SDR receivers. The production P25 assignment is configured through
+  the role template; the launch path fails closed rather than silently
   reverting to a single-radio decoder.
 - **VHF:** surveys only uploaded VHF channels with an FFT, validates an active
   carrier, demodulates NFM audio, and returns to scanning when the call ends.
@@ -95,10 +95,10 @@ serial stored in each RTL-SDR EEPROM.
 
 | Role | Required serial | Operational use |
 |---|---:|---|
-| P25 control | `00000251` | Remains on the trunked-system control channel |
-| P25 voice | `00000252` | Follows P25 voice-channel grants |
-| VHF / analog 2 m | `00000144` | FFT-directed VHF NFM scanner |
-| UHF / analog 70 cm | `00000440` | FFT-directed UHF NFM scanner |
+| P25 control | `<P25_CONTROL_SERIAL>` | Remains on the trunked-system control channel |
+| P25 voice | `<P25_VOICE_SERIAL>` | Follows P25 voice-channel grants |
+| VHF / analog 2 m | `<VHF_SERIAL>` | FFT-directed VHF NFM scanner |
+| UHF / analog 70 cm | `<UHF_SERIAL>` | FFT-directed UHF NFM scanner |
 
 Keep the two analog assignments distinct and do not swap them. The VHF and UHF
 workers fail closed if their

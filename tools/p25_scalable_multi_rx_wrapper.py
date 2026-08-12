@@ -246,17 +246,18 @@ def build_multi_rx_config(
     control_demod_type: str,
     voice_demod_type: str,
     voice_sample_rate: int,
-    control_center_hz: int,
     voice_center_hz: int,
     terminal_type: str,
     crypt_behavior: int,
     audio_base_port: int,
     audio_port_count: int,
     control_only_whitelist: Path,
+    control_center_hz: int | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     system = select_system(manifest)
     system_name = str(system.get("name") or "P25 System")
     controls_hz = [int(value) for value in system["control_channels_hz"]]
+    control_center_hz = int(control_center_hz or controls_hz[0])
     controls_mhz = system.get("control_channels_mhz")
     if not isinstance(controls_mhz, list) or not controls_mhz:
         controls_mhz = [f"{value / 1_000_000:.6f}" for value in controls_hz]
