@@ -14,6 +14,7 @@ def test_desktop_running_scanner_offers_enabled_listen_without_restart() -> None
     assert "if (!alreadyRunning)" in app
     assert app.count("postJson('/api/scanner/start')") == 1
     assert "Browser audio attached; scanners were left running" in app
+    assert "await window.__scannerBrowserAudio?.stop?.()" in app
 
 
 def test_desktop_pcm_controller_exposes_per_browser_attachment_state() -> None:

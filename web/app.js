@@ -468,6 +468,13 @@ async function stopScanner() {
 
   const audio = field('browserAudioPlayer');
   if (audio) { audio.pause(); audio.src = audioStreamUrl(); }
+  // Stop the per-browser PCM fetch as part of the scanner stop action.  The
+  // native audio element is separate from the low-latency PCM controller; if
+  // its reader remains attached, the UI continues to report Listen and a
+  // reconnect can make a stop appear to require multiple clicks.
+  try {
+    await window.__scannerBrowserAudio?.stop?.();
+  } catch (_error) {}
   updateAudioPanel('Stopping P25, VHF, UHF, and browser audio');
   try {
     const status = await postJson('/api/scanner/stop');
