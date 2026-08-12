@@ -573,6 +573,7 @@ class ScannerManager:
 
         encrypted_or_muted = update.encrypted is True or update.muted is True
         configured_label = self._talkgroup_label_for_tgid(parsed_tgid)
+        profile_tgid = parsed_tgid is not None and parsed_tgid in self.talkgroup_labels
         label_lower = configured_label.lower()
         label_blocked = bool(
             parsed_tgid is not None
@@ -632,7 +633,7 @@ class ScannerManager:
                 self.status.muted = update.muted
             update.parser_notes.append("suppressed_from_active_audio_display")
             self.status.runtime_status = update.to_status_dict()
-            self.status.activity_summary = self.activity_tracker.record(update)
+            self.status.activity_summary = self.activity_tracker.record(update, profile_tgid=profile_tgid)
             self._set_event("Encrypted/blocked talkgroup suppressed from active audio display")
             return
 
@@ -664,7 +665,7 @@ class ScannerManager:
         if update.muted is not None:
             self.status.muted = update.muted
         self.status.runtime_status = update.to_status_dict()
-        self.status.activity_summary = self.activity_tracker.record(update)
+        self.status.activity_summary = self.activity_tracker.record(update, profile_tgid=profile_tgid)
 
     def _append_log(self, line: str) -> None:
         clean = line.rstrip("\n")
@@ -1568,7 +1569,7 @@ if hasattr(ScannerManager, "_apply_runtime_status_update"):
                 # wrapper returns before the normal update path, so record
                 # encrypted/blacklisted calls explicitly as muted events.
                 try:
-                    self.status.activity_summary = self.activity_tracker.record(update)
+                    self.status.activity_summary = self.activity_tracker.record(update, profile_tgid=bool(tgid is not None and tgid in getattr(self, "talkgroup_labels", {})))
                 except Exception:
                     pass
                 self.status.last_event = f"Suppressed {reason} TGID {tgid} from active audio display and gated browser audio"

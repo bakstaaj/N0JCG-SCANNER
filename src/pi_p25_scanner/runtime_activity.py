@@ -144,7 +144,12 @@ class RuntimeActivityTracker:
         self.unique_tgid_order.append(tgid)
         self.unique_tgids.add(tgid)
 
-    def record(self, update: RuntimeStatusUpdate) -> dict[str, Any]:
+    def record(
+        self,
+        update: RuntimeStatusUpdate,
+        *,
+        profile_tgid: bool = True,
+    ) -> dict[str, Any]:
         """Record one parsed runtime status update and return a snapshot."""
 
         with self._lock:
@@ -178,7 +183,7 @@ class RuntimeActivityTracker:
             # Suppressed calls are activity events, but they are not audible
             # voice calls. Count them in muted_events instead of the voice
             # call counters.
-            if update.voice_call and update.muted is not True and update.encrypted is not True:
+            if profile_tgid and update.voice_call and update.muted is not True and update.encrypted is not True:
                 self.voice_call_events += 1
                 signature = (update.tgid, update.voice_frequency_hz)
                 if self._last_voice_call_signature is not None:
@@ -200,11 +205,11 @@ class RuntimeActivityTracker:
 
                 self._last_voice_call_signature = signature
                 self._last_voice_call_utc = self.updated_utc
-            if update.encrypted is True:
+            if profile_tgid and update.encrypted is True:
                 self.encrypted_events += 1
-            if update.encrypted is False:
+            if profile_tgid and update.encrypted is False:
                 self.clear_voice_events += 1
-            if update.muted is True:
+            if profile_tgid and update.muted is True:
                 self.muted_events += 1
 
             self.recent_events.append(event)
