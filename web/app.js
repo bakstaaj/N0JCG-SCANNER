@@ -520,6 +520,13 @@ async function refreshProfiles() {
   try {
     const payload = await fetchJson('/api/config/named');
     latestProfilesPayload = payload;
+    // A new installation has no named profile to drive the radio services.
+    // Put the operator directly in Radio setup instead of leaving the empty
+    // dashboard looking operational.
+    if (Number(payload.count || 0) === 0 && Array.isArray(payload.configs) && payload.configs.length === 0) {
+      showScreen('radioSetupScreen');
+      setText('profileStatusText', 'No profile loaded. Import or create a radio profile to continue.');
+    }
     const select = field('profileSelect');
     if (select) {
       const selected = select.value;
