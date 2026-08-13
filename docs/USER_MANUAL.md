@@ -5,9 +5,9 @@
 | Product | N0JCG Scanner |
 | Slug | scanner-user-guide |
 | Type | User guide |
-| Version | 4.2.0 |
+| Version | 4.2.5 |
 | Status | Current |
-| Last updated | 2026-08-11 |
+| Last updated | 2026-08-12 |
 | Audience | Scanner operators and installers |
 | Prerequisites | N0JCG Scanner hardware and network access |
 | Estimated time | 45 minutes for setup; 5 minutes for daily operation |
@@ -21,6 +21,7 @@ installation and normal daily operation.
 
 ## Contents
 
+0. [Getting started: new installation](#getting-started-new-installation)
 1. [What PI Scanner does](#1-what-pi-scanner-does)
 2. [Safety and legal use](#2-safety-and-legal-use)
 3. [Hardware and network requirements](#3-hardware-and-network-requirements)
@@ -40,6 +41,96 @@ installation and normal daily operation.
 17. [Troubleshooting](#17-troubleshooting)
 18. [Technical reference](#18-technical-reference)
 19. [Acceptance checklist](#19-acceptance-checklist)
+
+## Getting started: new installation
+
+This section is for a new scanner appliance that has not yet been configured.
+The complete first-install wizard is checked into the repository, so the
+operator does not need to copy individual service files or manually assemble
+the receiver configuration.
+
+### Hardware you need
+
+- Raspberry Pi 5 (4 GB or more recommended) with a reliable USB-C power supply.
+- A high-endurance microSD card, 32 GB or larger, for Raspberry Pi OS and the
+  scanner software. A 64 GB card is preferred when retaining diagnostic logs.
+- A powered USB 3 hub with enough ports and current capacity for four RTL-SDR
+  receivers. Avoid unpowered hubs for a permanent installation.
+- Four RTL-SDR dongles with direct USB access. The installer assigns stable
+  serial numbers to each one; do not connect all four during serial setup.
+- A network connection from the Pi to the operator browser. Wired Ethernet is
+  preferred; Wi-Fi is acceptable where Ethernet is unavailable.
+- Receive-only antennas, coax, and any needed band filters or splitters.
+
+### Antenna recommendations
+
+Use antennas appropriate to the bands you intend to monitor. A 2 m/VHF
+scanner antenna is appropriate for the VHF FFT receiver, and a 70 cm/UHF
+antenna is appropriate for the UHF receiver. P25 700/800 MHz systems benefit
+from a dedicated 700/800 MHz antenna; a directional Yagi can improve a known
+site, while a discone is useful for broad coverage. Keep antennas separated
+from transmit antennas and use filtering or attenuation if a nearby
+transmitter overloads an SDR. The P25 control and voice receivers may share an
+antenna through a suitable splitter, but each SDR must remain a separate USB
+receiver.
+
+### Prepare the Pi and SD card
+
+1. Use Raspberry Pi Imager on a workstation to write a current 64-bit
+   Raspberry Pi OS image to the microSD card.
+2. In the Imager customization panel, set the hostname, enable SSH, create the
+   intended Linux user, and configure the network when practical.
+3. Boot the Pi with the display, keyboard, network, and powered USB hub
+   attached. Complete the first-boot prompts and apply OS updates.
+4. Confirm the Pi's IP address and verify SSH from the MSYS/Git Bash machine:
+
+   ```bash
+   ssh <user>@<pi-ip>
+   ```
+
+Do not attach the RTL-SDRs until the installer reaches the serial-assignment
+prompts. This prevents Linux device indexes from being confused during the
+one-at-a-time assignment process.
+
+### Run the first-install wizard
+
+From the checked-out repository on the workstation, in MSYS/Git Bash, run:
+
+```bash
+cd /c/msys64/home/<windows-user>/sdrdev/PI-SCANNER
+./tools/install_n0jcg_scanner_pi.sh
+```
+
+The wizard asks for the Pi IP address, SSH user (default `pi`), and SSH
+password. It saves reusable values in the local `.env` file. That file contains
+a password and must remain private.
+
+The wizard installs the required OS packages, deploys the application to
+`/home/<user>/n0jcg-scanner`, installs path-correct systemd units, and leaves
+all scanner services stopped. It then prompts for each receiver in turn:
+
+1. Insert only the P25 Control SDR; the wizard assigns the required production
+   serial, verifies it, and asks you to remove it.
+2. Insert only the P25 Voice SDR; it assigns and verifies its required
+   production serial.
+3. Insert only the VHF / 2 m SDR; it assigns and verifies its required
+   production serial.
+4. Insert only the UHF / 70 cm SDR; it assigns and verifies its required
+   production serial.
+
+The serial numbers are required production assignments and are not entered
+manually. If an assignment fails, stop and correct the physical USB connection
+before continuing. The wizard validates the RTL tools, Python modules, role
+map, and service files before it finishes. It does not start the services.
+
+### Load the first radio profile
+
+Open `http://<pi-ip>:8070/` after installation. Because no named profile exists
+on a new installation, the application opens directly on **Radio setup**. Use
+the downloadable P25 and CHIRP CSV templates to create/import a profile, review
+the receiver roles and frequencies, and save the profile. Only after the role
+map and profile validate should the administrator enable and start the scanner
+services using the commands printed by the wizard.
 
 ## 1. What PI Scanner does
 
