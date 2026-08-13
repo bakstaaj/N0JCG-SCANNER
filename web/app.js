@@ -97,6 +97,7 @@ let latestStatus = null;
 let currentConfig = null;
 let latestProfilesPayload = null;
 let browserAudioLastEvent = 'Ready';
+let statusRefreshInFlight = false;
 const alignmentState = { window: null, samples: [] };
 
 function field(id) { return document.getElementById(id); }
@@ -399,13 +400,21 @@ function renderDashboard(status) {
 }
 
 async function refreshStatus() {
+  // Do not allow a slow response to overlap the next poll and overwrite a
+  // newer dashboard snapshot. This is especially easy to trigger while a
+  // browser tab is backgrounded or the Pi is briefly busy with RF decoding.
+  if (statusRefreshInFlight) return;
+  statusRefreshInFlight = true;
   try {
     latestStatus = await fetchJson('/api/status');
     renderDashboard(latestStatus);
   } catch (error) {
     setBadge('connectionStatus', 'Offline', 'bad');
     setText('dashboardSummary', `Status error: ${error.message}`);
+    setText('controlChannelState', 'Offline');
     setText('lastEvent', `Status error: ${error.message}`);
+  } finally {
+    statusRefreshInFlight = false;
   }
 }
 
@@ -1038,6 +1047,10 @@ p25RemoveDashboardAutostartTuningRemnants();
   refreshStatus();
   refreshConfig();
   setInterval(refreshStatus, 3000);
+  window.addEventListener('pageshow', refreshStatus);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshStatus();
+  });
 }
 
 if (document.readyState === 'loading') {
