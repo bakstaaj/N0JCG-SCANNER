@@ -544,6 +544,11 @@ Every P25 profile must define `control_demod_type`; this value controls the
 control-channel demodulator used by OP25. For Colorado DTRS, set
 `control_demod_type` to `fsk4`. Do not rely on the legacy runtime marker or an
 environment override to select the control demodulator.
+Profiles may also define `preferred_control_channel_hz`. This frequency must
+be one of the listed control channels and is attempted first at startup. The
+remaining listed channels are alternates and are searched only if the
+preferred channel does not lock. If the field is omitted for an older profile,
+the first control-channel entry is treated as the preferred channel.
 Talkgroup IDs must be unique within the system and range from 0 through 65535.
 PI Scanner does not decode encrypted traffic even if an encrypted talkgroup is
 present in a CSV.

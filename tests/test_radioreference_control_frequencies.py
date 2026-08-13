@@ -189,9 +189,9 @@ class ControlChannelHuntStatusTests(unittest.TestCase):
         self.assertEqual(853_537_500, update.control_frequency_hz)
         self.assertEqual("searching", update.control_channel_state)
 
-    def test_timeout_is_searching(self) -> None:
+    def test_timeout_is_distinct_from_searching(self) -> None:
         update = self.parser.parse_line("control channel timeout")
-        self.assertEqual("searching", update.control_channel_state)
+        self.assertEqual("timeout", update.control_channel_state)
 
     def test_control_activity_is_locked(self) -> None:
         update = self.parser.parse_line("tsbk network status broadcast nac=0xd11")

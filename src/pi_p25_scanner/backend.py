@@ -607,12 +607,12 @@ class ScannerManager:
                 if not metadata_only:
                     self.status.control_channel_state = "locked"
                     self.status.control_channel_locked = True
-            elif update.control_channel_state == "searching":
+            elif update.control_channel_state in {"searching", "timeout"}:
                 # A timeout is authoritative. OP25 may repeat stale
                 # set-tgid metadata for encrypted/blocked calls, but that is
                 # not control-channel decode evidence and must not hold the
                 # UI in a false locked state.
-                self.status.control_channel_state = "searching"
+                self.status.control_channel_state = update.control_channel_state
                 self.status.control_channel_locked = False
 
         # Do not promote encrypted/blocked/muted calls into the active-audio panel.

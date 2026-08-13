@@ -143,6 +143,15 @@ def generate_op25_configs(
                 "name": system.name,
                 "site": system.site,
                 "control_channels_hz": system.control_channels_hz,
+                "preferred_control_channel_hz": system.preferred_control_channel_hz,
+                "control_channel_plan": [
+                    {
+                        "frequency_hz": freq,
+                        "frequency_mhz": hz_to_mhz_string(freq),
+                        "role": "preferred" if freq == system.preferred_control_channel_hz else "alternate",
+                    }
+                    for freq in system.control_channels_hz
+                ],
                 "control_channels_mhz": [hz_to_mhz_string(freq) for freq in system.control_channels_hz],
                 "enabled_talkgroups": [tg.tgid for tg in clear_tgs],
                 "blocked_talkgroups": [tg.tgid for tg in blocked_tgs],

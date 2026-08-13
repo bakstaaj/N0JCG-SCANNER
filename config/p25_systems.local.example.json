@@ -10,6 +10,7 @@
         851012500,
         851512500
       ],
+      "preferred_control_channel_hz": 851012500,
       "voice_channels_hz": [],
       "talkgroups": [
         {

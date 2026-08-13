@@ -370,13 +370,13 @@ function renderDashboard(status) {
   const talkgroup = bestTalkgroup(status || {});
   const listener = extractOp25HttpListener(status || {});
   const controlState = status?.control_channel_state || (running ? 'searching' : 'idle');
-  const controlSummary = controlState === 'locked'
-    ? `Locked: ${formatHz(status?.active_control_frequency_hz)}`
-    : `Searching: ${formatHz(status?.active_control_frequency_hz)}`;
+  const controlLabel = controlState === 'timeout' ? 'Timeout' : controlState === 'locked' ? 'Locked' : controlState === 'searching' ? 'Searching' : 'Idle';
+  const controlSummary = `${controlLabel}: ${formatHz(status?.active_control_frequency_hz)}`;
   setText('dashboardSummary', running ? (talkgroup.has_talkgroup ? talkgroup.short_label : controlSummary) : (ready ? 'Ready to start' : 'Not launch-ready'));
   setText('scannerState', status?.scanner_state || '-');
   setText('decoderPid', process.pid || '-');
   setText('controlFrequency', formatHz(status?.active_control_frequency_hz));
+  setText('controlChannelState', `${controlLabel} (${formatHz(status?.active_control_frequency_hz)})`);
   setText('voiceFrequency', formatHz(talkgroup.voice_frequency_hz));
   setText('activeTgid', talkgroup.tgid_text);
   setText('activeTalkgroupLabel', talkgroup.label);
@@ -493,10 +493,14 @@ function compactProfileSummary(payload, message = '') {
     const selected = configs.find((item) => (item.id || item.name) === selectedId) || configs[0];
     const system = selected?.validation?.first_enabled_system || {};
     const talkgroupCount = Array.isArray(system.talkgroups) ? system.talkgroups.length : 0;
+    const preferredControl = system.preferred_control_channel_hz
+      ? formatHz(system.preferred_control_channel_hz)
+      : 'profile default';
     const analogCounts = selected?.analog_channel_counts;
     const analogSummary = analogCounts && Object.keys(analogCounts).length
       ? `${Number(analogCounts.analog_2m || 0)} VHF / ${Number(analogCounts.analog_70cm || 0)} UHF`
       : 'analog unchanged when loaded';
+    lines.push(`Main control: ${preferredControl}; remaining control channels are alternates.`);
     lines.push(`Selected: ${selected?.name || selected?.id} · ${system.name || 'Unknown system'} · ${talkgroupCount} talkgroups · ${analogSummary}`);
   } else if (!message) {
     lines.push('No saved profiles found.');

@@ -98,7 +98,7 @@ class RuntimeStatusParser:
             return update
 
         if "control channel timeout" in lower:
-            update.control_channel_state = "searching"
+            update.control_channel_state = "timeout"
             update.parser_notes.append("control_channel_timeout")
         elif "set control channel" in lower:
             update.control_channel_state = "searching"

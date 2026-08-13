@@ -114,6 +114,7 @@ class P25System:
     mode: str = "p25_trunked"
     site: str = ""
     control_channels_hz: list[int] = field(default_factory=list)
+    preferred_control_channel_hz: int | None = None
     voice_channels_hz: list[int] = field(default_factory=list)
     talkgroups: list[Talkgroup] = field(default_factory=list)
     receiver_roles: dict[str, ReceiverRole] = field(default_factory=dict)
@@ -132,6 +133,13 @@ class P25System:
         voice_channels = [frequency_to_hz(value) for value in item.get("voice_channels_hz", [])]
         if not control_channels:
             raise ConfigError(f"system {name!r} must define at least one control channel")
+        preferred_raw = item.get("preferred_control_channel_hz")
+        preferred = frequency_to_hz(preferred_raw) if preferred_raw not in (None, "") else control_channels[0]
+        if preferred not in control_channels:
+            raise ConfigError(
+                f"system {name!r} preferred_control_channel_hz must be one of control_channels_hz"
+            )
+        control_channels = [preferred, *[freq for freq in control_channels if freq != preferred]]
 
         tg_items = item.get("talkgroups", [])
         talkgroups = [Talkgroup.from_config(tg) for tg in tg_items]
@@ -146,6 +154,7 @@ class P25System:
             mode=str(item.get("mode") or "p25_trunked"),
             site=str(item.get("site") or ""),
             control_channels_hz=control_channels,
+            preferred_control_channel_hz=preferred,
             voice_channels_hz=voice_channels,
             talkgroups=talkgroups,
             receiver_roles=roles,
@@ -162,6 +171,14 @@ class P25System:
     def to_status_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["control_channels_mhz"] = [hz_to_mhz_string(freq) for freq in self.control_channels_hz]
+        data["control_channel_plan"] = [
+            {
+                "frequency_hz": freq,
+                "frequency_mhz": hz_to_mhz_string(freq),
+                "role": "preferred" if freq == self.preferred_control_channel_hz else "alternate",
+            }
+            for freq in self.control_channels_hz
+        ]
         data["voice_channels_mhz"] = [hz_to_mhz_string(freq) for freq in self.voice_channels_hz]
         return data
 

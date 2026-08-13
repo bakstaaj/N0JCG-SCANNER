@@ -29,6 +29,7 @@ HEADERS = (
     "NAC",
     "Modulation",
     "ControlDemod",
+    "PreferredControl",
     "Description",
 )
 REQUIRED = {"RecordType", "System"}
@@ -122,6 +123,7 @@ def parse_p25_csv(text: str) -> dict[str, Any]:
                     "nac": _text(row.get("NAC")) or None,
                     "modulation": _text(row.get("Modulation")) or "CQPSK",
                     "control_demod_type": _text(row.get("ControlDemod")) or "fsk4",
+                    "preferred_control_channel_hz": None,
                     "control_channels_hz": [],
                     "voice_channels_hz": [],
                     "talkgroups": [],
@@ -143,6 +145,7 @@ def parse_p25_csv(text: str) -> dict[str, Any]:
             control_demod = _text(row.get("ControlDemod"))
             if control_demod:
                 system["control_demod_type"] = control_demod.lower()
+            preferred_control = _text(row.get("PreferredControl"))
 
             enabled = _bool(row.get("Enabled"), True)
 
@@ -151,6 +154,10 @@ def parse_p25_csv(text: str) -> dict[str, Any]:
                 if not frequency:
                     raise P25CsvError(f"FrequencyMHz is required for {kind}")
                 hz = frequency_to_hz(frequency)
+                if kind == "control" and preferred_control and _bool(preferred_control, False):
+                    if system.get("preferred_control_channel_hz") not in (None, hz):
+                        raise P25CsvError("only one control channel may be PreferredControl=true")
+                    system["preferred_control_channel_hz"] = hz
                 seen_key = "_control_seen" if kind == "control" else "_voice_seen"
                 target_key = (
                     "control_channels_hz"
@@ -208,6 +215,8 @@ def parse_p25_csv(text: str) -> dict[str, Any]:
             raise P25CsvError(
                 f"System {system['name']!r} must contain at least one enabled control row"
             )
+        if system.get("preferred_control_channel_hz") is None:
+            system["preferred_control_channel_hz"] = system["control_channels_hz"][0]
 
     return {
         "systems": list(systems.values()),
@@ -262,6 +271,7 @@ def import_p25_csv_request(request: dict[str, Any]) -> dict[str, Any]:
                 "nac": incoming["nac"],
                 "modulation": incoming["modulation"],
                 "control_demod_type": incoming["control_demod_type"],
+                "preferred_control_channel_hz": incoming["preferred_control_channel_hz"],
             }
         )
         merged.setdefault("receiver_roles", existing.get("receiver_roles", {}))
