@@ -13,14 +13,18 @@ contains a password and must not be committed or shared.
 The installer then installs Raspberry Pi OS packages, deploys the application
 to `/home/<user>/n0jcg-scanner`, installs path-correct systemd units, and keeps
 all scanner services stopped. It prompts for each RTL-SDR separately; attach
-only the requested receiver before assigning its serial number:
+only the requested receiver before automatic serial assignment:
 
-| Role | Suggested serial |
+| Role | Required serial |
 |---|---|
 | P25 control | `00000251` |
 | P25 voice | `00000252` |
 | VHF / 2 m | `00000144` |
 | UHF / 70 cm | `00000440` |
+
+The wizard assigns these serials automatically. It does not ask the user to
+type serial numbers: insert only the requested SDR, press Enter, wait for the
+assignment and verification, then remove it before proceeding to the next SDR.
 
 Validation checks Python modules, the receiver-role JSON, RTL tooling, and
 service files. After validation, open the Pi dashboard and import or create a

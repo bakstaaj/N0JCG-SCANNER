@@ -63,16 +63,18 @@ printf '\n[3/5] Assign RTL-SDR serials one at a time\n'
 declare -A SERIALS
 for role in p25_control p25_voice analog_2m analog_70cm; do
   case "$role" in
-    p25_control) label='P25 control (suggested 00000251)' ;;
-    p25_voice) label='P25 voice (suggested 00000252)' ;;
-    analog_2m) label='VHF / 2 m (suggested 00000144)' ;;
-    analog_70cm) label='UHF / 70 cm (suggested 00000440)' ;;
+    p25_control) label='P25 Control SDR'; serial='00000251' ;;
+    p25_voice) label='P25 Voice SDR'; serial='00000252' ;;
+    analog_2m) label='VHF / 2 m SDR'; serial='00000144' ;;
+    analog_70cm) label='UHF / 70 cm SDR'; serial='00000440' ;;
   esac
-  printf '\nAttach ONLY the %s, then press Enter.\n' "$label"; read -r
-  read -r -p 'Serial to assign: ' serial
-  [[ "$serial" =~ ^[A-Za-z0-9_-]{4,32}$ ]] || die 'invalid serial'
+  printf '\nInsert the %s, and make sure no other RTL-SDR is connected.\n' "$label"; read -r -p 'Press Enter when ready: '
   SERIALS[$role]="$serial"
   printf '%s\n' "$PI_PASSWORD" | sshpass -e "${SSH[@]}" sudo -S -p '' rtl_eeprom -d 0 -s "$serial" || die "rtl_eeprom failed for $role"
+  assigned="$(sshpass -e "${SSH[@]}" rtl_eeprom -d 0 2>/dev/null | tr -d '\r' || true)"
+  printf '%s\n' "$assigned" | grep -Fq "$serial" || die "could not verify assigned serial $serial for $role"
+  printf 'PASS: %s assigned serial %s.\n' "$label" "$serial"
+  printf 'Remove the %s before continuing.\n' "$label"; read -r -p 'Press Enter after removal: '
 done
 sshpass -e "${SSH[@]}" sh -s -- "$PI_REPO" "${SERIALS[p25_control]}" "${SERIALS[p25_voice]}" "${SERIALS[analog_2m]}" "${SERIALS[analog_70cm]}" <<'REMOTE_ROLES'
 set -eu
