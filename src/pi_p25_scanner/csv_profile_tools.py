@@ -7,11 +7,18 @@ import io
 from typing import Any
 
 from .chirp_csv_import import CHIRP_COLUMNS
+from .config_model import normalize_control_demod
 from .p25_csv_import import HEADERS as P25_HEADERS
 
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _control_demod_for_csv(value: Any) -> str:
+    """Export OP25 demodulator values using terms users see in references."""
+    normalized = normalize_control_demod(value)
+    return {"fsk4": "C4FM", "cqpsk": "CQPSK"}.get(normalized, _text(value))
 
 
 def _csv_text(headers: tuple[str, ...], rows: list[dict[str, Any]]) -> str:
@@ -85,6 +92,7 @@ def p25_config_to_csv(config: dict[str, Any] | None) -> str:
             "Site": _text(system.get("site")),
             "NAC": _text(system.get("nac")),
             "Modulation": _text(system.get("modulation")) or "CQPSK",
+            "ControlDemod": _control_demod_for_csv(system.get("control_demod_type")),
         }
         for record_type, key in (
             ("control", "control_channels_hz"),

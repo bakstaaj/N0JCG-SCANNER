@@ -56,6 +56,7 @@ def test_p25_export_round_trips_template_contract() -> None:
     config = {"schema_version": 1, "systems": parsed["systems"]}
 
     exported = p25_config_to_csv(config)
+    assert ",C4FM," in exported
     round_trip = parse_p25_csv(exported)
 
     assert round_trip["row_count"] == 3
