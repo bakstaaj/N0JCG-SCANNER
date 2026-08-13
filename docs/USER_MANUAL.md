@@ -468,6 +468,12 @@ as failed and the application returns the other scanners to the stopped state.
 
 ## 10. Use the Dashboard
 
+The current desktop dashboard uses the N0JCG dark theme. The Control state
+card combines the lock state and active control frequency; the separate legacy
+Control frequency card is no longer shown.
+
+![Current N0JCG Scanner dark-theme dashboard](docs/assets/scanner-dashboard-dark.png)
+
 ### Top status indicators
 
 - **Scanning:** the system is ready and looking for activity.

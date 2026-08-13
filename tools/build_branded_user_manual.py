@@ -17,6 +17,7 @@ from docx.shared import Inches, Pt, RGBColor
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "docs" / "USER_MANUAL.md"
 LOGO = ROOT / "web" / "assets" / "brand" / "N0JCG_Header_Dark_Approved.png"
+FIGURE_DASHBOARD = ROOT / "docs" / "assets" / "scanner-dashboard-dark.png"
 OUTPUT = ROOT / "docs" / "publications" / "N0JCG_Scanner_User_Manual.docx"
 
 NAVY = "0A1F44"
@@ -516,6 +517,24 @@ def add_manual_body(doc: Document, lines: list[str]) -> None:
         if not stripped:
             flush_paragraph()
             active_numbering_id = None
+            index += 1
+            continue
+        image = re.match(r"^!\[([^]]*)\]\(([^)]+)\)$", stripped)
+        if image:
+            flush_paragraph()
+            active_numbering_id = None
+            image_path = (ROOT / image.group(2)).resolve()
+            if not image_path.is_file():
+                raise FileNotFoundError(f"manual image is missing: {image_path}")
+            paragraph = doc.add_paragraph()
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            paragraph.add_run().add_picture(str(image_path), width=Inches(6.65))
+            caption = doc.add_paragraph()
+            caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = caption.add_run(image.group(1))
+            run.italic = True
+            run.font.size = Pt(9)
+            run.font.color.rgb = rgb(MUTED)
             index += 1
             continue
         if stripped.startswith("```"):
