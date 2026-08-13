@@ -120,6 +120,8 @@ class P25System:
     decoder: dict[str, Any] = field(default_factory=dict)
     nac: str | int | None = None
     modulation: str = "CQPSK"
+    # OP25 control-channel demodulator.  Colorado DTRS uses C4FM/4FSK.
+    control_demod_type: str = "fsk4"
 
     @classmethod
     def from_config(cls, item: dict[str, Any]) -> "P25System":
@@ -150,6 +152,7 @@ class P25System:
             decoder=dict(item.get("decoder", {}) if isinstance(item.get("decoder", {}), dict) else {}),
             nac=item.get("nac"),
             modulation=str(item.get("modulation") or "CQPSK"),
+            control_demod_type=str(item.get("control_demod_type") or "fsk4").strip().lower(),
         )
 
     @property

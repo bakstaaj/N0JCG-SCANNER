@@ -39,7 +39,8 @@
         "engine": "op25",
         "phase_ii_enabled": true,
         "mute_encrypted": true
-      }
+      },
+      "control_demod_type": "fsk4"
     }
   ]
 }

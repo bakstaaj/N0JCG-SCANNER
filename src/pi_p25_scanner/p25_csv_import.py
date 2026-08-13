@@ -28,6 +28,7 @@ HEADERS = (
     "ServiceType",
     "NAC",
     "Modulation",
+    "ControlDemod",
     "Description",
 )
 REQUIRED = {"RecordType", "System"}
@@ -120,6 +121,7 @@ def parse_p25_csv(text: str) -> dict[str, Any]:
                     "site": _text(row.get("Site")),
                     "nac": _text(row.get("NAC")) or None,
                     "modulation": _text(row.get("Modulation")) or "CQPSK",
+                    "control_demod_type": _text(row.get("ControlDemod")) or "fsk4",
                     "control_channels_hz": [],
                     "voice_channels_hz": [],
                     "talkgroups": [],
@@ -138,6 +140,9 @@ def parse_p25_csv(text: str) -> dict[str, Any]:
                 system["nac"] = nac
             if modulation:
                 system["modulation"] = modulation
+            control_demod = _text(row.get("ControlDemod"))
+            if control_demod:
+                system["control_demod_type"] = control_demod.lower()
 
             enabled = _bool(row.get("Enabled"), True)
 
@@ -256,6 +261,7 @@ def import_p25_csv_request(request: dict[str, Any]) -> dict[str, Any]:
                 "talkgroups": incoming["talkgroups"],
                 "nac": incoming["nac"],
                 "modulation": incoming["modulation"],
+                "control_demod_type": incoming["control_demod_type"],
             }
         )
         merged.setdefault("receiver_roles", existing.get("receiver_roles", {}))

@@ -153,6 +153,7 @@ def generate_op25_configs(
                 "blacklist_file": str(blacklist_file.resolve()),
                 "nac": op25_nac_value(system),
                 "modulation": system.modulation or "CQPSK",
+                "control_demod_type": system.control_demod_type,
             }
         )
 

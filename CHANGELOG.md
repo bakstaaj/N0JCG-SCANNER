@@ -5,6 +5,9 @@ notes are available in [`docs/releases/`](docs/releases/).
 
 ## Unreleased
 
+- Made the P25 control-channel demodulator an explicit profile field named
+  `control_demod_type`; Colorado DTRS profiles use `fsk4` for C4FM control
+  decoding, and CSV templates/imports now carry the setting.
 - Returned scanner runtime ownership to the Pi: the Pi now serves the complete
   web application, API, radio workers, and audio while the ROC provides a
   direct link to `http://<RADIO_HOST>:8070/`.

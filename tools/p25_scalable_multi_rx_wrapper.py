@@ -635,7 +635,8 @@ def main(argv: list[str] | None = None) -> int:
         or str(system.get("modulation") or "")
     )
     control_demod_type = normalize_demod(
-        os.environ.get("P25_CONTROL_DEMOD_TYPE", "")
+        str(system.get("control_demod_type") or "")
+        or os.environ.get("P25_CONTROL_DEMOD_TYPE", "")
         or marker.get("P25_CONTROL_DEMOD_TYPE", "")
         or legacy_demod_type
     )

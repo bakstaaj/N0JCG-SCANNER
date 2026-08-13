@@ -536,9 +536,14 @@ Important columns:
 | `Enabled` | `true` or `false` |
 | `Priority` | Optional value from 0 through 100 |
 | `NAC` | Optional P25 network access code |
-| `Modulation` | Usually `CQPSK` for the validated system |
+| `Modulation` | System modulation metadata; retain the value supplied by the system profile |
+| `ControlDemod` | **Required.** OP25 control-channel demodulator. Use `fsk4` for Colorado DTRS C4FM control channels. |
 
 Every imported system must have at least one enabled control-channel row.
+Every P25 profile must define `control_demod_type`; this value controls the
+control-channel demodulator used by OP25. For Colorado DTRS, set
+`control_demod_type` to `fsk4`. Do not rely on the legacy runtime marker or an
+environment override to select the control demodulator.
 Talkgroup IDs must be unique within the system and range from 0 through 65535.
 PI Scanner does not decode encrypted traffic even if an encrypted talkgroup is
 present in a CSV.
