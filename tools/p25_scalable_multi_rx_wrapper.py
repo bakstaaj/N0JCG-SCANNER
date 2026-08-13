@@ -748,7 +748,10 @@ def main(argv: list[str] | None = None) -> int:
         "receiver_count": len(receiver_rows),
         "receivers": receiver_rows,
         "serial_regex": serial_regex,
-        "demod_type": legacy_demod_type,
+        # Keep the compatibility key truthful: it historically represented
+        # the single-radio demodulator, but the control receiver now follows
+        # the profile's explicit control demodulator.
+        "demod_type": control_demod_type,
         "control_demod_type": control_demod_type,
         "voice_demod_type": voice_demod_type,
         "voice_sample_rate": voice_sample_rate,
