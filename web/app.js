@@ -376,7 +376,6 @@ function renderDashboard(status) {
   setText('dashboardSummary', running ? (talkgroup.has_talkgroup ? talkgroup.short_label : controlSummary) : (ready ? 'Ready to start' : 'Not launch-ready'));
   setText('scannerState', status?.scanner_state || '-');
   setText('decoderPid', process.pid || '-');
-  setText('controlFrequency', formatHz(status?.active_control_frequency_hz));
   setText('controlChannelState', `${controlLabel} (${formatHz(status?.active_control_frequency_hz)})`);
   setText('voiceFrequency', formatHz(talkgroup.voice_frequency_hz));
   setText('activeTgid', talkgroup.tgid_text);

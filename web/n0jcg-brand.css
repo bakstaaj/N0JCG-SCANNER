@@ -412,8 +412,7 @@ article span,
 .stats-grid strong,
 .details-grid strong,
 .counter-grid strong,
-#voiceFrequency,
-#controlFrequency {
+#voiceFrequency {
   color: var(--n0-color-navy);
   font-family: var(--n0-font-mono);
   font-variant-numeric: tabular-nums;
@@ -796,8 +795,7 @@ select {
 .stats-grid strong,
 .details-grid strong,
 .counter-grid strong,
-#voiceFrequency,
-#controlFrequency {
+#voiceFrequency {
   color: var(--n0-color-text);
 }
 
