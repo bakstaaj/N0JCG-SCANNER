@@ -63,6 +63,14 @@ def test_p25_export_round_trips_template_contract() -> None:
     assert round_trip["systems"][0]["talkgroups"][0]["tgid"] == 1001
 
 
+def test_p25_csv_translates_radio_reference_demodulation_terms() -> None:
+    source = (WEB / "p25_import_template.csv").read_text(encoding="utf-8")
+    parsed = parse_p25_csv(source.replace("C4FM", "4FSK"))
+    assert parsed["systems"][0]["control_demod_type"] == "fsk4"
+    cqpsk = parse_p25_csv(source.replace("C4FM", "CQPSK"))
+    assert cqpsk["systems"][0]["control_demod_type"] == "cqpsk"
+
+
 def test_p25_csv_import_updates_runtime_config_with_backup(
     tmp_path: Path,
     monkeypatch,

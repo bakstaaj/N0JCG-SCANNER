@@ -536,13 +536,14 @@ Important columns:
 | `Enabled` | `true` or `false` |
 | `Priority` | Optional value from 0 through 100 |
 | `NAC` | Optional P25 network access code |
-| `Modulation` | System modulation metadata; retain the value supplied by the system profile |
-| `ControlDemod` | **Required.** OP25 control-channel demodulator. Use `fsk4` for Colorado DTRS C4FM control channels. |
+| `Modulation` | Modulation term shown by your frequency reference, such as `C4FM` or `CQPSK` |
+| `ControlDemod` | **Required.** Control-channel modulation term shown by your reference. Enter `C4FM`, `4FSK`, or `CQPSK`; PI Scanner translates these to OP25's internal `fsk4` or `cqpsk` values. |
 
 Every imported system must have at least one enabled control-channel row.
 Every P25 profile must define `control_demod_type`; this value controls the
-control-channel demodulator used by OP25. For Colorado DTRS, set
-`control_demod_type` to `fsk4`. Do not rely on the legacy runtime marker or an
+control-channel demodulator used by OP25. Use the modulation term published by
+your system reference. `C4FM` and `4FSK` are translated to OP25's `fsk4`, while
+`CQPSK` is translated to `cqpsk`. Do not rely on a legacy runtime marker or an
 environment override to select the control demodulator.
 Profiles may also define `preferred_control_channel_hz`. This frequency must
 be one of the listed control channels and is attempted first at startup. The

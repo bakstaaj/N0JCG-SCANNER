@@ -121,7 +121,7 @@ class P25System:
     decoder: dict[str, Any] = field(default_factory=dict)
     nac: str | int | None = None
     modulation: str = "CQPSK"
-    # OP25 control-channel demodulator.  Colorado DTRS uses C4FM/4FSK.
+    # OP25 control-channel demodulator; user-facing names are normalized on load.
     control_demod_type: str = "fsk4"
 
     @classmethod
@@ -161,7 +161,7 @@ class P25System:
             decoder=dict(item.get("decoder", {}) if isinstance(item.get("decoder", {}), dict) else {}),
             nac=item.get("nac"),
             modulation=str(item.get("modulation") or "CQPSK"),
-            control_demod_type=str(item.get("control_demod_type") or "fsk4").strip().lower(),
+            control_demod_type=normalize_control_demod(item.get("control_demod_type")),
         )
 
     @property
@@ -220,3 +220,15 @@ def load_project_config(path: str | Path = DEFAULT_CONFIG_PATH) -> ProjectConfig
     except json.JSONDecodeError as exc:
         raise ConfigError(f"config JSON invalid: {config_path}: {exc}") from exc
     return ProjectConfig.from_dict(payload)
+def normalize_control_demod(value: Any, default: str = "fsk4") -> str:
+    """Translate user-facing modulation names to OP25 receiver values."""
+    text = str(value or "").strip().lower().replace("-", "").replace(" ", "")
+    if not text:
+        return default
+    return {
+        "c4fm": "fsk4",
+        "4fsk": "fsk4",
+        "fsk4": "fsk4",
+        "cqpsk": "cqpsk",
+        "qpsk": "cqpsk",
+    }.get(text, text)

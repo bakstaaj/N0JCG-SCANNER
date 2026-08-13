@@ -7,7 +7,7 @@ import io
 import time
 from typing import Any
 
-from .config_model import ConfigError, frequency_to_hz
+from .config_model import ConfigError, frequency_to_hz, normalize_control_demod
 from .config_store import (
     read_active_config_payload,
     validate_config_payload,
@@ -122,7 +122,7 @@ def parse_p25_csv(text: str) -> dict[str, Any]:
                     "site": _text(row.get("Site")),
                     "nac": _text(row.get("NAC")) or None,
                     "modulation": _text(row.get("Modulation")) or "CQPSK",
-                    "control_demod_type": _text(row.get("ControlDemod")) or "fsk4",
+                    "control_demod_type": normalize_control_demod(row.get("ControlDemod")),
                     "preferred_control_channel_hz": None,
                     "control_channels_hz": [],
                     "voice_channels_hz": [],
@@ -144,7 +144,7 @@ def parse_p25_csv(text: str) -> dict[str, Any]:
                 system["modulation"] = modulation
             control_demod = _text(row.get("ControlDemod"))
             if control_demod:
-                system["control_demod_type"] = control_demod.lower()
+                system["control_demod_type"] = normalize_control_demod(control_demod)
             preferred_control = _text(row.get("PreferredControl"))
 
             enabled = _bool(row.get("Enabled"), True)
