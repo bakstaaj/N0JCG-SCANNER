@@ -42,5 +42,5 @@ def test_dedicated_voice_receiver_can_use_fixed_wideband_center(tmp_path) -> Non
     assert control["rate"] == 960_000
     assert voice["frequency"] == 852_493_750
     assert voice["rate"] == 2_400_000
-    assert config["channels"][1]["frequency"] == 853_300_000
+    assert config["channels"][1]["frequency"] == 852_493_750
     assert receivers[1]["center_frequency_hz"] == 852_493_750

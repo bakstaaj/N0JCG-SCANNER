@@ -263,7 +263,6 @@ def build_multi_rx_config(
         controls_mhz = [f"{value / 1_000_000:.6f}" for value in controls_hz]
 
     ordered_serials = [control_serial, *voice_serials]
-    initial_frequency = controls_hz[0]
     receiver_rows: list[dict[str, Any]] = []
     devices: list[dict[str, Any]] = []
     channels: list[dict[str, Any]] = []
@@ -278,6 +277,13 @@ def build_multi_rx_config(
         )
         receiver_sample_rate = sample_rate if role == "control" else voice_sample_rate
         receiver_center_hz = control_center_hz if role == "control" else voice_center_hz
+        # The dedicated voice dongle starts at the fixed wideband center.  It
+        # remains tunable for OP25 grants, but does not first visit the control
+        # frequency during startup, which otherwise costs the opening audio
+        # of the first call.
+        initial_frequency = (
+            control_center_hz if role == "control" else voice_center_hz
+        )
         device_name = f"rtl_{serial}"
         audio_port = serial_audio_port(serial, audio_base_port, audio_port_count)
         devices.append(
