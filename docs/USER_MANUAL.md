@@ -453,6 +453,8 @@ Mute and Volume, current P25 or analog activity, Voice/VHF/UHF counters, and
 analog Skip, Block, Clear Lock, and Clear Blocks. Use **Full UI** when profile
 editing, logs, or detailed radio setup is required.
 
+![Current N0JCG Scanner dark-theme mobile dashboard](docs/assets/scanner-mobile-dashboard-dark.png)
+
 After boot, the dashboard and audio infrastructure are available, but P25, VHF,
 and UHF scanning are all stopped. Opening the web page or the desktop shortcut
 does not start a receiver. Press **Start Scanning + Audio** once to start all

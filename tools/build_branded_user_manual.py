@@ -528,7 +528,8 @@ def add_manual_body(doc: Document, lines: list[str]) -> None:
                 raise FileNotFoundError(f"manual image is missing: {image_path}")
             paragraph = doc.add_paragraph()
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            paragraph.add_run().add_picture(str(image_path), width=Inches(6.65))
+            image_width = 2.85 if "mobile" in image_path.stem.lower() else 6.65
+            paragraph.add_run().add_picture(str(image_path), width=Inches(image_width))
             caption = doc.add_paragraph()
             caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = caption.add_run(image.group(1))
