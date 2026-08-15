@@ -101,12 +101,12 @@ def test_active_stream_keeps_twenty_millisecond_cadence_during_frame_gap() -> No
     assert 0.06 <= elapsed < 0.30
 
 
-def test_installed_arbitrator_uses_short_start_buffer() -> None:
+def test_installed_arbitrator_uses_gap_tolerant_start_and_tail() -> None:
     service = (
         ROOT / "systemd" / "pi-p25-raw-audio-bridge.service"
     ).read_text(encoding="utf-8")
 
-    assert "--warmup-frames 2 --prebuffer-frames 3" in service
+    assert "--release-seconds 2.0 --warmup-frames 2 --prebuffer-frames 5" in service
 
 
 def test_active_source_gets_bounded_late_frame_recovery_window() -> None:
@@ -116,7 +116,7 @@ def test_active_source_gets_bounded_late_frame_recovery_window() -> None:
 
     assert state.source_is_recent(now + 0.05)
     assert not state.source_is_recent(now + 0.20)
-    assert CLIENT_JITTER_GRACE_SECONDS == 0.08
+    assert CLIENT_JITTER_GRACE_SECONDS == 0.12
 
 
 def test_source_status_tracks_packet_jitter() -> None:

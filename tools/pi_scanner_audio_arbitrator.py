@@ -17,7 +17,10 @@ from typing import Deque
 RATE = 8000
 FRAME_BYTES = 320
 FRAME_SECONDS = FRAME_BYTES / (RATE * 2)
-CLIENT_JITTER_GRACE_SECONDS = 0.08
+# Keep a little silence budget for a late UDP frame instead of terminating the
+# browser clock.  This is deliberately below one quarter second so normal
+# speech remains responsive while short RF/USB scheduling gaps are covered.
+CLIENT_JITTER_GRACE_SECONDS = 0.12
 SOURCE_RECENT_SECONDS = 0.12
 SILENCE = bytes(FRAME_BYTES)
 
