@@ -5,16 +5,16 @@
 | Product | N0JCG Scanner |
 | Slug | scanner-user-guide |
 | Type | User guide |
-| Version | 4.2.5 |
+| Version | 4.2.7 |
 | Status | Current |
-| Last updated | 2026-08-12 |
+| Last updated | 2026-08-19 |
 | Audience | Scanner operators and installers |
 | Prerequisites | N0JCG Scanner hardware and network access |
 | Estimated time | 45 minutes for setup; 5 minutes for daily operation |
 | Related | [Product page](https://www.n0jcg.com/products/scanner/), [Hardware Guide](HARDWARE_GUIDE.md) |
 | Owner | N0JCG |
 
-This manual covers the N0JCG Scanner v4.2.0 production layout: P25 trunked radio,
+This manual covers the N0JCG Scanner v4.2.7 production layout: P25 trunked radio,
 FFT-directed VHF and UHF analog scanning, unified browser audio, radio profiles,
 and four dedicated RTL-SDR receiver assignments. It is written for both initial
 installation and normal daily operation.
@@ -703,6 +703,22 @@ systemctl --no-pager --full status pi-p25-audio-pool.service
 systemctl --no-pager --full status pi-scanner-vhf-worker.service
 systemctl --no-pager --full status pi-scanner-uhf-worker.service
 ```
+
+The P25 decoder is owned by the radio service, while its event log is followed
+continuously by the backend. A routine backend restart therefore reconnects to
+the already-running decoder instead of launching a second OP25 process or
+dropping an active call. Verify that the decoder remains present after a
+backend-only restart:
+
+```bash
+pgrep -af p25_multi_rx_sticky_launcher.py
+journalctl -u pi-p25-scanner.service -n 80 --no-pager
+```
+
+Use the dashboard **Stop** control when you intend to stop radio reception. Do
+not use a backend restart as a substitute for Stop; the persistent decoder
+handoff is specifically designed to keep the radio path alive during service
+maintenance.
 
 Interpret the results according to the dashboard state:
 

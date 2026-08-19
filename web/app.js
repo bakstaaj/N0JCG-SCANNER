@@ -310,8 +310,18 @@ function setButtonsForState(status) {
 
 function bestTalkgroup(status) {
   const recent = Array.isArray(status?.activity_summary?.recent_events) ? status.activity_summary.recent_events : [];
-  const fallback = [...recent].reverse().find((event) => event && (event.tgid || event.talkgroup_label));
-  const tgid = status?.active_tgid || status?.last_active_tgid || fallback?.tgid || null;
+  const blockedLabels = status?.blocked_talkgroups?.labels || {};
+  const catalogLabels = status?.talkgroup_catalog?.labels || {};
+  const isSuppressed = (event) => {
+    if (!event) return true;
+    if (event.muted === true || event.encrypted === true) return true;
+    return event.tgid != null && Object.prototype.hasOwnProperty.call(blockedLabels, String(event.tgid));
+  };
+  const isProfileEvent = (event) => event?.tgid == null || Object.prototype.hasOwnProperty.call(catalogLabels, String(event.tgid));
+  const fallback = [...recent].reverse().find((event) => isProfileEvent(event) && !isSuppressed(event) && (event.tgid || event.talkgroup_label));
+  const activeBlocked = status?.active_tgid != null && Object.prototype.hasOwnProperty.call(blockedLabels, String(status.active_tgid));
+  const lastBlocked = status?.last_active_tgid != null && Object.prototype.hasOwnProperty.call(blockedLabels, String(status.last_active_tgid));
+  const tgid = activeBlocked ? null : (status?.active_tgid || (!lastBlocked ? status?.last_active_tgid : null) || fallback?.tgid || null);
   const configuredLabel = tgid ? status?.talkgroup_catalog?.labels?.[String(tgid)] : '';
   const activeLabel = status?.active_tgid === tgid ? status?.active_talkgroup_label : '';
   const lastLabel = status?.last_active_tgid === tgid ? status?.last_active_talkgroup_label : '';

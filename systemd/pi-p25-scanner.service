@@ -14,6 +14,10 @@ ExecStart=/usr/bin/python3 -m pi_p25_scanner.backend --host 0.0.0.0 --port 8070
 Restart=on-failure
 RestartSec=3
 KillSignal=SIGINT
+# Keep the OP25 child alive across a web-backend restart. The backend
+# reconnect worker follows its persistent event log and can reconcile the
+# existing decoder without interrupting RF/audio service.
+KillMode=process
 TimeoutStopSec=10
 
 [Install]

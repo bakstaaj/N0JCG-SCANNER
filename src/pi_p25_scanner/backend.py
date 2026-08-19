@@ -9,6 +9,7 @@ import mimetypes
 import os
 import re
 import shlex
+import signal
 import socket
 import subprocess
 import sys
@@ -126,6 +127,12 @@ else:
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "web"
 OP25_OUTPUT_DIR = Path(os.environ.get("P25_SCANNER_OP25_OUTPUT", str(DEFAULT_OUTPUT_DIR)))
+OP25_EVENT_LOG_PATH = Path(
+    os.environ.get(
+        "P25_SCANNER_OP25_EVENT_LOG",
+        str(PROJECT_ROOT / "runtime" / "logs" / "op25-runtime.log"),
+    )
+)
 LOG_TAIL_LIMIT = 80
 MAX_JSON_BODY_BYTES = 512 * 1024
 OP25_HTTP_PORT_RE = re.compile(r"http:(?:\[[^\]]+\]|[^:\s]+):(?P<port>\d{1,5})")
@@ -303,6 +310,10 @@ class ScannerManager:
         self.status = ScannerStatus()
         self.process: subprocess.Popen[str] | None = None
         self.log_lines: deque[str] = deque(maxlen=LOG_TAIL_LIMIT)
+        self._op25_log_path = OP25_EVENT_LOG_PATH
+        self._op25_log_offset: int | None = None
+        self._op25_log_inode: int | None = None
+        self._op25_tail_stop = threading.Event()
         self.runtime_parser = RuntimeStatusParser()
         self.activity_tracker = RuntimeActivityTracker(state_path=ACTIVITY_STATE_PATH)
         self.analog_service_controller = AnalogScannerServiceController()
@@ -326,6 +337,11 @@ class ScannerManager:
         self.lock = threading.RLock()
         self.refresh_capability()
         self.refresh_config_summary()
+        threading.Thread(
+            target=self._op25_event_tail_loop,
+            name="op25-event-reconnect",
+            daemon=True,
+        ).start()
         self.license_client.start_background_refresh()
 
     # LAUNCH_READINESS_REFRESH_V0_4G14
@@ -429,10 +445,14 @@ class ScannerManager:
             return {"ok": True, "registration": dict(self.status.registration)}
 
     def shutdown(self) -> None:
+        # A backend/service restart must not stop a live decoder. The decoder
+        # is independently supervised and the reconnect tail resumes status
+        # parsing after this process returns. The explicit UI Stop action
+        # remains responsible for stopping P25/VHF/UHF.
+        self._op25_tail_stop.set()
         client = getattr(self, "license_client", None)
         if client is not None:
             client.close()
-        self.stop()
 
     def _registration_payload_locked(self) -> dict[str, Any]:
         payload = self._registration_snapshot()
@@ -537,8 +557,72 @@ class ScannerManager:
             if self.status.scanner_state == "running":
                 self.status.scanner_state = "decoder_exited"
         else:
-            self.status.decoder_process["running"] = False
-            self.status.decoder_process["pid"] = None
+            external_pid = self._find_external_decoder_pid()
+            self.status.decoder_process["running"] = external_pid is not None
+            self.status.decoder_process["pid"] = external_pid
+            if external_pid is not None:
+                if self.status.scanner_state not in ("running", "starting"):
+                    self.status.scanner_state = "running"
+                self.status.coordinated_scanners["p25"] = "running"
+
+    @staticmethod
+    def _find_external_decoder_pid() -> int | None:
+        """Find OP25 launched outside this backend after a backend restart."""
+
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", "p25_multi_rx_sticky_launcher.py"],
+                capture_output=True,
+                text=True,
+                timeout=0.5,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        for token in result.stdout.split():
+            try:
+                pid = int(token)
+            except ValueError:
+                continue
+            if pid != os.getpid():
+                try:
+                    command_line = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\\x00", b" ").decode("utf-8", "replace")
+                except OSError:
+                    continue
+                if "p25_multi_rx_sticky_launcher.py" in command_line and "python" in command_line:
+                    return pid
+        return None
+
+    def _op25_event_tail_loop(self) -> None:
+        """Reconnect status parsing to a decoder that outlived this backend.
+
+        The decoder supervisor writes a persistent rotating log. Start at EOF
+        so old calls are never replayed, then follow new bytes. When this
+        backend owns a live Popen stdout reader, the tail pauses to avoid
+        duplicate events; after a backend restart it becomes the event source.
+        """
+
+        while not self._op25_tail_stop.wait(0.25):
+            try:
+                path = self._op25_log_path
+                if not path.exists():
+                    continue
+                stat = path.stat()
+                inode = int(getattr(stat, "st_ino", 0))
+                if self._op25_log_inode != inode or self._op25_log_offset is None or stat.st_size < self._op25_log_offset:
+                    self._op25_log_inode = inode
+                    self._op25_log_offset = stat.st_size
+                    continue
+                if stat.st_size <= self._op25_log_offset:
+                    continue
+                with path.open("r", encoding="utf-8", errors="replace") as handle:
+                    handle.seek(self._op25_log_offset)
+                    lines = handle.readlines()
+                    self._op25_log_offset = handle.tell()
+                for line in lines:
+                    self._append_log(line)
+            except (OSError, UnicodeError):
+                continue
 
     def _talkgroup_label_for_tgid(self, tgid: int | None) -> str:
         if tgid is None:
@@ -635,6 +719,19 @@ class ScannerManager:
             self.status.runtime_status = update.to_status_dict()
             self.status.activity_summary = self.activity_tracker.record(update, profile_tgid=profile_tgid)
             self._set_event("Encrypted/blocked talkgroup suppressed from active audio display")
+            return
+
+        # Only talkgroups in the enabled profile may become active or
+        # last-heard UI state. OP25 can report other trunk assignments while
+        # monitoring the system; those are not calls for this profile.
+        if parsed_tgid is not None and not profile_tgid:
+            if self.status.active_tgid == parsed_tgid:
+                self.status.active_tgid = None
+                self.status.active_talkgroup_label = ""
+                self.status.active_voice_frequency_hz = None
+            update.parser_notes.append("unprofiled_tgid_ignored_from_active_display")
+            self.status.runtime_status = update.to_status_dict()
+            self.status.activity_summary = self.activity_tracker.record(update, profile_tgid=False)
             return
 
         if update.control_frequency_hz is not None:
@@ -933,9 +1030,8 @@ class ScannerManager:
             updated.extend(["-W", OP25_AUDIO_UDP_HOST])
         if "-u" not in updated:
             updated.extend(["-u", str(OP25_AUDIO_UDP_PORT)])
-        # boatbod OP25 only logs control-channel hunt changes at verbosity 5+
-        # (trunking.py hunt_cc). Normalize the existing validated command so
-        # the backend can report the tuner frequency currently being tested.
+        # Use the normal diagnostic verbosity to avoid excessive decoder I/O
+        # interfering with real-time voice handoff and audio delivery.
         if "-v" in updated:
             verbosity_index = updated.index("-v") + 1
             if verbosity_index < len(updated):
@@ -990,6 +1086,36 @@ class ScannerManager:
                 }
                 self._arm_trial_limit_locked()
                 self._set_event("P25, VHF, and UHF scanners already running")
+                return self.status_payload(), HTTPStatus.ACCEPTED
+
+        # The web backend may have restarted while the decoder supervisor
+        # remained alive. Attach to that process instead of launching a second
+        # OP25 instance.
+        external_pid = self._find_external_decoder_pid()
+        if external_pid is not None:
+            try:
+                analog_state = self.analog_service_controller.start()
+            except (OSError, subprocess.SubprocessError, ScannerServiceControlError) as exc:
+                with self.lock:
+                    self.status.ok = False
+                    self.status.scanner_state = "coordinated_start_failed"
+                    self._append_warning(str(exc))
+                    self._set_event(f"Coordinated scanner attach failed: {exc}")
+                return self.status_payload(), HTTPStatus.INTERNAL_SERVER_ERROR
+            with self.lock:
+                self.status.ok = True
+                self.status.scanner_state = "running"
+                self.status.decoder_process["running"] = True
+                self.status.decoder_process["pid"] = external_pid
+                self.status.control_channel_state = "searching"
+                self.status.control_channel_locked = False
+                self.status.coordinated_scanners = {
+                    "p25": "running",
+                    "vhf": analog_state["vhf"],
+                    "uhf": analog_state["uhf"],
+                }
+                self._arm_trial_limit_locked()
+                self._set_event(f"Attached to running P25 decoder pid={external_pid}")
                 return self.status_payload(), HTTPStatus.ACCEPTED
 
         self.refresh_config_summary()
@@ -1059,10 +1185,12 @@ class ScannerManager:
                 command,
                 cwd=command_cwd,
                 env=command_env,
-                stdout=subprocess.PIPE,
+                # OP25 is supervised by its persistent rotating log. Do not
+                # bind its lifetime to the backend's stdout pipe; that pipe
+                # disappears when the web service restarts.
+                stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
+                start_new_session=True,
             )
         except OSError as exc:
             with self.lock:
@@ -1082,8 +1210,6 @@ class ScannerManager:
             self.status.decoder_process["pid"] = process.pid
             self.status.coordinated_scanners["p25"] = "running"
             self._set_event(f"P25 scanner started pid={process.pid}; starting VHF and UHF")
-        threading.Thread(target=self._reader_thread, args=(process,), daemon=True).start()
-
         try:
             analog_state = self.analog_service_controller.start()
         except (OSError, subprocess.SubprocessError, ScannerServiceControlError) as exc:
@@ -1123,9 +1249,16 @@ class ScannerManager:
         with self.lock:
             process = self.process
             self._cancel_trial_limit_locked()
+        external_pid = None if process is not None else self._find_external_decoder_pid()
         stop_result = None
         if process is not None:
             stop_result = _stop_process_safely(process)
+        elif external_pid is not None:
+            try:
+                os.kill(external_pid, signal.SIGTERM)
+                stop_result = {"external_pid": external_pid, "terminated": True}
+            except (ProcessLookupError, OSError):
+                stop_result = {"external_pid": external_pid, "terminated": False}
         analog_error = None
         try:
             self.analog_service_controller.stop()
@@ -1257,6 +1390,18 @@ def _v04h_apply_activity(manager: Any, activity: dict[str, Any] | None) -> bool:
             tgid = int(tgid)
         except Exception:
             tgid = None
+    # The legacy activity parser runs after the main runtime-status handler.
+    # Never let it re-promote a disabled/encrypted talkgroup that the main
+    # handler deliberately removed from the active-audio display.
+    blocked_tgids = getattr(manager, "blocked_tgids", None)
+    if blocked_tgids is None:
+        blocked_tgids = _v04h5_rebuild_blocked_tgids(manager)
+    if tgid is not None and tgid in blocked_tgids:
+        return True
+    # Unprofiled control-channel assignments are not user activity. Keep them
+    # out of the active/last-heard display.
+    if tgid is not None and tgid not in _v04h_talkgroup_labels(manager):
+        return True
     if tgid is not None and not label:
         label = labels.get(tgid, "")
     now = time.time()
@@ -1330,7 +1475,10 @@ if callable(_v04h_original_append_log):
 
 _v04h_original_status_payload = getattr(ScannerManager, "status_payload", None)
 def _v04h_status_payload(self: Any) -> dict[str, Any]:
-    _v04h_scan_existing_logs(self)
+    # Do not replay the retained OP25 log tail on every status poll.  Those
+    # lines may describe a call from a previous process/session and would seed
+    # the dashboard with a phantom "Active" or "Last heard" talkgroup before
+    # any new traffic arrives.  Fresh lines are handled by _append_log below.
     if callable(_v04h_original_status_payload):
         payload = _v04h_original_status_payload(self)
         if isinstance(payload, dict):
@@ -1561,6 +1709,12 @@ if hasattr(ScannerManager, "_apply_runtime_status_update"):
                     self.status.active_voice_frequency_hz = None
                 self.status.encrypted = bool(encrypted or is_blocked_tgid or is_blocked_label)
                 self.status.muted = True
+                # Make the suppression explicit on the activity record. The
+                # parser often sees only `set tgid=...` for blacklisted calls,
+                # without an OP25 literal "muted" or "encrypted" token.
+                update.muted = True
+                if is_blocked_tgid or is_blocked_label:
+                    update.parser_notes.append("blacklisted_talkgroup")
                 try:
                     self.status.runtime_status = update.to_status_dict()
                 except Exception:
@@ -1569,7 +1723,14 @@ if hasattr(ScannerManager, "_apply_runtime_status_update"):
                 # wrapper returns before the normal update path, so record
                 # encrypted/blacklisted calls explicitly as muted events.
                 try:
-                    self.status.activity_summary = self.activity_tracker.record(update, profile_tgid=bool(tgid is not None and tgid in getattr(self, "talkgroup_labels", {})))
+                    profile_tgid = bool(
+                        tgid is not None
+                        and (
+                            tgid in getattr(self, "talkgroup_labels", {})
+                            or tgid in blocked
+                        )
+                    )
+                    self.status.activity_summary = self.activity_tracker.record(update, profile_tgid=profile_tgid)
                 except Exception:
                     pass
                 self.status.last_event = f"Suppressed {reason} TGID {tgid} from active audio display and gated browser audio"

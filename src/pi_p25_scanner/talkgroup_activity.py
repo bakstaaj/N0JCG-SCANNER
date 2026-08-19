@@ -18,6 +18,8 @@ _CONFIG_LINE_TOKENS = (
     "blackli",
     "trunk.tsv",
     "configured talkgroup",
+    "setting tgid",
+    "setting tg(",
     "loading talkgroup",
     "loaded talkgroup",
     "added talkgroup",

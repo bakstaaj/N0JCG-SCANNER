@@ -11,7 +11,7 @@ def test_desktop_uses_approved_n0jcg_product_lockup() -> None:
     assert 'alt="N0JCG Open Radio Platform"' in html
     assert "assets/brand/N0JCG_Header_Dark_Approved.png" in html
     assert '<strong class="product-name">Scanner</strong>' in html
-    assert 'href="n0jcg-brand.css?v=3.1.2-registration-badge"' in html
+    assert 'href="n0jcg-brand.css?v=3.2.1-activity-blue"' in html
     assert 'class="return-icon"' in html
     assert 'aria-label="Return to previous application"' in html
     assert "&#8592;" not in html
@@ -23,7 +23,7 @@ def test_mobile_uses_same_brand_system_and_product_name() -> None:
     assert "<title>N0JCG Scanner Mobile</title>" in html
     assert "assets/brand/N0JCG_Header_Dark_Approved.png" in html
     assert '<span class="product-name">Scanner</span>' in html
-    assert 'href="n0jcg-brand.css?v=3.1.0"' in html
+    assert 'href="n0jcg-brand.css?v=3.2.1-activity-blue"' in html
 
 
 def test_brand_css_uses_canonical_tokens_and_accessible_states() -> None:

@@ -36,9 +36,9 @@ def test_html_assets_and_navigation_are_subpath_safe() -> None:
     assert "`${base}/mobile.html`" in desktop
     assert 'href="mobile.css?' in mobile
     assert 'src="mobile.js?' in mobile
-    assert "n0jcg-brand.css?v=3.1.2-registration-badge" in desktop
+    assert "n0jcg-brand.css?v=3.2.1-activity-blue" in desktop
     assert 'href="./?desktop=1"' in mobile
-    assert "2.0.19-first-run-radio-setup" in desktop
+    assert "2.0.23-ignore-unprofiled-tgid" in desktop
     assert "source.origin !== window.location.origin" in desktop
     assert "3.0.1-roc-subpath" in mobile
 

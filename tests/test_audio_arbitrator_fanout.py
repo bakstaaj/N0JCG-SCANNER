@@ -106,7 +106,7 @@ def test_installed_arbitrator_uses_gap_tolerant_start_and_tail() -> None:
         ROOT / "systemd" / "pi-p25-raw-audio-bridge.service"
     ).read_text(encoding="utf-8")
 
-    assert "--release-seconds 2.0 --warmup-frames 2 --prebuffer-frames 5" in service
+    assert "--release-seconds 3.5 --warmup-frames 0 --prebuffer-frames 10" in service
 
 
 def test_active_source_gets_bounded_late_frame_recovery_window() -> None:

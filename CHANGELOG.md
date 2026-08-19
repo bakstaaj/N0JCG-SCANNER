@@ -5,6 +5,15 @@ notes are available in [`docs/releases/`](docs/releases/).
 
 ## Unreleased
 
+## 4.2.7 - 2026-08-19
+
+- Kept the OP25 decoder alive across a backend service restart and added
+  persistent event-log tailing so scanner state and control-channel events
+  reconnect without launching duplicate decoders.
+- Hardened external decoder detection against shell/process-name false
+  positives and documented the recovery and maintenance workflow.
+- Refreshed the branded operator guide and release package for this runtime.
+
 - Made the P25 control-channel demodulator an explicit profile field named
   `control_demod_type`; Colorado DTRS profiles use `fsk4` for C4FM control
   decoding, and CSV templates/imports now carry the setting.

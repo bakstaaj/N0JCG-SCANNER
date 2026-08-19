@@ -128,7 +128,21 @@ class RuntimeStatusParser:
         update.tgid = parsed_tgid
         freq = self._parse_frequency(text)
         if freq is not None:
-            if self._looks_like_control_channel(lower):
+            # OP25 emits identifier updates (iden_up/iden_up_tdma) containing
+            # the system's base frequencies.  These are not the frequency
+            # currently tuned by the control receiver.  Treating them as a
+            # control frequency makes the dashboard appear to jump between
+            # values such as 851.006250 and 762.006250 MHz even while the
+            # receiver remains on its configured control channel.
+            identifier_update = (
+                "iden_up" in lower
+                or "iden up" in lower
+                or "base freq:" in lower
+                or "base frequency:" in lower
+            )
+            if identifier_update:
+                update.parser_notes.append("trunking_identifier_frequency_ignored")
+            elif self._looks_like_control_channel(lower):
                 update.control_frequency_hz = freq
                 update.parser_notes.append("control_frequency")
             elif self._looks_like_voice_channel(lower) or update.tgid is not None:
@@ -280,6 +294,8 @@ class RuntimeStatusParser:
             "loading talkgroup",
             "reading talkgroup",
             "configured talkgroup",
+            "setting tgid",
+            "setting tg(",
         )
         return any(token in lower for token in config_tokens)
 

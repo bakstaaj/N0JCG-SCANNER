@@ -197,6 +197,23 @@ class ControlChannelHuntStatusTests(unittest.TestCase):
         update = self.parser.parse_line("tsbk network status broadcast nac=0xd11")
         self.assertEqual("locked", update.control_channel_state)
 
+    def test_identifier_update_frequency_is_not_active_control_frequency(self) -> None:
+        update = self.parser.parse_line(
+            "tsbk(0x33) iden_up_tdma: id: 3 freq: 762.006250 "
+            "toff: 30.000000 spac: 12.500000 slots/carrier: 2"
+        )
+        self.assertIsNone(update.control_frequency_hz)
+        self.assertIsNone(update.voice_frequency_hz)
+        self.assertIn("trunking_identifier_frequency_ignored", update.parser_notes)
+
+    def test_identifier_base_frequency_is_not_active_control_frequency(self) -> None:
+        update = self.parser.parse_line(
+            "tsbk(0x3c) adj_sts_bcst: base freq: 851006250 step: 6250"
+        )
+        self.assertIsNone(update.control_frequency_hz)
+        self.assertIsNone(update.voice_frequency_hz)
+        self.assertIn("trunking_identifier_frequency_ignored", update.parser_notes)
+
     def test_op25_tgid_assignment_is_lock_and_voice_activity(self) -> None:
         update = self.parser.parse_line("08/10/26 new tgid=1107  prio 3")
         self.assertEqual(1107, update.tgid)

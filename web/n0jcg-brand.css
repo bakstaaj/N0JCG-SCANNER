@@ -907,3 +907,258 @@ pre {
 :where(#registrationBadge.registration-visible) {
   display: inline-flex !important;
 }
+
+/* Winlink-style operator console finish.  Keep this final block last so the
+   Scanner inherits the shared N0JCG light-console treatment even when the
+   legacy dark operations rules above are present in an older deployment. */
+:root {
+  color-scheme: light;
+  --n0-color-navy: #0a1f44;
+  --n0-color-blue: #1565c0;
+  --n0-color-cyan: #00b8d9;
+  --n0-color-slate: #2b3440;
+  --n0-color-mist: #f4f7fa;
+  --n0-color-white: #ffffff;
+  --n0-color-text: #15202b;
+  --n0-color-text-secondary: #3f4b59;
+  --n0-color-text-muted: #6b7785;
+  --n0-color-border: #c7cdd4;
+  --n0-color-border-soft: #e9edf2;
+  --n0-color-success: #168a4a;
+  --n0-color-warning: #b25e00;
+  --n0-color-danger: #c62828;
+  --n0-radius-control: 4px;
+  --n0-radius-card: 8px;
+  --n0-focus: 0 0 0 3px rgb(0 184 217 / 45%);
+  --bg: var(--n0-color-mist);
+  --panel: var(--n0-color-white);
+  --panel-2: #f8fafc;
+  --ink: var(--n0-color-text);
+  --muted: var(--n0-color-text-muted);
+  --line: var(--n0-color-border);
+  --good: var(--n0-color-success);
+  --warn: var(--n0-color-warning);
+  --bad: var(--n0-color-danger);
+  --accent: var(--n0-color-blue);
+}
+
+html,
+body,
+.app-shell,
+.screen-frame,
+.screen,
+.phone-shell {
+  background: var(--n0-color-mist);
+  color: var(--n0-color-text);
+}
+
+.topbar,
+.phone-header {
+  background: var(--n0-color-navy);
+  color: var(--n0-color-white);
+  border-bottom: 1px solid var(--n0-color-navy);
+}
+
+.topbar .icon-button,
+.topbar .return-button {
+  background: transparent;
+  border-color: rgb(255 255 255 / 42%);
+  color: var(--n0-color-white);
+}
+
+.topbar .icon-button:hover,
+.topbar .return-button:hover {
+  background: rgb(0 184 217 / 18%);
+  border-color: var(--n0-color-cyan);
+  color: var(--n0-color-white);
+}
+
+.screen-title,
+.activity-card,
+.profile-panel,
+.category-panel,
+.wizard-results,
+details,
+.last-event,
+.analog-live-controls,
+.now-card,
+.audio-controls,
+.analog-card,
+.scanner-summary {
+  background: var(--n0-color-white);
+  border-color: var(--n0-color-border);
+  color: var(--n0-color-text);
+  box-shadow: 0 1px 2px rgb(10 31 68 / 12%);
+}
+
+.screen-title h1,
+.activity-card strong,
+.now-card h2,
+.section-heading strong,
+.scanner-summary strong,
+.counter-grid strong,
+#activeTalkgroupLabel,
+summary {
+  color: var(--n0-color-navy) !important;
+}
+
+input,
+textarea,
+select {
+  background: var(--n0-color-white);
+  border-color: var(--n0-color-border);
+  color: var(--n0-color-text);
+}
+
+.activity-grid div,
+.stats-grid article,
+.details-grid article,
+.counter-grid article {
+  background: #f8fafc;
+  border-color: var(--n0-color-border-soft);
+  color: var(--n0-color-text);
+}
+
+.activity-grid strong,
+.stats-grid strong,
+.details-grid strong,
+.counter-grid strong,
+#voiceFrequency,
+#activeTgid.active-tgid-inline {
+  color: var(--n0-color-navy) !important;
+}
+
+.nav-item {
+  color: var(--n0-color-text);
+}
+
+.nav-item.active,
+.nav-item[aria-current="page"] {
+  background: #e9f5fb;
+  color: var(--n0-color-blue);
+}
+
+button,
+.button-link {
+  background: var(--n0-color-white);
+  border-color: var(--n0-color-border);
+  color: var(--n0-color-navy);
+}
+
+button:not(:disabled):hover,
+.button-link:hover {
+  background: #eef5fc;
+  border-color: var(--n0-color-blue);
+  color: var(--n0-color-blue);
+}
+
+.primary,
+.start,
+.control-button.start {
+  background: var(--n0-color-blue);
+  border-color: var(--n0-color-blue);
+  color: var(--n0-color-white);
+}
+
+.primary:not(:disabled):hover,
+.start:not(:disabled):hover,
+.control-button.start:not(:disabled):hover {
+  background: var(--n0-color-navy);
+  border-color: var(--n0-color-navy);
+  color: var(--n0-color-white);
+}
+
+.stop,
+.control-button.stop,
+.mute-button,
+.analog-actions button,
+.control-strip .audio-mute-button,
+.control-strip #stopBtn {
+  background: var(--n0-color-white);
+  border-color: var(--n0-color-border);
+  color: var(--n0-color-navy);
+}
+
+.pill,
+.badge {
+  background: var(--n0-color-white);
+  border-color: var(--n0-color-border);
+  color: var(--n0-color-text-secondary);
+}
+
+.pill.ok,
+.badge.online {
+  background: #edf8f1;
+  border-color: #8bc4a5;
+  color: var(--n0-color-success);
+}
+
+.pill.warn,
+.badge.scanning,
+.badge.pending {
+  background: #fff8ec;
+  border-color: #d9b37c;
+  color: var(--n0-color-warning);
+}
+
+.pill.bad,
+.badge.offline {
+  background: #fff2f2;
+  border-color: #dfa2a2;
+  color: var(--n0-color-danger);
+}
+
+.badge.on-air {
+  background: #e8fafd;
+  border-color: var(--n0-color-cyan);
+  color: var(--n0-color-navy);
+}
+
+.drawer {
+  background: var(--n0-color-white);
+  border-right-color: var(--n0-color-border);
+  color: var(--n0-color-text);
+  box-shadow: 6px 0 18px rgb(10 31 68 / 12%);
+}
+
+.phone-header h1 {
+  color: #d6e7f5;
+}
+
+.full-ui-link {
+  border-color: rgb(255 255 255 / 42%);
+  color: var(--n0-color-white);
+}
+
+/* Match the NOAA scanner hero treatment for the live activity block. */
+.activity-card {
+  background: var(--n0-color-navy);
+  border-color: var(--n0-color-blue);
+  color: var(--n0-color-white);
+  box-shadow: 0 1px 2px rgb(10 31 68 / 18%);
+}
+
+.activity-card .label,
+.activity-card .activity-grid span {
+  color: #d6e7f5;
+}
+
+.activity-card #activeTalkgroupLabel,
+.activity-card #activeTgid.active-tgid-inline {
+  color: var(--n0-color-white) !important;
+}
+
+.activity-card #activeTgid.active-tgid-inline {
+  color: #9defff !important;
+}
+
+.activity-card .activity-grid div {
+  background: rgb(21 101 192 / 52%);
+  border-color: rgb(157 239 255 / 34%);
+  color: var(--n0-color-white);
+}
+
+.activity-card .activity-grid strong,
+.activity-card #voiceFrequency {
+  color: var(--n0-color-white) !important;
+}
