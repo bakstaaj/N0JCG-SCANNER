@@ -453,7 +453,7 @@ Mute and Volume, current P25 or analog activity, Voice/VHF/UHF counters, and
 analog Skip, Block, Clear Lock, and Clear Blocks. Use **Full UI** when profile
 editing, logs, or detailed radio setup is required.
 
-![Current N0JCG Scanner dark-theme mobile dashboard](docs/assets/scanner-mobile-dashboard-dark.png)
+![Current N0JCG Scanner dark-theme mobile dashboard](assets/scanner-mobile-dashboard-dark.png)
 
 After boot, the dashboard and audio infrastructure are available, but P25, VHF,
 and UHF scanning are all stopped. Opening the web page or the desktop shortcut
@@ -474,7 +474,7 @@ The current desktop dashboard uses the N0JCG dark theme. The Control state
 card combines the lock state and active control frequency; the separate legacy
 Control frequency card is no longer shown.
 
-![Current N0JCG Scanner dark-theme dashboard](docs/assets/scanner-dashboard-dark.png)
+![Current N0JCG Scanner dark-theme dashboard](assets/scanner-dashboard-dark.png)
 
 ### Top status indicators
 

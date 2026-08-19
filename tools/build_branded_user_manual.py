@@ -523,7 +523,11 @@ def add_manual_body(doc: Document, lines: list[str]) -> None:
         if image:
             flush_paragraph()
             active_numbering_id = None
-            image_path = (ROOT / image.group(2)).resolve()
+            # Manual links are authored relative to docs/USER_MANUAL.md. Keep
+            # a root-relative fallback for older internal references.
+            image_path = (SOURCE.parent / image.group(2)).resolve()
+            if not image_path.is_file():
+                image_path = (ROOT / image.group(2)).resolve()
             if not image_path.is_file():
                 raise FileNotFoundError(f"manual image is missing: {image_path}")
             paragraph = doc.add_paragraph()

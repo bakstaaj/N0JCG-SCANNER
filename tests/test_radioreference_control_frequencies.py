@@ -237,7 +237,7 @@ class ControlChannelHuntStatusTests(unittest.TestCase):
         verbosity_index = command.index("-v") + 1
         self.assertEqual("5", command[verbosity_index])
 
-    def test_unknown_tgid_does_not_reuse_previous_label(self) -> None:
+    def test_unprofiled_tgid_does_not_reuse_previous_label_or_activate(self) -> None:
         manager = ScannerManager.__new__(ScannerManager)
         manager.status = ScannerStatus()
         manager.activity_tracker = RuntimeActivityTracker()
@@ -254,9 +254,10 @@ class ControlChannelHuntStatusTests(unittest.TestCase):
         manager._apply_runtime_status_update(
             self.parser.parse_line("07/20/26 set tgid=2522, srcaddr=614523")
         )
-        self.assertEqual(2522, manager.status.active_tgid)
-        self.assertEqual("", manager.status.active_talkgroup_label)
-        self.assertEqual("", manager.status.last_active_talkgroup_label)
+        self.assertEqual(6132, manager.status.active_tgid)
+        self.assertEqual("Teller SO 1", manager.status.active_talkgroup_label)
+        self.assertEqual(6132, manager.status.last_active_tgid)
+        self.assertEqual("Teller SO 1", manager.status.last_active_talkgroup_label)
 
 
 if __name__ == "__main__":
